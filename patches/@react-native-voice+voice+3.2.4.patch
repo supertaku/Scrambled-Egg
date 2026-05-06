@@ -1,0 +1,338 @@
+diff --git a/node_modules/@react-native-voice/voice/android/build.gradle b/node_modules/@react-native-voice/voice/android/build.gradle
+index 8fce879..81227c5 100644
+--- a/node_modules/@react-native-voice/voice/android/build.gradle
++++ b/node_modules/@react-native-voice/voice/android/build.gradle
+@@ -2,7 +2,7 @@ apply plugin: 'com.android.library'
+ 
+ repositories {
+     mavenLocal()
+-    jcenter()
++    mavenCentral()
+     maven {
+         // For developing the library outside the context of the example app, expect `react-native`
+         // to be installed at `./node_modules`.
+@@ -20,7 +20,7 @@ def DEFAULT_TARGET_SDK_VERSION = 28
+ def DEFAULT_SUPPORT_LIB_VERSION = "28.0.0"
+ 
+ android {
+-    compileSdkVersion rootProject.hasProperty('compileSdkVersion') ? rootProject.compileSdkVersion : DEFAULT_COMPILE_SDK_VERSION
++    compileSdk rootProject.hasProperty('compileSdkVersion') ? rootProject.compileSdkVersion : DEFAULT_COMPILE_SDK_VERSION
+     buildToolsVersion rootProject.hasProperty('buildToolsVersion') ? rootProject.buildToolsVersion : DEFAULT_BUILD_TOOLS_VERSION
+ 
+     defaultConfig {
+@@ -40,7 +40,7 @@ android {
+ buildscript {
+     if (project == rootProject) {
+         repositories {
+-            jcenter()
++            mavenCentral()
+         }
+         dependencies {
+             classpath 'com.android.tools.build:gradle:3.3.2'
+@@ -53,7 +53,7 @@ buildscript {
+ 
+ allprojects {
+     repositories {
+-        jcenter()
++        mavenCentral()
+     }
+ }
+ 
+@@ -62,6 +62,6 @@ def supportVersion = rootProject.hasProperty('supportLibVersion') ? rootProject.
+ dependencies {
+     implementation fileTree(dir: 'libs', include: ['*.jar'])
+     testImplementation 'junit:junit:4.12'
+-    implementation "com.android.support:appcompat-v7:${supportVersion}"
++    implementation "androidx.appcompat:appcompat:1.0.0"
+     implementation 'com.facebook.react:react-native:+'
+ }
+diff --git a/node_modules/@react-native-voice/voice/dist/index.js b/node_modules/@react-native-voice/voice/dist/index.js
+index a10af13..c65eb78 100644
+--- a/node_modules/@react-native-voice/voice/dist/index.js
++++ b/node_modules/@react-native-voice/voice/dist/index.js
+@@ -5,9 +5,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
+ Object.defineProperty(exports, "__esModule", { value: true });
+ const react_native_1 = require("react-native");
+ const invariant_1 = __importDefault(require("invariant"));
+-const Voice = react_native_1.NativeModules.Voice;
++const Voice = react_native_1.NativeModules.Voice ?? react_native_1.NativeModules.RCTVoice;
++const LINKING_ERROR = 'Voice native module is not installed. Rebuild and install a custom native app that includes @react-native-voice/voice.';
++function getVoice() {
++    if (!Voice) {
++        throw new Error(LINKING_ERROR);
++    }
++    return Voice;
++}
+ // NativeEventEmitter is only availabe on React Native platforms, so this conditional is used to avoid import conflicts in the browser/server
+-const voiceEmitter = react_native_1.Platform.OS !== 'web' ? new react_native_1.NativeEventEmitter(Voice) : null;
++const voiceEmitter = react_native_1.Platform.OS !== 'web' && Voice ? new react_native_1.NativeEventEmitter(Voice) : null;
+ class RCTVoice {
+     constructor() {
+         this._loaded = false;
+@@ -23,20 +30,24 @@ class RCTVoice {
+         };
+     }
+     removeAllListeners() {
+-        Voice.onSpeechStart = undefined;
+-        Voice.onSpeechRecognized = undefined;
+-        Voice.onSpeechEnd = undefined;
+-        Voice.onSpeechError = undefined;
+-        Voice.onSpeechResults = undefined;
+-        Voice.onSpeechPartialResults = undefined;
+-        Voice.onSpeechVolumeChanged = undefined;
++        const voice = Voice;
++        if (!voice)
++            return;
++        voice.onSpeechStart = undefined;
++        voice.onSpeechRecognized = undefined;
++        voice.onSpeechEnd = undefined;
++        voice.onSpeechError = undefined;
++        voice.onSpeechResults = undefined;
++        voice.onSpeechPartialResults = undefined;
++        voice.onSpeechVolumeChanged = undefined;
+     }
+     destroy() {
++        const voice = getVoice();
+         if (!this._loaded && !this._listeners) {
+             return Promise.resolve();
+         }
+         return new Promise((resolve, reject) => {
+-            Voice.destroySpeech((error) => {
++            voice.destroySpeech((error) => {
+                 if (error) {
+                     reject(new Error(error));
+                 }
+@@ -51,6 +62,7 @@ class RCTVoice {
+         });
+     }
+     start(locale, options = {}) {
++        const voice = getVoice();
+         if (!this._loaded && !this._listeners && voiceEmitter !== null) {
+             this._listeners = Object.keys(this._events).map((key) => voiceEmitter.addListener(key, this._events[key]));
+         }
+@@ -64,7 +76,7 @@ class RCTVoice {
+                 }
+             };
+             if (react_native_1.Platform.OS === 'android') {
+-                Voice.startSpeech(locale, Object.assign({
++                voice.startSpeech(locale, Object.assign({
+                     EXTRA_LANGUAGE_MODEL: 'LANGUAGE_MODEL_FREE_FORM',
+                     EXTRA_MAX_RESULTS: 5,
+                     EXTRA_PARTIAL_RESULTS: true,
+@@ -72,16 +84,17 @@ class RCTVoice {
+                 }, options), callback);
+             }
+             else {
+-                Voice.startSpeech(locale, callback);
++                voice.startSpeech(locale, callback);
+             }
+         });
+     }
+     stop() {
++        const voice = getVoice();
+         if (!this._loaded && !this._listeners) {
+             return Promise.resolve();
+         }
+         return new Promise((resolve, reject) => {
+-            Voice.stopSpeech(error => {
++            voice.stopSpeech(error => {
+                 if (error) {
+                     reject(new Error(error));
+                 }
+@@ -92,11 +105,12 @@ class RCTVoice {
+         });
+     }
+     cancel() {
++        const voice = getVoice();
+         if (!this._loaded && !this._listeners) {
+             return Promise.resolve();
+         }
+         return new Promise((resolve, reject) => {
+-            Voice.cancelSpeech(error => {
++            voice.cancelSpeech(error => {
+                 if (error) {
+                     reject(new Error(error));
+                 }
+@@ -107,8 +121,9 @@ class RCTVoice {
+         });
+     }
+     isAvailable() {
++        const voice = getVoice();
+         return new Promise((resolve, reject) => {
+-            Voice.isSpeechAvailable((isAvailable, error) => {
++            voice.isSpeechAvailable((isAvailable, error) => {
+                 if (error) {
+                     reject(new Error(error));
+                 }
+@@ -122,15 +137,17 @@ class RCTVoice {
+      * (Android) Get a list of the speech recognition engines available on the device
+      * */
+     getSpeechRecognitionServices() {
++        const voice = getVoice();
+         if (react_native_1.Platform.OS !== 'android') {
+-            invariant_1.default(Voice, 'Speech recognition services can be queried for only on Android');
++            invariant_1.default(voice, 'Speech recognition services can be queried for only on Android');
+             return;
+         }
+-        return Voice.getSpeechRecognitionServices();
++        return voice.getSpeechRecognitionServices();
+     }
+     isRecognizing() {
++        const voice = getVoice();
+         return new Promise(resolve => {
+-            Voice.isRecognizing((isRecognizing) => resolve(isRecognizing));
++            voice.isRecognizing((isRecognizing) => resolve(isRecognizing));
+         });
+     }
+     set onSpeechStart(fn) {
+diff --git a/node_modules/@react-native-voice/voice/src/index.ts b/node_modules/@react-native-voice/voice/src/index.ts
+index 8b51121..f8c3e31 100644
+--- a/node_modules/@react-native-voice/voice/src/index.ts
++++ b/node_modules/@react-native-voice/voice/src/index.ts
+@@ -11,11 +11,23 @@ import {
+   SpeechVolumeChangeEvent,
+ } from './VoiceModuleTypes';
+ 
+-const Voice = NativeModules.Voice as VoiceModule;
++const Voice = (NativeModules.Voice ?? NativeModules.RCTVoice) as
++  | VoiceModule
++  | undefined;
++const LINKING_ERROR =
++  'Voice native module is not installed. Rebuild and install a custom native app that includes @react-native-voice/voice.';
++
++function getVoice(): VoiceModule {
++  if (!Voice) {
++    throw new Error(LINKING_ERROR);
++  }
++
++  return Voice;
++}
+ 
+ // NativeEventEmitter is only availabe on React Native platforms, so this conditional is used to avoid import conflicts in the browser/server
+ const voiceEmitter =
+-  Platform.OS !== 'web' ? new NativeEventEmitter(Voice) : null;
++  Platform.OS !== 'web' && Voice ? new NativeEventEmitter(Voice) : null;
+ type SpeechEvent = keyof SpeechEvents;
+ 
+ class RCTVoice {
+@@ -38,21 +50,24 @@ class RCTVoice {
+   }
+ 
+   removeAllListeners() {
+-    Voice.onSpeechStart = undefined;
+-    Voice.onSpeechRecognized = undefined;
+-    Voice.onSpeechEnd = undefined;
+-    Voice.onSpeechError = undefined;
+-    Voice.onSpeechResults = undefined;
+-    Voice.onSpeechPartialResults = undefined;
+-    Voice.onSpeechVolumeChanged = undefined;
++    const voice = Voice;
++    if (!voice) return;
++    voice.onSpeechStart = undefined;
++    voice.onSpeechRecognized = undefined;
++    voice.onSpeechEnd = undefined;
++    voice.onSpeechError = undefined;
++    voice.onSpeechResults = undefined;
++    voice.onSpeechPartialResults = undefined;
++    voice.onSpeechVolumeChanged = undefined;
+   }
+ 
+   destroy() {
++    const voice = getVoice();
+     if (!this._loaded && !this._listeners) {
+       return Promise.resolve();
+     }
+     return new Promise((resolve, reject) => {
+-      Voice.destroySpeech((error: string) => {
++      voice.destroySpeech((error: string) => {
+         if (error) {
+           reject(new Error(error));
+         } else {
+@@ -67,6 +82,7 @@ class RCTVoice {
+   }
+ 
+   start(locale: any, options = {}) {
++    const voice = getVoice();
+     if (!this._loaded && !this._listeners && voiceEmitter !== null) {
+       this._listeners = (Object.keys(this._events) as SpeechEvent[]).map(
+         (key: SpeechEvent) => voiceEmitter.addListener(key, this._events[key]),
+@@ -82,7 +98,7 @@ class RCTVoice {
+         }
+       };
+       if (Platform.OS === 'android') {
+-        Voice.startSpeech(
++        voice.startSpeech(
+           locale,
+           Object.assign(
+             {
+@@ -96,16 +112,17 @@ class RCTVoice {
+           callback,
+         );
+       } else {
+-        Voice.startSpeech(locale, callback);
++        voice.startSpeech(locale, callback);
+       }
+     });
+   }
+   stop() {
++    const voice = getVoice();
+     if (!this._loaded && !this._listeners) {
+       return Promise.resolve();
+     }
+     return new Promise((resolve, reject) => {
+-      Voice.stopSpeech(error => {
++      voice.stopSpeech(error => {
+         if (error) {
+           reject(new Error(error));
+         } else {
+@@ -115,11 +132,12 @@ class RCTVoice {
+     });
+   }
+   cancel() {
++    const voice = getVoice();
+     if (!this._loaded && !this._listeners) {
+       return Promise.resolve();
+     }
+     return new Promise((resolve, reject) => {
+-      Voice.cancelSpeech(error => {
++      voice.cancelSpeech(error => {
+         if (error) {
+           reject(new Error(error));
+         } else {
+@@ -129,8 +147,9 @@ class RCTVoice {
+     });
+   }
+   isAvailable(): Promise<0 | 1> {
++    const voice = getVoice();
+     return new Promise((resolve, reject) => {
+-      Voice.isSpeechAvailable((isAvailable: 0 | 1, error: string) => {
++      voice.isSpeechAvailable((isAvailable: 0 | 1, error: string) => {
+         if (error) {
+           reject(new Error(error));
+         } else {
+@@ -144,20 +163,22 @@ class RCTVoice {
+    * (Android) Get a list of the speech recognition engines available on the device
+    * */
+   getSpeechRecognitionServices() {
++    const voice = getVoice();
+     if (Platform.OS !== 'android') {
+       invariant(
+-        Voice,
++        voice,
+         'Speech recognition services can be queried for only on Android',
+       );
+       return;
+     }
+ 
+-    return Voice.getSpeechRecognitionServices();
++    return voice.getSpeechRecognitionServices();
+   }
+ 
+   isRecognizing(): Promise<0 | 1> {
++    const voice = getVoice();
+     return new Promise(resolve => {
+-      Voice.isRecognizing((isRecognizing: 0 | 1) => resolve(isRecognizing));
++      voice.isRecognizing((isRecognizing: 0 | 1) => resolve(isRecognizing));
+     });
+   }
+ 

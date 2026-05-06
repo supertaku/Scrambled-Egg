@@ -1,0 +1,71 @@
+{
+  "expo": {
+    "name": "Haki",
+    "slug": "haki",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "haki",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      [
+        "expo-sqlite",
+        {
+          "enableFTS": true,
+          "withSQLiteVecExtension": true
+        }
+      ],
+      [
+        "@react-native-voice/voice",
+        {
+          "microphonePermission": "Allow Haki to use your microphone for voice questions.",
+          "speechRecognitionPermission": "Allow Haki to recognize speech and turn it into chat text."
+        }
+      ],
+      [
+        "llama.rn",
+        {
+          "enableEntitlements": true,
+          "entitlementsProfile": "production",
+          "forceCxx20": true,
+          "enableOpenCLAndHexagon": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "18.1"
+          }
+        }
+      ]
+    ],
+    "icon": "./assets/images/grayhawk.png",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tupt.haki",
+      "icon": "./assets/images/grayhawk.png"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/grayhawk.png",
+        "backgroundColor": "#7A0019"
+      },
+      "package": "com.tupt.haki",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "offlineMvp": true,
+      "router": {},
+      "eas": {
+        "projectId": "702732cf-9b30-40ce-a5b7-b6bd5547e708"
+      }
+    }
+  }
+}

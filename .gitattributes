@@ -1,0 +1,6 @@
+# Set default behavior to handle line endings automatically.
+* text=auto
+
+# Force patch files to always use LF line endings, even on Windows.
+# This ensures compatibility with EAS (Linux) and patch-package.
+*.patch text eol=lf

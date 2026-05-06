@@ -1,0 +1,936 @@
+[
+  {
+    "document_id": "demo_tup_manila_student_essentials_2026",
+    "document_title": "[DEMO] TUP Manila Student Essentials Guide",
+    "document_type": "student_guide",
+    "category": "Campus Basics",
+    "office": "Student Affairs",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://www.tup.edu.ph/",
+    "chunks": [
+      {
+        "chunk_id": "demo_tup_manila_student_essentials_2026_001",
+        "section_title": "Campus Location and Main Landmarks",
+        "process_name": "Finding TUP Manila",
+        "content": "Demo campus navigation guidance. TUP Manila is the university's Manila campus at Ayala Boulevard, Ermita, Manila, near San Marcelino Street. Common student landmarks include the main gate along Ayala Boulevard, the University Library area, the College of Arts and Science building area, the IRTC building near the Ayala Boulevard and San Marcelino side, college buildings, student service offices, and guard posts. Use posted campus maps, building signs, and guards for the final room or office location because room assignments can change during renovation or events.",
+        "answer": "TUP Manila is at Ayala Boulevard, Ermita, Manila, near San Marcelino Street. For wayfinding, start from the main gate or nearest guard post, then ask for the target building or office. Use this app as demo guidance only; confirm final room locations with posted signs or campus personnel.",
+        "citation": "[DEMO] TUP Manila Student Essentials Guide, Campus Location and Main Landmarks",
+        "page_number": 1,
+        "tags": ["campus location", "navigation", "ayala boulevard", "san marcelino", "main gate"],
+        "synonyms": ["where is tup manila", "directions", "campus map", "landmarks", "how to get around"],
+        "steps": [
+          "Enter through the designated gate and observe guard instructions.",
+          "Ask the guard or information desk for the building or office name.",
+          "Check posted signs and room schedules before entering offices or classrooms.",
+          "For unfamiliar locations, use landmarks such as the library area, college buildings, and IRTC side."
+        ],
+        "office_location": "TUP Manila campus, Ayala Boulevard, Ermita, Manila",
+        "contact_info": "For official contact details, use the TUP website or call the campus trunk line and ask for the relevant office.",
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_tup_manila_student_essentials_2026_002",
+        "section_title": "Quick Office Routing",
+        "process_name": "Choosing the Right Office",
+        "content": "Demo office routing guidance. Students should route enrollment and admission concerns to Admissions, advising to the department or college adviser, registration and records to the University Registrar, assessments and balances to Accounting or Finance Services, payments to the Cashier's Office, ID and student activity concerns to the Office of Student Affairs, medical concerns to the University Medical and Dental Clinic, counseling to Guidance, library borrowing to the University Library, account or ERS concerns to UITC, and internship or job placement concerns to IRJP.",
+        "answer": "Use this quick routing: Admissions for applicants and notices of admission; department adviser for enlistment; Registrar for records, confirmation, COR, TOR, graduation, shifting, and transfer; Accounting or Finance for assessment and balances; Cashier for payment; OSA for ID, scholarships, orgs, and student welfare; Clinic for health concerns; Guidance for counseling; Library for borrowing and clearance; UITC for ERS or account issues; IRJP for OJT and job placement.",
+        "citation": "[DEMO] TUP Manila Student Essentials Guide, Quick Office Routing",
+        "page_number": 2,
+        "tags": ["office routing", "student services", "where to go", "frontline offices"],
+        "synonyms": ["which office", "right office", "where should i go", "student concern"],
+        "office_location": "Start with the responsible office or ask OSA/Admin for routing.",
+        "contact_info": "Admissions loc. 603, OSA loc. 606, Guidance loc. 625, Library loc. 601, IRJP loc. 204, Finance Services loc. 123 are demo references from public contact listings; verify before use.",
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_tup_manila_student_essentials_2026_003",
+        "section_title": "Daily Student Checklist",
+        "process_name": "Before Going to Campus",
+        "content": "Demo daily student checklist. Bring your school ID or temporary proof of enrollment, class schedule, registration form or COR when needed, writing materials, lab or shop requirements, personal water, and payment or document request references. Check official announcements for class modality changes, transport disruptions, exam schedules, holidays, and office-hour changes.",
+        "answer": "Before going to campus, bring your ID or temporary proof of enrollment, class schedule, COR or registration form if transacting, required lab or shop materials, and any payment or document references. Check official announcements for schedule, modality, and office-hour changes.",
+        "citation": "[DEMO] TUP Manila Student Essentials Guide, Daily Student Checklist",
+        "page_number": 3,
+        "tags": ["checklist", "id", "cor", "class schedule", "office transactions"],
+        "synonyms": ["what to bring", "campus checklist", "first day", "before going to school"],
+        "prerequisites": ["Current enrollment or valid campus purpose", "Official announcement checked if available"],
+        "priority": 6
+      },
+      {
+        "chunk_id": "demo_tup_manila_student_essentials_2026_004",
+        "section_title": "Campus Emergencies and Urgent Help",
+        "process_name": "Getting Urgent Assistance",
+        "content": "Demo emergency-style guidance, not a substitute for official emergency procedures. If a student is injured, faints, has severe breathing difficulty, is threatened, sees a fire, or notices another urgent hazard, the student should call for nearby help, alert a guard, faculty member, office staff, or class officer, and ask that the Clinic, security, or emergency responders be contacted. For life-threatening emergencies, local emergency hotlines and campus security procedures should be used immediately.",
+        "answer": "For urgent help on campus, alert the nearest guard, faculty member, office staff, or class officer immediately and ask them to contact the Clinic, security, or emergency responders. For life-threatening cases, use official emergency hotlines and campus security procedures right away. This is demo guidance only; follow official instructions from campus personnel.",
+        "citation": "[DEMO] TUP Manila Student Essentials Guide, Campus Emergencies and Urgent Help",
+        "page_number": 4,
+        "tags": ["emergency", "urgent help", "security", "clinic", "fire", "injury"],
+        "synonyms": ["accident", "fainted", "threat", "hazard", "earthquake", "fire alarm", "medical emergency"],
+        "steps": [
+          "Move away from immediate danger if it is safe to do so.",
+          "Call the attention of the nearest guard, faculty member, office staff, or class officer.",
+          "Give the exact location, nature of the emergency, number of people involved, and any visible risks.",
+          "Follow instructions from campus personnel or emergency responders."
+        ],
+        "office_location": "Nearest guard post, Clinic, or responsible office depending on the incident",
+        "contact_info": "Use official campus security and public emergency numbers posted on campus; verify numbers with TUP before production use.",
+        "priority": 10
+      },
+      {
+        "chunk_id": "demo_tup_manila_student_essentials_2026_005",
+        "section_title": "Lost and Found",
+        "process_name": "Reporting a Lost Item",
+        "content": "Demo lost-and-found workflow. If a student loses an item such as an ID, phone, calculator, drawing tools, PE uniform, wallet, or lab materials, the student should retrace the last location, ask the classroom or lab instructor, check the guard post or OSA-designated lost-and-found point, and prepare proof of ownership. Found items should be surrendered to a guard, OSA, or the responsible building office rather than kept by the finder.",
+        "answer": "For a lost item, retrace where you last used it, ask the instructor or office in that area, then check the guard post or OSA-designated lost-and-found point. Bring proof of ownership such as a description, photo, serial number, receipt, or matching ID. If you find an item, surrender it to a guard, OSA, or responsible office.",
+        "citation": "[DEMO] TUP Manila Student Essentials Guide, Lost and Found",
+        "page_number": 5,
+        "tags": ["lost and found", "lost id", "lost phone", "guard post", "osa"],
+        "synonyms": ["missing item", "found item", "lost wallet", "lost calculator", "lost belongings"],
+        "steps": [
+          "Retrace the classroom, lab, canteen, library, or office where the item may have been left.",
+          "Ask the instructor, guard, or staff assigned to that area.",
+          "Check the OSA or guard-post lost-and-found process.",
+          "Present proof of ownership before claiming the item."
+        ],
+        "office_location": "Nearest guard post or OSA-designated lost-and-found point",
+        "contact_info": "Coordinate with OSA or campus security through official campus channels.",
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_tup_manila_student_essentials_2026_006",
+        "section_title": "Canteen, Food, and Breaks",
+        "process_name": "Using Campus Food Areas",
+        "content": "Demo student-life guidance. Students should use designated canteen or food areas, observe queueing and clean-as-you-go practices, avoid eating inside laboratories, shops, computer rooms, and library areas where prohibited, and respect class schedules when buying food. For dietary or health concerns, students should bring safe food or ask the Clinic for health-related advice when needed.",
+        "answer": "Use designated canteen or food areas, queue properly, clean your table, and avoid eating in labs, shops, computer rooms, or library spaces where food is prohibited. Plan breaks around class schedules and verify current vendor hours on campus.",
+        "citation": "[DEMO] TUP Manila Student Essentials Guide, Canteen, Food, and Breaks",
+        "page_number": 6,
+        "tags": ["canteen", "food", "break time", "clean as you go", "campus services"],
+        "synonyms": ["where to eat", "lunch", "snacks", "food area", "cafeteria"],
+        "priority": 5
+      }
+    ]
+  },
+  {
+    "document_id": "demo_admission_enrollment_2026",
+    "document_title": "[DEMO] TUP Manila Admission and Enrollment Guide",
+    "document_type": "procedure",
+    "category": "Admission and Enrollment",
+    "office": "Admissions",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://tup.edu.ph/pages/students/enrollment-procedure",
+    "chunks": [
+      {
+        "chunk_id": "demo_admission_enrollment_2026_001",
+        "section_title": "Admissions Office",
+        "process_name": "Applicant and Notice of Admission Concerns",
+        "content": "Demo admissions guidance based on public TUP information. The Admissions Office assists applicants with admission-related evaluation, applicant profiling, notice of admission concerns, and next steps before enrollment. Public contact listings identify TUP Manila Admissions Office at Ayala Boulevard, Ermita, Manila, with local 603; verify the current head, schedule, and requirements before production use.",
+        "answer": "For applicant concerns, Notice of Admission, admission profiling, and applicant requirements, contact or visit the Admissions Office. The demo contact reference is Admissions Office, TUP Manila, Ayala Boulevard, Ermita, Manila, local 603. Verify current schedules and requirements with the office.",
+        "citation": "[DEMO] TUP Manila Admission and Enrollment Guide, Admissions Office",
+        "page_number": 1,
+        "tags": ["admissions", "applicant", "notice of admission", "tupstat", "profiling"],
+        "synonyms": ["admission office", "applicant module", "entrance exam", "new student", "freshman"],
+        "office_location": "Admissions Office, TUP Manila, Ayala Boulevard, Ermita, Manila",
+        "contact_info": "Demo reference: local 603; verify through the official TUP contact page.",
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_admission_enrollment_2026_002",
+        "section_title": "Freshman Enrollment",
+        "process_name": "Freshman Enrollment Flow",
+        "content": "Demo freshman enrollment flow. The public TUP enrollment guide lists a sequence where first-year students secure a Notice of Admission, complete medical certificate requirements through the University Clinic, proceed to Admissions for profiling, go to the course adviser for enlistment, route scholarship notation through OSA if applicable, proceed to Accounting for assessment and registration form, pay assessed fees at the Cashier's Office, present original requirements and registration form to the Registrar for confirmation, and proceed to OSA for ID processing. This is demo guidance; official schedules and required documents may change.",
+        "answer": "Freshman enrollment usually moves through: Admissions for Notice of Admission and profiling, Clinic for medical certificate, course adviser for enlistment, OSA for scholarship notation if applicable, Accounting for assessment and registration form, Cashier for payment, Registrar for confirmation, then OSA for ID processing. Verify the exact sequence, deadlines, and documents with official enrollment announcements.",
+        "citation": "[DEMO] TUP Manila Admission and Enrollment Guide, Freshman Enrollment Flow",
+        "page_number": 2,
+        "tags": ["freshman enrollment", "first year", "notice of admission", "medical certificate", "registration form"],
+        "synonyms": ["new student enrollment", "first-year enrollment", "freshmen", "enroll as freshman"],
+        "steps": [
+          "Secure Notice of Admission and required originals such as Form 138 or equivalent documents, certificate of good moral character, and test permit when required.",
+          "Complete Clinic medical certificate requirements.",
+          "Proceed to Admissions for profiling.",
+          "Go to the course adviser or department for enlistment.",
+          "If you have a scholarship, report to OSA for notation.",
+          "Proceed to Accounting for assessment and registration form.",
+          "Pay assessed fees at the Cashier's Office.",
+          "Present registration form and original requirements to the Registrar for confirmation.",
+          "Proceed to OSA for student ID processing."
+        ],
+        "prerequisites": ["Notice of Admission", "Required original admission documents", "Medical certificate when required"],
+        "office_location": "Admissions, Clinic, department adviser, OSA, Accounting, Cashier, and Registrar",
+        "contact_info": "Check official enrollment announcements and office schedules before transacting.",
+        "priority": 10
+      },
+      {
+        "chunk_id": "demo_admission_enrollment_2026_003",
+        "section_title": "Old Student Enrollment",
+        "process_name": "Continuing Student Enrollment Flow",
+        "content": "Demo continuing-student enrollment flow. For old students, public TUP enrollment guidance commonly routes students to the course adviser for enlistment, OSA for scholarship notation if applicable, Accounting for assessment and registration form, Cashier for payment, Registrar for confirmation, and OSA for ID-related processing if needed. Departments may add advising, clearance, prerequisite, overload, or petition-subject checks.",
+        "answer": "For continuing students, start with your department or course adviser for enlistment. If you have a scholarship, go to OSA for notation. Then proceed to Accounting for assessment and registration form, pay at the Cashier, and present the registration form to the Registrar for confirmation. Follow department-specific advising, clearance, and prerequisite checks.",
+        "citation": "[DEMO] TUP Manila Admission and Enrollment Guide, Old Student Enrollment",
+        "page_number": 3,
+        "tags": ["old student enrollment", "continuing student", "enlistment", "assessment", "registrar confirmation"],
+        "synonyms": ["regular enrollment", "second year enrollment", "upper year", "returning student"],
+        "steps": [
+          "Check your department advising schedule.",
+          "Proceed to your course adviser for subject enlistment.",
+          "Route scholarship notation through OSA if applicable.",
+          "Proceed to Accounting for assessment and registration form.",
+          "Pay assessed fees at the Cashier's Office.",
+          "Submit or present the registration form to the Registrar for confirmation."
+        ],
+        "prerequisites": ["Department advising eligibility", "Clearance or accountability status if required", "Previous grades or ERS printout if required"],
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_admission_enrollment_2026_004",
+        "section_title": "Enrollment Problems",
+        "process_name": "Blocked Enrollment or Missing Subject",
+        "content": "Demo troubleshooting guidance. If a student cannot enlist a subject, has a missing grade, prerequisite issue, overload request, section conflict, blocked account, scholarship notation issue, or unpaid balance, the student should identify the blocking reason and route it to the responsible office: adviser or department for academic blocks, Registrar for record or grade encoding concerns, Accounting or Cashier for payment and assessment concerns, OSA for scholarship notation, and UITC for ERS access issues.",
+        "answer": "First identify what is blocking enrollment. Go to your adviser or department for missing subjects, prerequisites, overload, petition, or section conflicts; Registrar for record or grade issues; Accounting/Cashier for assessment or payment problems; OSA for scholarship notation; and UITC for ERS login or system access concerns.",
+        "citation": "[DEMO] TUP Manila Admission and Enrollment Guide, Enrollment Problems",
+        "page_number": 4,
+        "tags": ["enrollment problem", "blocked enrollment", "missing subject", "prerequisite", "overload"],
+        "synonyms": ["cannot enroll", "subject not available", "section conflict", "petition subject", "enlistment problem"],
+        "steps": [
+          "Take a screenshot or note the exact error, subject code, section, and schedule.",
+          "Ask your adviser or department to check academic eligibility and subject availability.",
+          "If the issue is record-related, ask the Registrar what correction or document is needed.",
+          "If the issue is financial, ask Accounting or Cashier about assessment and payment posting.",
+          "If the issue is system access, ask UITC about ERS account support."
+        ],
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_admission_enrollment_2026_005",
+        "section_title": "Late Enrollment and Adding or Dropping Subjects",
+        "process_name": "Late Enrollment, Add, Drop, and Change of Matriculation",
+        "content": "Demo academic transaction guidance. Late enrollment, adding, dropping, changing sections, and changing loads are time-sensitive and usually require department or adviser approval, compliance with academic calendar deadlines, assessment adjustment, payment if applicable, and Registrar confirmation. Students should not rely on verbal permission alone; they should keep a copy of approved forms or screenshots from official systems.",
+        "answer": "For late enrollment, adding, dropping, or changing subjects, ask your department adviser first and check the academic calendar deadline. Secure required approvals, have assessment adjusted if needed, pay any required fees, and confirm the final registration with the Registrar. Keep proof of the approved transaction.",
+        "citation": "[DEMO] TUP Manila Admission and Enrollment Guide, Late Enrollment and Adding or Dropping Subjects",
+        "page_number": 5,
+        "tags": ["late enrollment", "adding", "dropping", "change of matriculation", "academic calendar"],
+        "synonyms": ["add subject", "drop subject", "change section", "change schedule", "late registration"],
+        "prerequisites": ["Academic calendar deadline not yet closed", "Adviser or department approval", "Assessment adjustment if fees change"],
+        "priority": 8
+      }
+    ]
+  },
+  {
+    "document_id": "demo_registrar_procedure_2026",
+    "document_title": "[DEMO] Registrar Office Procedure Guide",
+    "document_type": "office_procedure",
+    "category": "Academic Records",
+    "office": "Registrar",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://tup.edu.ph/pages/services/university-registrar",
+    "chunks": [
+      {
+        "chunk_id": "demo_registrar_procedure_2026_001",
+        "section_title": "Certificate of Registration",
+        "process_name": "Certificate of Registration Request",
+        "content": "Demo Registrar guidance. The University Registrar is the custodian of student records and handles registration confirmation, school records, graduation, transfer, and related academic records. Students requesting a Certificate of Registration or COR should prepare their student number, program, year level, semester, proof of enrollment or registration form if available, and any payment or request reference required by the office.",
+        "answer": "Request a Certificate of Registration from the University Registrar. Prepare your student number, program, year level, semester, and proof of enrollment or registration form if available. Ask the Registrar about the current request window, fees if any, release schedule, and whether a printed or digital COR is available.",
+        "citation": "[DEMO] Registrar Office Procedure Guide, Certificate of Registration",
+        "page_number": 1,
+        "tags": ["registrar", "certificate of registration", "cor", "document request", "school records"],
+        "synonyms": ["cert of reg", "registration certificate", "proof of enrollment", "enrollment certificate"],
+        "steps": [
+          "Prepare your student number, full name, program, year level, and semester.",
+          "Bring your ID or temporary proof of enrollment.",
+          "Ask the Registrar for the current COR request process and fees if any.",
+          "Keep the claim slip, receipt, or request reference until release."
+        ],
+        "office_location": "University Registrar, ground floor of the College of Arts and Science building behind the University Library, per public TUP service page",
+        "contact_info": "Use the official TUP contact page or campus trunk line for current Registrar contact details.",
+        "priority": 10
+      },
+      {
+        "chunk_id": "demo_registrar_procedure_2026_002",
+        "section_title": "Course Shifting",
+        "process_name": "Course Shifting Inquiry",
+        "content": "Demo shifting guidance. Students asking about shifting programs should check eligibility with their current department, ask the receiving department about available slots, grade or interview requirements, curriculum differences, and deadlines, then confirm routing with the Registrar. Shifting may require clearances, adviser endorsement, department approval, and updated registration records.",
+        "answer": "For shifting, start with your current department adviser, then ask the receiving department about slots, grade requirements, interview or portfolio requirements, and deadlines. After both departments advise you, confirm the official forms and routing with the Registrar. Do not assume approval until the receiving department and Registrar have processed it.",
+        "citation": "[DEMO] Registrar Office Procedure Guide, Course Shifting",
+        "page_number": 2,
+        "tags": ["shift", "course", "program transfer", "department", "registrar"],
+        "synonyms": ["shifting", "change course", "change program", "transfer program", "change major"],
+        "steps": [
+          "Ask your current adviser if you are eligible to shift.",
+          "Ask the receiving department about slots, requirements, and deadline.",
+          "Secure required endorsements, grades, interview results, or portfolio documents.",
+          "Submit approved routing to the Registrar for record updating."
+        ],
+        "prerequisites": ["Current department advising", "Receiving department slot or acceptance", "Registrar-approved forms"],
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_registrar_procedure_2026_003",
+        "section_title": "Transcript and Certifications",
+        "process_name": "TOR, Good Standing, and Certification Requests",
+        "content": "Demo records request guidance. Registrar document requests may include Transcript of Records, certificate of grades, certificate of enrollment, certificate of good standing, honorable dismissal or transfer credentials, authentication, and graduation-related certifications. Students should prepare student ID, full name used in school records, student number, program, year last attended, purpose of request, clearance status, authorization letter if a representative will claim, and payment proof if required.",
+        "answer": "For TOR and academic certifications, go to the Registrar with your ID, student number, full registered name, program, year or semester needed, purpose of request, and clearance/payment proof if required. If someone else will claim, ask about authorization letter and valid ID requirements.",
+        "citation": "[DEMO] Registrar Office Procedure Guide, Transcript and Certifications",
+        "page_number": 3,
+        "tags": ["tor", "transcript", "certificate of grades", "good standing", "honorable dismissal"],
+        "synonyms": ["school records", "academic records", "certification", "authentication", "transfer credentials"],
+        "prerequisites": ["No unresolved records or clearance hold", "Valid student ID or government ID", "Payment proof if fees apply"],
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_registrar_procedure_2026_004",
+        "section_title": "Grade Correction and Missing Grade",
+        "process_name": "Missing Grade or Incorrect Grade Follow-up",
+        "content": "Demo grade concern guidance. If a student sees an INC, missing grade, wrong grade, duplicate subject, or record mismatch in ERS or a printed record, the student should first ask the subject instructor or department to verify the grade submission. The Registrar can advise on record correction routing, but grade changes usually need faculty or department documentation and official approval.",
+        "answer": "For a missing or incorrect grade, first contact the instructor or department that handled the subject. Ask whether the grade was submitted and what correction form or endorsement is needed. Then coordinate with the Registrar for official record updating. Keep screenshots, class details, and approved correction documents.",
+        "citation": "[DEMO] Registrar Office Procedure Guide, Grade Correction and Missing Grade",
+        "page_number": 4,
+        "tags": ["missing grade", "incorrect grade", "grade correction", "ers", "registrar"],
+        "synonyms": ["wrong grade", "grade not posted", "inc", "incomplete grade", "record mismatch"],
+        "steps": [
+          "Capture the subject code, section, instructor, semester, and visible record issue.",
+          "Ask the instructor or department to verify grade submission.",
+          "Secure the required correction endorsement if a change is needed.",
+          "Coordinate with the Registrar for official posting or correction."
+        ],
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_registrar_procedure_2026_005",
+        "section_title": "Graduation Processing",
+        "process_name": "Application for Graduation and Records Check",
+        "content": "Demo graduation guidance. Graduating students should follow the academic calendar for application for graduation, consult their department for curriculum evaluation, check remaining subjects, deficiencies, and clearances, verify personal information for diploma records, and coordinate with Registrar for official graduation application and record validation. Deadlines vary by semester and must be checked in official announcements.",
+        "answer": "For graduation processing, check the academic calendar deadline, ask your department for curriculum evaluation, clear remaining deficiencies, verify your personal information, and submit the official application or requirements through the Registrar process. Confirm exact forms and dates with your department and the Registrar.",
+        "citation": "[DEMO] Registrar Office Procedure Guide, Graduation Processing",
+        "page_number": 5,
+        "tags": ["graduation", "application for graduation", "curriculum evaluation", "clearance", "diploma"],
+        "synonyms": ["graduating", "grad application", "candidate for graduation", "records check"],
+        "prerequisites": ["Department curriculum evaluation", "No unresolved academic deficiencies", "Clearance status checked"],
+        "priority": 8
+      }
+    ]
+  },
+  {
+    "document_id": "demo_accounting_cashier_2026",
+    "document_title": "[DEMO] Accounting and Cashier Student Transactions",
+    "document_type": "office_procedure",
+    "category": "Payments and Assessment",
+    "office": "Accounting",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://tup.edu.ph/pages/students/enrollment-procedure",
+    "chunks": [
+      {
+        "chunk_id": "demo_accounting_cashier_2026_001",
+        "section_title": "Assessment and Registration Form",
+        "process_name": "Accounting Assessment Inquiry",
+        "content": "Demo Accounting guidance. During enrollment, Accounting or Finance Services handles assessment concerns and registration form preparation after subject enlistment. Students should bring student number, program, year level, adviser-enlisted subjects, scholarship notation if applicable, and previous balance or clearance information. Public contact listings identify Finance Services local 123; verify current routing before production use.",
+        "answer": "For assessment or registration form concerns, go to Accounting or Finance Services after adviser enlistment. Bring your student number, program, year level, enlisted subjects, scholarship notation if any, and previous balance or clearance information. Demo contact reference: Finance Services local 123; verify through official TUP channels.",
+        "citation": "[DEMO] Accounting and Cashier Student Transactions, Assessment and Registration Form",
+        "page_number": 1,
+        "tags": ["accounting", "assessment", "registration form", "student account", "finance"],
+        "synonyms": ["billing", "assessed fees", "balance", "accounting concern", "statement of account"],
+        "steps": [
+          "Finish adviser or department enlistment first.",
+          "Prepare student number, program, year level, and enlisted subjects.",
+          "Bring scholarship notation or clearance details if applicable.",
+          "Ask Accounting or Finance Services for assessment and registration form status."
+        ],
+        "office_location": "Accounting or Finance Services office; confirm current room on campus",
+        "contact_info": "Demo reference: Finance Services local 123; verify with official contact page.",
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_accounting_cashier_2026_002",
+        "section_title": "Cashier Payments",
+        "process_name": "Paying Assessed Fees",
+        "content": "Demo Cashier guidance. After assessment, students pay assessed fees at the Cashier's Office or through an officially announced payment channel. Students should keep the official receipt, transaction slip, or payment reference because it may be needed for Registrar confirmation, clearance, document release, or payment posting follow-up.",
+        "answer": "After Accounting assessment, pay through the Cashier's Office or an officially announced payment channel. Keep the official receipt or payment reference and present it when asked by Accounting, Registrar, or other offices. Do not send payments to unofficial accounts.",
+        "citation": "[DEMO] Accounting and Cashier Student Transactions, Cashier Payments",
+        "page_number": 2,
+        "tags": ["cashier", "payment", "receipt", "assessed fees", "official receipt"],
+        "synonyms": ["pay fees", "where to pay", "payment posting", "tuition payment", "miscellaneous fees"],
+        "prerequisites": ["Accounting assessment completed", "Registration form or assessment reference available"],
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_accounting_cashier_2026_003",
+        "section_title": "Payment Posting Problem",
+        "process_name": "Unposted or Incorrect Payment",
+        "content": "Demo payment troubleshooting. If a payment is not reflected, reflected under the wrong semester, duplicated, or missing from clearance, the student should prepare the official receipt, online payment reference if any, student number, date paid, amount, purpose of payment, and screenshot of the issue. The concern should be routed to Cashier or Accounting depending on whether the issue is receipt validation, posting, balance, or assessment.",
+        "answer": "For unposted or incorrect payment, prepare your receipt or online reference, student number, date paid, amount, purpose, and screenshot of the issue. Ask Cashier to verify receipt/payment details and Accounting to check balance, assessment, or posting status.",
+        "citation": "[DEMO] Accounting and Cashier Student Transactions, Payment Posting Problem",
+        "page_number": 3,
+        "tags": ["payment posting", "unposted payment", "receipt", "balance", "cashier"],
+        "synonyms": ["payment not reflected", "wrong payment", "missing receipt", "online payment problem"],
+        "steps": [
+          "Take a screenshot of the balance or posting issue.",
+          "Prepare receipt number, date paid, amount, and purpose.",
+          "Ask Cashier to verify the receipt or payment reference.",
+          "Ask Accounting to update assessment, balance, or clearance status if needed."
+        ],
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_accounting_cashier_2026_004",
+        "section_title": "Clearance Holds",
+        "process_name": "Accounting Clearance Check",
+        "content": "Demo clearance guidance. Accounting clearance may be checked before enrollment, graduation, transfer, or release of selected documents. Holds may involve unpaid balances, unposted payments, missing receipts, or unresolved assessment changes. Students should resolve holds before Registrar document release or graduation processing deadlines.",
+        "answer": "If you have an Accounting clearance hold, ask Accounting what balance, receipt, or assessment issue is blocking you. Bring payment proof and registration details, settle or correct the issue, then ask how clearance status will be updated for Registrar, enrollment, or graduation processing.",
+        "citation": "[DEMO] Accounting and Cashier Student Transactions, Clearance Holds",
+        "page_number": 4,
+        "tags": ["clearance", "accounting hold", "graduation", "document release", "balance"],
+        "synonyms": ["accountability", "financial hold", "cannot get records", "blocked by accounting"],
+        "priority": 8
+      }
+    ]
+  },
+  {
+    "document_id": "demo_osa_student_affairs_2026",
+    "document_title": "[DEMO] Office of Student Affairs Student Services Guide",
+    "document_type": "office_procedure",
+    "category": "Student Welfare",
+    "office": "Student Affairs",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://tup.edu.ph/pages/students/office-of-student-affairs",
+    "chunks": [
+      {
+        "chunk_id": "demo_osa_student_affairs_2026_001",
+        "section_title": "OSA Frontline Services",
+        "process_name": "Office of Student Affairs Routing",
+        "content": "Demo OSA guidance based on public TUP information. The Office of Student Affairs is a primary frontline office for student welfare, student development, records related to student affairs, discipline coordination, scholarships, testing, orientation, co-curricular and extra-curricular activities, and student-life concerns. Public contact listings identify OSA local 606; verify current contact and office hours.",
+        "answer": "Go to OSA for student welfare concerns, ID processing, scholarship notation, student organization matters, discipline-related routing, orientation concerns, and other student-life concerns. Demo contact reference: OSA local 606; verify current schedule and requirements with official TUP channels.",
+        "citation": "[DEMO] Office of Student Affairs Student Services Guide, OSA Frontline Services",
+        "page_number": 1,
+        "tags": ["osa", "student affairs", "student welfare", "student services", "frontline office"],
+        "synonyms": ["office of student affairs", "student life", "where to ask student concern", "student affairs office"],
+        "office_location": "Office of Student Affairs, TUP Manila; confirm current room on campus",
+        "contact_info": "Demo reference: OSA local 606; verify through official contact page.",
+        "priority": 10
+      },
+      {
+        "chunk_id": "demo_osa_student_affairs_2026_002",
+        "section_title": "Student ID",
+        "process_name": "ID Card Processing, Replacement, and Temporary ID",
+        "content": "Demo ID guidance. New students commonly proceed to OSA for ID processing after registration confirmation. For lost, damaged, or incorrect ID details, students should prepare student number, COR or registration form, proof of payment if replacement has a fee, affidavit or loss report if required, photo requirements if requested, and a valid temporary proof of enrollment. Students should ask OSA whether a temporary ID or gate pass is available while waiting.",
+        "answer": "For ID processing or replacement, go to OSA. Bring your student number, COR or registration form, current or damaged ID if available, proof of payment if required, and any loss report or affidavit if OSA asks for it. Ask about a temporary ID or gate pass while waiting for release.",
+        "citation": "[DEMO] Office of Student Affairs Student Services Guide, Student ID",
+        "page_number": 2,
+        "tags": ["student id", "id replacement", "temporary id", "lost id", "osa"],
+        "synonyms": ["school id", "identification card", "id card", "gate pass", "damaged id"],
+        "steps": [
+          "Confirm your enrollment or registration status.",
+          "Prepare COR or registration form and student number.",
+          "For lost ID, ask OSA if an affidavit, loss report, or payment is required.",
+          "Ask whether a temporary ID, claim stub, or gate pass can be issued."
+        ],
+        "office_location": "Office of Student Affairs",
+        "contact_info": "Demo reference: OSA local 606; verify current process with OSA.",
+        "priority": 10
+      },
+      {
+        "chunk_id": "demo_osa_student_affairs_2026_003",
+        "section_title": "Scholarships",
+        "process_name": "Scholarship Notation and Application Support",
+        "content": "Demo scholarship guidance. TUP public student pages describe scholarship grants for deserving students with academic, athletic, government, community, private company, or NGO support. During enrollment, scholars may need OSA notation before Accounting assessment. Students should prepare scholarship award notice, certificate, previous rating slip or grades, COR or registration form, student number, and sponsor requirements. Application deadlines and accepted programs change and must be checked with OSA or the sponsor.",
+        "answer": "For scholarship notation or application support, go to OSA. Bring your scholarship award notice or certificate, previous grades or rating slip, COR or registration form, student number, and sponsor forms. Deadlines and accepted scholarship programs change, so confirm with OSA and the sponsoring agency.",
+        "citation": "[DEMO] Office of Student Affairs Student Services Guide, Scholarships",
+        "page_number": 3,
+        "tags": ["scholarship", "scholarship notation", "osa", "financial aid", "rating slip"],
+        "synonyms": ["scholar", "grant", "discount", "financial assistance", "academic scholar", "ched", "dost"],
+        "steps": [
+          "Check whether your scholarship requires notation before assessment.",
+          "Prepare scholarship award notice, sponsor forms, grades, and COR or registration form.",
+          "Submit requirements to OSA for notation or validation.",
+          "Proceed to Accounting for assessment after OSA notation if required."
+        ],
+        "prerequisites": ["Scholarship proof or application documents", "Current enrollment or applicant status", "Grades or rating slip if required"],
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_osa_student_affairs_2026_004",
+        "section_title": "Student Organizations",
+        "process_name": "Joining or Accrediting a Student Organization",
+        "content": "Demo student organization guidance. Public TUP pages list accredited clubs and student organizations across colleges, non-college-based groups, religious groups, and new or probationary groups. Students who want to join an organization should check the latest accredited list, membership requirements, adviser approval, and activity rules. Officers who want an organization accredited or re-accredited should coordinate with OSA and submit updated officers, adviser endorsement, constitution or bylaws if required, activity plan, and compliance documents.",
+        "answer": "To join an organization, check the latest OSA-accredited list and ask the organization's officers or adviser about membership. For accreditation or re-accreditation, coordinate with OSA and prepare adviser endorsement, officer list, constitution or bylaws if required, activity plan, and compliance documents.",
+        "citation": "[DEMO] Office of Student Affairs Student Services Guide, Student Organizations",
+        "page_number": 4,
+        "tags": ["student organizations", "clubs", "accreditation", "osa", "adviser"],
+        "synonyms": ["org", "student org", "club", "accredited organization", "join organization"],
+        "office_location": "Office of Student Affairs",
+        "contact_info": "Demo reference: OSA local 606; verify the current accredited list with OSA.",
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_osa_student_affairs_2026_005",
+        "section_title": "Uniform and Dress Guidance",
+        "process_name": "Uniform, ID, and Attire Clarification",
+        "content": "Demo uniform guidance. Students should follow the official TUP student handbook, department laboratory or shop attire rules, PE uniform requirements, and any posted event or exam dress instructions. ID should be worn or carried as required by campus entry and office transaction rules. For labs, shops, OJT, and field activities, students may need prescribed protective clothing, shoes, hair restraints, PPE, or department-specific uniform.",
+        "answer": "Follow the official handbook, department, lab, shop, PE, and event dress rules. Carry or wear your student ID as required. For labs, shops, OJT, and fieldwork, ask your instructor or department about required uniform, shoes, PPE, and grooming rules before attending.",
+        "citation": "[DEMO] Office of Student Affairs Student Services Guide, Uniform and Dress Guidance",
+        "page_number": 5,
+        "tags": ["uniform", "dress code", "id", "pe uniform", "lab attire"],
+        "synonyms": ["what to wear", "proper attire", "dress policy", "shop uniform", "ppe"],
+        "priority": 7
+      },
+      {
+        "chunk_id": "demo_osa_student_affairs_2026_006",
+        "section_title": "Student Conduct and Campus Rules",
+        "process_name": "Student Conduct Rules",
+        "content": "Demo conduct guidance. Students are expected to respect classmates, faculty, staff, guards, visitors, and university property; follow classroom, lab, shop, and library rules; avoid harassment, intimidation, vandalism, cheating, unauthorized entry, disruptive behavior, and unsafe conduct; observe queueing and office procedures; and use official channels for complaints or appeals. Final discipline rules must come from the official handbook and OSA.",
+        "answer": "Students should respect people and property, follow classroom and office rules, avoid cheating, harassment, vandalism, unsafe conduct, and disruption, and use official channels for complaints or appeals. This is demo guidance only; the official handbook and OSA control final discipline procedures.",
+        "citation": "[DEMO] Office of Student Affairs Student Services Guide, Student Conduct and Campus Rules",
+        "page_number": 6,
+        "tags": ["student conduct", "campus rules", "discipline", "behavior", "handbook"],
+        "synonyms": ["rules", "disciplinary", "code of conduct", "misconduct", "violation"],
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_osa_student_affairs_2026_007",
+        "section_title": "Complaints and Student Concerns",
+        "process_name": "Reporting a Student Concern",
+        "content": "Demo concern-reporting guidance. For harassment, bullying, unsafe facilities, discrimination, serious classroom conflict, organization issues, or service problems, students should document what happened, keep evidence, identify date, time, location, people involved, and witnesses, then ask OSA, Guidance, department chair, security, or the relevant office for the correct reporting route. Emergencies should be reported immediately to guards or emergency responders.",
+        "answer": "For a student concern or complaint, document the date, time, location, people involved, witnesses, and evidence. Route academic concerns through the instructor or department, student welfare or conduct concerns through OSA, counseling concerns through Guidance, safety concerns through guards/security, and service issues through the responsible office.",
+        "citation": "[DEMO] Office of Student Affairs Student Services Guide, Complaints and Student Concerns",
+        "page_number": 7,
+        "tags": ["complaint", "student concern", "harassment", "bullying", "unsafe facility"],
+        "synonyms": ["report concern", "file complaint", "student welfare", "incident report", "grievance"],
+        "steps": [
+          "Write down date, time, location, people involved, and witnesses.",
+          "Save screenshots, photos, messages, receipts, or documents if relevant.",
+          "Route the concern to OSA, Guidance, department, guard post, or responsible office depending on the issue.",
+          "For immediate danger, alert guards or emergency responders first."
+        ],
+        "priority": 9
+      }
+    ]
+  },
+  {
+    "document_id": "demo_clinic_procedure_2026",
+    "document_title": "[DEMO] University Medical and Dental Clinic Guide",
+    "document_type": "office_procedure",
+    "category": "Health Services",
+    "office": "Clinic",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://www.tup.edu.ph/pages/services/medical-and-dental-clinic",
+    "chunks": [
+      {
+        "chunk_id": "demo_clinic_procedure_2026_001",
+        "section_title": "On-Campus Health Concern",
+        "process_name": "Feeling Sick on Campus",
+        "content": "Demo Clinic guidance. The TUP Medical and Dental Clinic provides routine medical and dental consultation, basic procedures, referrals to specialized institutions, annual medical and dental evaluation, and health-related activities. If a student feels sick on campus, they should proceed to the Clinic or ask a faculty member, class officer, guard, or office staff for help. Severe symptoms should be escalated immediately through campus safety and emergency procedures.",
+        "answer": "If you feel sick on campus, go to the University Medical and Dental Clinic or ask your instructor, class officer, guard, or office staff to assist you. For severe symptoms such as fainting, chest pain, difficulty breathing, heavy bleeding, or serious injury, request immediate emergency assistance through campus personnel.",
+        "citation": "[DEMO] University Medical and Dental Clinic Guide, On-Campus Health Concern",
+        "page_number": 1,
+        "tags": ["clinic", "medical", "sick", "health", "consultation"],
+        "synonyms": ["nurse", "doctor", "faint", "dizzy", "headache", "injury", "first aid"],
+        "steps": [
+          "Tell your instructor, class officer, or nearby staff if you cannot walk safely.",
+          "Proceed to the Clinic or ask for assistance going there.",
+          "Bring your student ID and explain symptoms, medicines taken, allergies, and recent incidents.",
+          "For severe symptoms, ask campus personnel to activate emergency response."
+        ],
+        "office_location": "University Medical and Dental Clinic; confirm current room on campus",
+        "contact_info": "Use official TUP contact channels or nearby campus personnel for urgent help.",
+        "priority": 10
+      },
+      {
+        "chunk_id": "demo_clinic_procedure_2026_002",
+        "section_title": "Medical Certificate and Health Evaluation",
+        "process_name": "Medical Certificate for Enrollment or Activity",
+        "content": "Demo medical certificate guidance. Enrollment and some activities may require a Clinic medical certificate or health clearance. Students should bring ID or proof of enrollment, completed health forms if available, prior medical records if relevant, vaccination or lab documents if requested, and activity details when clearance is for sports, fieldwork, internship, or shop/lab participation.",
+        "answer": "For a medical certificate or health clearance, go to the Clinic with your ID or proof of enrollment, required health forms, and any relevant medical, lab, vaccination, or referral documents. Tell the Clinic if the certificate is for enrollment, sports, fieldwork, OJT, lab, or shop activity.",
+        "citation": "[DEMO] University Medical and Dental Clinic Guide, Medical Certificate and Health Evaluation",
+        "page_number": 2,
+        "tags": ["medical certificate", "health clearance", "clinic", "enrollment", "activity clearance"],
+        "synonyms": ["med cert", "medical clearance", "health evaluation", "fit to participate"],
+        "prerequisites": ["Student ID or enrollment proof", "Required clinic forms or prior medical records if applicable"],
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_clinic_procedure_2026_003",
+        "section_title": "Dental Services",
+        "process_name": "Dental Consultation",
+        "content": "Demo dental guidance. The University Medical and Dental Clinic provides routine dental services and may advise students on dental concerns, basic procedures, or referral. Students with tooth pain, mouth injury, bleeding gums, broken dental appliances, or dental clearance requirements should contact or visit the Clinic and bring ID plus any prior dental record when relevant.",
+        "answer": "For tooth pain or dental concerns, go to the University Medical and Dental Clinic with your ID and describe the symptoms, onset, medicines taken, and any prior dental treatment. The Clinic can provide routine dental assistance or referral guidance depending on the case.",
+        "citation": "[DEMO] University Medical and Dental Clinic Guide, Dental Services",
+        "page_number": 3,
+        "tags": ["dental", "toothache", "clinic", "dentist", "mouth injury"],
+        "synonyms": ["tooth pain", "dental clearance", "gum bleeding", "broken braces"],
+        "priority": 7
+      },
+      {
+        "chunk_id": "demo_clinic_procedure_2026_004",
+        "section_title": "Clinic Records and Privacy",
+        "process_name": "Clinic Record Request",
+        "content": "Demo clinic records guidance. Clinic-related records are health records and should be handled with privacy. Students requesting records, clearances, or copies should bring ID, specify the purpose, and follow the Clinic verification process. If a representative will request or claim records, written authorization and valid IDs may be required.",
+        "answer": "For clinic-related records, bring your ID, specify the purpose, and follow the Clinic verification process. If someone else will request or claim records, ask whether authorization letter and valid IDs are required. Health records should be handled confidentially.",
+        "citation": "[DEMO] University Medical and Dental Clinic Guide, Clinic Records and Privacy",
+        "page_number": 4,
+        "tags": ["clinic records", "medical record", "privacy", "medical certificate", "authorization"],
+        "synonyms": ["health records", "medical file", "claim medical certificate", "confidential"],
+        "priority": 7
+      }
+    ]
+  },
+  {
+    "document_id": "demo_guidance_counseling_2026",
+    "document_title": "[DEMO] Career Guidance and Counseling Center Guide",
+    "document_type": "office_procedure",
+    "category": "Guidance and Counseling",
+    "office": "Guidance",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://tup.edu.ph/pages/students/office-of-student-affairs",
+    "chunks": [
+      {
+        "chunk_id": "demo_guidance_counseling_2026_001",
+        "section_title": "Counseling Support",
+        "process_name": "Requesting Counseling or Mental Health Support",
+        "content": "Demo Guidance guidance based on public OSA information. The Career Guidance and Counseling Center provides counseling, consultation, individual inventory, information services, testing, and student development support. Students may ask for help with academic stress, adjustment, family concerns, conflict, career planning, grief, anxiety, burnout, or personal-social concerns. Public contact listings identify Guidance Office local 625; verify current process and confidentiality rules.",
+        "answer": "For counseling or mental health support, contact the Guidance Office or ask OSA to route you. You can seek help for stress, adjustment, academic pressure, conflict, career concerns, grief, anxiety, or personal concerns. Demo contact reference: Guidance Office local 625; verify current appointment and confidentiality procedures.",
+        "citation": "[DEMO] Career Guidance and Counseling Center Guide, Counseling Support",
+        "page_number": 1,
+        "tags": ["guidance", "counseling", "mental health", "stress", "support"],
+        "synonyms": ["counselor", "anxiety", "burnout", "personal problem", "academic stress", "career guidance"],
+        "steps": [
+          "Contact Guidance directly or ask OSA, an adviser, or trusted faculty member for referral.",
+          "State whether the concern is urgent, academic, personal, family-related, or career-related.",
+          "Prepare your student number and available schedule if an appointment is needed.",
+          "For immediate danger or self-harm risk, ask nearby personnel for urgent emergency assistance."
+        ],
+        "office_location": "Guidance Office; confirm current room on campus",
+        "contact_info": "Demo reference: Guidance Office local 625; verify through official contact page.",
+        "priority": 10
+      },
+      {
+        "chunk_id": "demo_guidance_counseling_2026_002",
+        "section_title": "Testing and Inventory",
+        "process_name": "Guidance Testing, Inventory, and Referral",
+        "content": "Demo testing guidance. Guidance may conduct student inventory, psychological or career-related testing, orientation, consultation, and referrals as part of student development. Students asked to report for testing should bring ID, follow the schedule, answer forms honestly, and ask how results will be used and who can access them.",
+        "answer": "If Guidance asks you to report for testing or inventory, bring your ID, follow the assigned schedule, answer honestly, and ask how results will be used. Guidance records should be treated confidentially under the office process.",
+        "citation": "[DEMO] Career Guidance and Counseling Center Guide, Testing and Inventory",
+        "page_number": 2,
+        "tags": ["guidance testing", "student inventory", "career test", "consultation", "referral"],
+        "synonyms": ["psych test", "aptitude test", "inventory form", "guidance referral"],
+        "priority": 7
+      },
+      {
+        "chunk_id": "demo_guidance_counseling_2026_003",
+        "section_title": "Academic Difficulty",
+        "process_name": "Getting Help When Failing or Overwhelmed",
+        "content": "Demo academic support guidance. A student who is failing a subject, missing classes due to personal issues, overwhelmed by shop/lab requirements, or at risk of dropping should talk to the instructor and adviser early, then seek Guidance support for planning, adjustment, and referrals. Registrar deadlines still apply for dropping, incomplete grades, and enrollment status changes.",
+        "answer": "If you are failing or overwhelmed, talk to your instructor and adviser early, then consider Guidance for counseling and planning support. Ask about options before deadlines for dropping, INC completion, make-up work, or reduced load pass. Keep communication and approval records.",
+        "citation": "[DEMO] Career Guidance and Counseling Center Guide, Academic Difficulty",
+        "page_number": 3,
+        "tags": ["failing subject", "academic stress", "guidance", "adviser", "dropping"],
+        "synonyms": ["overwhelmed", "burnout", "absences", "at risk", "failed subject"],
+        "priority": 8
+      }
+    ]
+  },
+  {
+    "document_id": "demo_library_services_2026",
+    "document_title": "[DEMO] University Library Student Services Guide",
+    "document_type": "office_procedure",
+    "category": "Library Services",
+    "office": "Library",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://library.tup.edu.ph/",
+    "chunks": [
+      {
+        "chunk_id": "demo_library_services_2026_001",
+        "section_title": "Borrowing and Reading Services",
+        "process_name": "Borrowing Books and Using the Library",
+        "content": "Demo library guidance. The University Library supports reading, borrowing, reference help, research support, and learning resources. Students should bring a valid student ID or proof of enrollment, follow library rules, check borrowing limits and due dates, return materials on time, and ask library staff about catalog search, reference materials, e-resources, or study space rules. Public contact listings identify Library Resources and Learning Center local 601; verify current hours.",
+        "answer": "To borrow or use library services, bring your student ID or proof of enrollment, follow library rules, check borrowing limits and due dates, and ask staff about catalog search, reference materials, e-resources, and study spaces. Demo contact reference: Library local 601; verify current hours and policies.",
+        "citation": "[DEMO] University Library Student Services Guide, Borrowing and Reading Services",
+        "page_number": 1,
+        "tags": ["library", "borrow books", "reading", "catalog", "student id"],
+        "synonyms": ["book loan", "library card", "study area", "library resources", "learning center"],
+        "steps": [
+          "Bring student ID or current enrollment proof.",
+          "Search the catalog or ask staff for help finding a resource.",
+          "Check borrowing rules, due date, and renewal policy.",
+          "Return materials on time and settle any accountability before clearance."
+        ],
+        "office_location": "University Library or Library Resources and Learning Center; confirm current entrance and hours",
+        "contact_info": "Demo reference: Library local 601; verify through official contact page.",
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_library_services_2026_002",
+        "section_title": "Library Clearance",
+        "process_name": "Library Clearance or Accountability",
+        "content": "Demo library clearance guidance. Library clearance may be required for graduation, transfer, or document release. Common holds can include unreturned books, overdue fines, damaged materials, missing library forms, or unsettled accountability. Students should bring ID, clearance form or transaction reference, and proof of returned or paid items.",
+        "answer": "For library clearance, ask the Library to check your accountabilities. Bring your ID, clearance form or request reference, and proof of returned books or settled fines if any. Resolve lost, damaged, or overdue material issues before Registrar or graduation deadlines.",
+        "citation": "[DEMO] University Library Student Services Guide, Library Clearance",
+        "page_number": 2,
+        "tags": ["library clearance", "clearance", "overdue books", "accountability", "graduation"],
+        "synonyms": ["library hold", "return books", "lost book", "fines", "clearance signing"],
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_library_services_2026_003",
+        "section_title": "Research Help",
+        "process_name": "Reference, Thesis, and E-Resource Help",
+        "content": "Demo research support guidance. Students working on reports, thesis, capstone, feasibility studies, design plates, lab reports, or literature reviews may ask the Library for help with search strategies, citations, references, catalogs, journals, databases, and resource availability. Students should bring the topic, keywords, required format, adviser instructions, and deadline.",
+        "answer": "For research help, bring your topic, keywords, required citation style or format, adviser instructions, and deadline to the Library. Ask staff about catalogs, reference books, journals, databases, e-resources, and proper citation support.",
+        "citation": "[DEMO] University Library Student Services Guide, Research Help",
+        "page_number": 3,
+        "tags": ["research", "reference", "thesis", "citation", "e-resources"],
+        "synonyms": ["literature review", "journals", "database", "references", "capstone"],
+        "priority": 7
+      },
+      {
+        "chunk_id": "demo_library_services_2026_004",
+        "section_title": "Library Conduct",
+        "process_name": "Study Space and Computer Use Rules",
+        "content": "Demo library conduct guidance. Students should keep noise low, handle materials carefully, avoid food and drinks in prohibited areas, follow computer and charging rules, respect seat-sharing policies during peak hours, and observe copyright and citation rules when copying or scanning resources.",
+        "answer": "Inside the Library, keep noise low, handle materials carefully, avoid food and drinks where prohibited, follow computer and charging rules, share seats during peak hours, and observe copyright and citation rules when copying or scanning.",
+        "citation": "[DEMO] University Library Student Services Guide, Library Conduct",
+        "page_number": 4,
+        "tags": ["library rules", "study space", "computer use", "noise", "food prohibited"],
+        "synonyms": ["library conduct", "quiet area", "charging", "scanning", "copyright"],
+        "priority": 6
+      }
+    ]
+  },
+  {
+    "document_id": "demo_ers_uitc_2026",
+    "document_title": "[DEMO] ERS and University IT Help Guide",
+    "document_type": "office_procedure",
+    "category": "Systems and Accounts",
+    "office": "University Information Technology Center",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://www.tup.edu.ph/",
+    "chunks": [
+      {
+        "chunk_id": "demo_ers_uitc_2026_001",
+        "section_title": "ERS Student Access",
+        "process_name": "ERS Login or Password Reset",
+        "content": "Demo ERS/UITC guidance. The TUP website links to ERS for Students and Student Applicants Module. Students who cannot log in, forgot a password, see incorrect account details, or cannot access enrollment functions should prepare student number or applicant number, registered email or phone if applicable, screenshot of the error, device/browser used, and proof of identity. Route technical account concerns to the University Information Technology Center or the officially announced help channel.",
+        "answer": "For ERS login or password reset concerns, prepare your student or applicant number, registered email or phone, screenshot of the error, device/browser used, and proof of identity. Contact UITC or the officially announced ERS help channel. Do not share your password or one-time codes with classmates or unofficial pages.",
+        "citation": "[DEMO] ERS and University IT Help Guide, ERS Student Access",
+        "page_number": 1,
+        "tags": ["ers", "password reset", "login", "uitc", "student portal"],
+        "synonyms": ["student portal", "forgot password", "account access", "cannot login", "applicant module"],
+        "steps": [
+          "Try the official ERS or applicant module link from the TUP website.",
+          "Record the exact error message and take a screenshot.",
+          "Prepare student or applicant number and proof of identity.",
+          "Contact UITC or the officially announced help channel.",
+          "Change your password only through official systems."
+        ],
+        "office_location": "University Information Technology Center or official online help channel",
+        "contact_info": "Verify current UITC contact and ERS support announcements on official TUP channels.",
+        "priority": 10
+      },
+      {
+        "chunk_id": "demo_ers_uitc_2026_002",
+        "section_title": "Wrong Data in ERS",
+        "process_name": "Correcting ERS Profile, Subject, or Grade Display",
+        "content": "Demo systems guidance. If ERS shows wrong name spelling, program, section, subject, schedule, grade, or payment status, determine whether the issue is technical display, academic record, department enlistment, or payment posting. Technical access issues go to UITC, academic record issues to Registrar, subject enlistment to the department adviser, and payment posting to Cashier or Accounting.",
+        "answer": "For wrong data in ERS, first identify the type of error. Login or display issues go to UITC; name, record, COR, or grade records go to Registrar; subject or schedule enlistment goes to your adviser or department; payment posting goes to Cashier or Accounting. Bring screenshots and transaction references.",
+        "citation": "[DEMO] ERS and University IT Help Guide, Wrong Data in ERS",
+        "page_number": 2,
+        "tags": ["ers", "wrong data", "profile correction", "grade display", "payment status"],
+        "synonyms": ["incorrect profile", "wrong schedule", "wrong subject", "wrong name", "system error"],
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_ers_uitc_2026_003",
+        "section_title": "Account Safety",
+        "process_name": "Protecting Student Accounts",
+        "content": "Demo account safety guidance. Students should use only official TUP systems and links, avoid sharing passwords, use strong passwords, sign out of shared computers, avoid saving passwords on public devices, report suspicious links or fake pages, and keep screenshots of suspicious messages. Offices should not ask students to send passwords through chat.",
+        "answer": "Protect your student account by using official TUP links, keeping passwords private, signing out of shared computers, avoiding saved passwords on public devices, and reporting suspicious links or fake pages. Never send your password or one-time code through chat.",
+        "citation": "[DEMO] ERS and University IT Help Guide, Account Safety",
+        "page_number": 3,
+        "tags": ["account safety", "password", "phishing", "fake page", "security"],
+        "synonyms": ["scam", "suspicious link", "hacked account", "one time code", "otp"],
+        "priority": 8
+      }
+    ]
+  },
+  {
+    "document_id": "demo_academic_department_2026",
+    "document_title": "[DEMO] Department and Academic Advising Guide",
+    "document_type": "procedure",
+    "category": "Academic Advising",
+    "office": "Academic Department",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://www.tup.edu.ph/",
+    "chunks": [
+      {
+        "chunk_id": "demo_academic_department_2026_001",
+        "section_title": "Academic Advising",
+        "process_name": "Talking to Your Adviser",
+        "content": "Demo academic advising guidance. Students should consult their department or course adviser for subject enlistment, prerequisite checks, curriculum sequencing, overload, underload, petition subjects, shifting preparation, retention concerns, make-up work, and academic planning. Bring grades, curriculum checklist, COR, prospectus, subject codes, and a proposed schedule.",
+        "answer": "Go to your department or course adviser for enlistment, prerequisites, curriculum sequence, overload or underload, petition subjects, retention concerns, and academic planning. Bring your grades, curriculum checklist, COR, prospectus, subject codes, and proposed schedule.",
+        "citation": "[DEMO] Department and Academic Advising Guide, Academic Advising",
+        "page_number": 1,
+        "tags": ["adviser", "department", "academic advising", "curriculum", "enlistment"],
+        "synonyms": ["course adviser", "program adviser", "department chair", "prospectus", "curriculum checklist"],
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_academic_department_2026_002",
+        "section_title": "Prerequisite and Petition Subjects",
+        "process_name": "Prerequisite, Petition, and Closed Section Concerns",
+        "content": "Demo subject availability guidance. If a subject is closed, not offered, conflicts with another subject, or requires a prerequisite, the department decides whether a petition, tutorial, overload, alternative section, or next-term plan is possible. Registrar and Accounting steps may follow only after department approval.",
+        "answer": "For closed sections, missing offerings, conflicts, petition subjects, or prerequisite concerns, ask your department first. The department determines whether a petition, alternative section, overload, tutorial, or next-term plan is possible. Registrar or Accounting steps usually come after department approval.",
+        "citation": "[DEMO] Department and Academic Advising Guide, Prerequisite and Petition Subjects",
+        "page_number": 2,
+        "tags": ["petition subject", "closed section", "prerequisite", "department", "overload"],
+        "synonyms": ["subject not offered", "conflict schedule", "cannot enlist", "tutorial class", "alternative section"],
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_academic_department_2026_003",
+        "section_title": "Laboratory, Shop, and Field Classes",
+        "process_name": "Lab, Shop, and Fieldwork Requirements",
+        "content": "Demo lab and shop guidance. Technical courses may require personal protective equipment, prescribed shoes, shop or lab uniforms, drawing tools, calculator, plates, lab manuals, safety orientation, and instructor clearance. Students should not enter restricted lab or shop areas without permission or required safety gear.",
+        "answer": "For lab, shop, or field classes, ask the instructor or department about PPE, uniform, shoes, tools, manuals, safety orientation, and entry rules. Do not enter restricted areas or operate equipment without permission and required safety gear.",
+        "citation": "[DEMO] Department and Academic Advising Guide, Laboratory, Shop, and Field Classes",
+        "page_number": 3,
+        "tags": ["laboratory", "shop", "fieldwork", "ppe", "safety"],
+        "synonyms": ["lab class", "workshop", "safety gear", "drawing tools", "plates"],
+        "priority": 8
+      }
+    ]
+  },
+  {
+    "document_id": "demo_irjp_ojt_career_2026",
+    "document_title": "[DEMO] Industrial Relations and Job Placement Guide",
+    "document_type": "office_procedure",
+    "category": "OJT and Career",
+    "office": "IRJP",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://tup.edu.ph/pages/services/industrial-relations-job-placement",
+    "chunks": [
+      {
+        "chunk_id": "demo_irjp_ojt_career_2026_001",
+        "section_title": "OJT and Internship",
+        "process_name": "OJT Endorsement and Internship Coordination",
+        "content": "Demo IRJP guidance. The Industrial Relations and Job Placement Office supports supervised industrial training or on-the-job training by connecting students with industry experience and coordinating practical training processes. Students should coordinate first with their department OJT coordinator, then prepare resume, endorsement request, company details, training agreement or memorandum requirements, insurance or health clearance if required, parent consent if required, and schedule details. Public contact listings identify IRJP local 204; verify current process.",
+        "answer": "For OJT, start with your department OJT coordinator, then coordinate with IRJP for endorsement or placement requirements. Prepare your resume, company details, endorsement request, training agreement requirements, health or insurance documents if required, and schedule details. Demo contact reference: IRJP local 204; verify current process.",
+        "citation": "[DEMO] Industrial Relations and Job Placement Guide, OJT and Internship",
+        "page_number": 1,
+        "tags": ["ojt", "internship", "irjp", "endorsement", "job placement"],
+        "synonyms": ["on the job training", "supervised industrial training", "practicum", "internship endorsement"],
+        "steps": [
+          "Ask your department OJT coordinator about eligibility and required hours.",
+          "Prepare resume, company details, and proposed training schedule.",
+          "Ask IRJP about endorsement, agreement, and placement requirements.",
+          "Submit approved documents before starting OJT.",
+          "Keep attendance, accomplishment reports, and evaluation forms during training."
+        ],
+        "office_location": "Industrial Relations and Job Placement Office; confirm current room on campus",
+        "contact_info": "Demo reference: IRJP local 204; verify through official contact page.",
+        "priority": 9
+      },
+      {
+        "chunk_id": "demo_irjp_ojt_career_2026_002",
+        "section_title": "Career and Job Placement",
+        "process_name": "Job Placement, Resume, and Career Events",
+        "content": "Demo career support guidance. Students and alumni may ask IRJP or their department about job placement announcements, career fairs, employer talks, resume preparation, interview readiness, company referrals, and graduate employment information. Students should verify job posts and avoid paying unofficial recruiters.",
+        "answer": "For job placement or career events, ask IRJP and your department about announcements, employer talks, career fairs, resume help, interview preparation, and company referrals. Verify job posts and do not pay unofficial recruiters.",
+        "citation": "[DEMO] Industrial Relations and Job Placement Guide, Career and Job Placement",
+        "page_number": 2,
+        "tags": ["career", "job placement", "resume", "career fair", "irjp"],
+        "synonyms": ["job posting", "employment", "interview", "company referral", "alumni job"],
+        "priority": 7
+      }
+    ]
+  },
+  {
+    "document_id": "demo_campus_rules_safety_2026",
+    "document_title": "[DEMO] Campus Rules, Safety, and Facilities Guide",
+    "document_type": "policy",
+    "category": "Campus Rules and Safety",
+    "office": "Administration",
+    "version": "2026-demo",
+    "last_updated": "2026-05-03",
+    "authored_by": "Demo Knowledge Base Team",
+    "source_url": "https://www.tup.edu.ph/",
+    "chunks": [
+      {
+        "chunk_id": "demo_campus_rules_safety_2026_001",
+        "section_title": "Campus Entry",
+        "process_name": "Gate Entry, Visitors, and ID Checks",
+        "content": "Demo campus entry guidance. Students should bring a valid student ID, temporary ID, COR, or proof of enrollment when required by guards. Visitors, alumni, parents, delivery riders, and guests may need to state purpose, present ID, log in, and wait for confirmation from the receiving office. Campus entry rules may change during exams, events, emergencies, or security advisories.",
+        "answer": "Bring your student ID or temporary proof of enrollment when entering campus. Visitors may need to present valid ID, log in, state their purpose, and wait for the receiving office. Follow guard instructions and check official advisories for event or security-related changes.",
+        "citation": "[DEMO] Campus Rules, Safety, and Facilities Guide, Campus Entry",
+        "page_number": 1,
+        "tags": ["campus entry", "gate", "visitor", "student id", "security"],
+        "synonyms": ["enter campus", "gate pass", "visitor pass", "guard", "id check"],
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_campus_rules_safety_2026_002",
+        "section_title": "Facilities and Maintenance Concerns",
+        "process_name": "Reporting Broken Facilities",
+        "content": "Demo facilities guidance. For broken chairs, electrical hazards, leaking ceilings, unsafe stairs, damaged comfort rooms, lab hazards, blocked exits, or broken lights, students should report the exact location, photo if safe, time observed, and nature of hazard to the instructor, guard, building office, department, or Admin/maintenance channel. Do not attempt repairs on electrical, structural, or laboratory hazards.",
+        "answer": "Report broken or unsafe facilities with the exact location, photo if safe, time observed, and hazard description. Tell the instructor, guard, building office, department, or Admin/maintenance channel. Do not repair electrical, structural, or lab hazards yourself.",
+        "citation": "[DEMO] Campus Rules, Safety, and Facilities Guide, Facilities and Maintenance Concerns",
+        "page_number": 2,
+        "tags": ["facilities", "maintenance", "hazard", "broken chair", "comfort room"],
+        "synonyms": ["broken lights", "leak", "unsafe stairs", "damaged room", "maintenance request"],
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_campus_rules_safety_2026_003",
+        "section_title": "Weather, Transport, and Class Modality Advisories",
+        "process_name": "Checking Class Suspension or Remote Learning Advisories",
+        "content": "Demo advisory guidance. Students should check official TUP channels, faculty announcements, department group channels, and government advisories for class suspensions, remote synchronous learning, transport strike adjustments, exam schedule changes, and office work arrangements. Do not rely only on reposts or unofficial screenshots.",
+        "answer": "For class suspension, remote learning, transport strike, or schedule advisories, check official TUP channels plus your instructor or department announcements. Verify screenshots before sharing and follow the latest official dated advisory.",
+        "citation": "[DEMO] Campus Rules, Safety, and Facilities Guide, Weather, Transport, and Class Modality Advisories",
+        "page_number": 3,
+        "tags": ["class suspension", "remote synchronous learning", "advisory", "transport strike", "schedule"],
+        "synonyms": ["rsl", "online class", "work arrangement", "weather advisory", "cancelled classes"],
+        "priority": 8
+      },
+      {
+        "chunk_id": "demo_campus_rules_safety_2026_004",
+        "section_title": "Campus Cleanliness and Shared Spaces",
+        "process_name": "Using Classrooms, Corridors, and Shared Areas",
+        "content": "Demo shared-space guidance. Students should keep classrooms, corridors, shops, labs, comfort rooms, canteen areas, and study spaces clean; dispose of trash properly; avoid blocking corridors and emergency exits; return borrowed chairs or equipment; and report spills, broken fixtures, or hazards.",
+        "answer": "Keep shared spaces clean, dispose of trash properly, avoid blocking corridors and emergency exits, return borrowed chairs or equipment, and report spills, broken fixtures, or hazards to staff or guards.",
+        "citation": "[DEMO] Campus Rules, Safety, and Facilities Guide, Campus Cleanliness and Shared Spaces",
+        "page_number": 4,
+        "tags": ["cleanliness", "shared spaces", "classroom", "corridor", "trash"],
+        "synonyms": ["clean as you go", "comfort room", "emergency exit", "borrowed chairs", "spill"],
+        "priority": 6
+      },
+      {
+        "chunk_id": "demo_campus_rules_safety_2026_005",
+        "section_title": "Official Confirmation Rule",
+        "process_name": "Verifying Requirements Before Acting",
+        "content": "Demo reliability guidance. This knowledge base is mock data for app testing and should be replaced with official TUP-approved content. Students should confirm final requirements, office hours, deadlines, payment channels, forms, contact numbers, and approvals with the responsible office or official TUP announcement because procedures can change.",
+        "answer": "This app uses demo guidance. Before acting on requirements, deadlines, payment channels, forms, contact numbers, or approvals, confirm with the responsible office or official TUP announcement. Replace this mock data with office-approved content before production use.",
+        "citation": "[DEMO] Campus Rules, Safety, and Facilities Guide, Official Confirmation Rule",
+        "page_number": 5,
+        "tags": ["demo data", "official confirmation", "verify", "requirements", "deadlines"],
+        "synonyms": ["mock data", "not official", "confirm office", "verify requirements", "official announcement"],
+        "priority": 10
+      }
+    ]
+  }
+]

@@ -1,0 +1,333 @@
+[
+  {
+    "question": "Where is TUP Manila and how do I find offices on campus?",
+    "expectedTopChunkId": "demo_tup_manila_student_essentials_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What is the quick office routing for Registrar, OSA, Clinic, Library, UITC, and IRJP?",
+    "expectedTopChunkId": "demo_tup_manila_student_essentials_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What should I bring before going to campus for office transactions?",
+    "expectedTopChunkId": "demo_tup_manila_student_essentials_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What should I do during a campus emergency or serious injury?",
+    "expectedTopChunkId": "demo_tup_manila_student_essentials_2026_004",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where do I report a lost ID, phone, wallet, or calculator?",
+    "expectedTopChunkId": "demo_tup_manila_student_essentials_2026_005",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where can students eat lunch or snacks on campus?",
+    "expectedTopChunkId": "demo_tup_manila_student_essentials_2026_006",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where is the Admissions Office and what applicant concerns does it handle?",
+    "expectedTopChunkId": "demo_admission_enrollment_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What is the freshman enrollment process after Notice of Admission?",
+    "expectedTopChunkId": "demo_admission_enrollment_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do old students enroll for the next semester?",
+    "expectedTopChunkId": "demo_admission_enrollment_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "My enrollment is blocked because a subject is missing. Which office helps?",
+    "expectedTopChunkId": "demo_admission_enrollment_2026_004",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I add or drop a subject after advising?",
+    "expectedTopChunkId": "demo_admission_enrollment_2026_005",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where do I request a certificate of registration or COR?",
+    "expectedTopChunkId": "demo_registrar_procedure_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I shift course or transfer program?",
+    "expectedTopChunkId": "demo_registrar_procedure_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I request TOR, certificate of grades, or good standing?",
+    "expectedTopChunkId": "demo_registrar_procedure_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What should I do if my grade is missing or wrong in my academic record?",
+    "expectedTopChunkId": "demo_registrar_procedure_2026_004",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I apply for graduation and check records?",
+    "expectedTopChunkId": "demo_registrar_procedure_2026_005",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where do I go for assessment, billing, balance, or registration form concerns?",
+    "expectedTopChunkId": "demo_accounting_cashier_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where do I pay assessed fees and keep my receipt?",
+    "expectedTopChunkId": "demo_accounting_cashier_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "My payment is not reflected. What should I prepare?",
+    "expectedTopChunkId": "demo_accounting_cashier_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I resolve an Accounting clearance hold before graduation?",
+    "expectedTopChunkId": "demo_accounting_cashier_2026_004",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What student services does OSA handle?",
+    "expectedTopChunkId": "demo_osa_student_affairs_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I replace a lost student ID or ask for a temporary ID?",
+    "expectedTopChunkId": "demo_osa_student_affairs_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I get scholarship notation or apply for scholarship support?",
+    "expectedTopChunkId": "demo_osa_student_affairs_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How can I join an accredited student organization or club?",
+    "expectedTopChunkId": "demo_osa_student_affairs_2026_004",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What uniform, ID, or lab attire rules should I follow?",
+    "expectedTopChunkId": "demo_osa_student_affairs_2026_005",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What are the student conduct and campus rules?",
+    "expectedTopChunkId": "demo_osa_student_affairs_2026_006",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I report harassment, bullying, or a student complaint?",
+    "expectedTopChunkId": "demo_osa_student_affairs_2026_007",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What should I do if I feel sick on campus?",
+    "expectedTopChunkId": "demo_clinic_procedure_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I get a medical certificate or health clearance?",
+    "expectedTopChunkId": "demo_clinic_procedure_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where do I go for toothache or dental consultation?",
+    "expectedTopChunkId": "demo_clinic_procedure_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I request clinic records or a copy of my medical file?",
+    "expectedTopChunkId": "demo_clinic_procedure_2026_004",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where can I request counseling for stress, anxiety, or personal problems?",
+    "expectedTopChunkId": "demo_guidance_counseling_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Why would Guidance ask me to report for testing or inventory?",
+    "expectedTopChunkId": "demo_guidance_counseling_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "I am failing a subject and overwhelmed. Who can help?",
+    "expectedTopChunkId": "demo_guidance_counseling_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I borrow books or use the University Library?",
+    "expectedTopChunkId": "demo_library_services_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I clear library accountabilities before graduation?",
+    "expectedTopChunkId": "demo_library_services_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Can the library help me find journals, references, or thesis sources?",
+    "expectedTopChunkId": "demo_library_services_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What rules should I follow in library study spaces and computers?",
+    "expectedTopChunkId": "demo_library_services_2026_004",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What is the student portal or ERS password reset process?",
+    "expectedTopChunkId": "demo_ers_uitc_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "ERS shows my wrong name, subject, grade, or payment status. Where do I go?",
+    "expectedTopChunkId": "demo_ers_uitc_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I protect my student account from fake pages and phishing?",
+    "expectedTopChunkId": "demo_ers_uitc_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "When should I talk to my course adviser or department chair?",
+    "expectedTopChunkId": "demo_academic_department_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Who handles petition subjects, closed sections, or prerequisite problems?",
+    "expectedTopChunkId": "demo_academic_department_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What should I prepare for laboratory, shop, or fieldwork classes?",
+    "expectedTopChunkId": "demo_academic_department_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I get OJT endorsement or internship requirements?",
+    "expectedTopChunkId": "demo_irjp_ojt_career_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where can I ask for job placement, resume help, or career fair announcements?",
+    "expectedTopChunkId": "demo_irjp_ojt_career_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What should I bring to enter campus or for a visitor pass?",
+    "expectedTopChunkId": "demo_campus_rules_safety_2026_001",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "How do I report broken lights, leaks, or unsafe facilities?",
+    "expectedTopChunkId": "demo_campus_rules_safety_2026_002",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where do I check class suspension, remote learning, or transport strike advisories?",
+    "expectedTopChunkId": "demo_campus_rules_safety_2026_003",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "What cleanliness rules apply in classrooms, corridors, and shared spaces?",
+    "expectedTopChunkId": "demo_campus_rules_safety_2026_004",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Is this app official, or should I confirm requirements with the office?",
+    "expectedTopChunkId": "demo_campus_rules_safety_2026_005",
+    "minConfidence": "medium",
+    "expectedReliable": true
+  },
+  {
+    "question": "Where can I get a parking sticker?",
+    "expectedReliable": false,
+    "maxConfidence": "low"
+  },
+  {
+    "question": "What is the exact scholarship deadline this semester?",
+    "expectedReliable": false,
+    "maxConfidence": "low"
+  },
+  {
+    "question": "Where can I borrow sports equipment?",
+    "expectedReliable": false,
+    "maxConfidence": "low"
+  },
+  {
+    "question": "How do I reserve the auditorium for a private birthday party?",
+    "expectedReliable": false,
+    "maxConfidence": "low"
+  },
+  {
+    "question": "student office",
+    "expectedReliable": false,
+    "maxConfidence": "low"
+  }
+]

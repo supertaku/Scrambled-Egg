@@ -1,0 +1,167 @@
+import {
+  FALLBACK_SEARCH_LABEL,
+  type DeviceAIMode
+} from "@/ai/DeviceAIMode";
+import { DefaultCapabilityDetector, type DeviceCapabilityReport } from "@/ai/CapabilityDetector";
+import type { LocalAIProvider } from "@/ai/LocalAIProvider";
+import { createLocalAIProviderRegistry, type LocalAIProviderRegistry } from "@/ai/providerRegistry";
+import { getDatabase } from "@/db/database";
+import { assertFts5Available } from "@/db/ftsHealth";
+import { logger } from "@/utils/logger";
+
+export interface SelectedAIMode {
+  mode: DeviceAIMode;
+  summaryProvider: LocalAIProvider | null;
+  embeddingProvider: LocalAIProvider | null;
+}
+
+const disabledProviderIds = new Set<string>();
+let selectedModePromise: Promise<SelectedAIMode> | null = null;
+let capabilityReportPromise: Promise<DeviceCapabilityReport> | null = null;
+let activeRegistry: LocalAIProviderRegistry | null = null;
+
+async function verifyFts5Baseline(): Promise<void> {
+  const db = await getDatabase();
+  await assertFts5Available(db);
+}
+
+function toFallbackMode(mode: DeviceAIMode, reason: string): DeviceAIMode {
+  return {
+    ...mode,
+    id: "fallback-fts5-only",
+    label: FALLBACK_SEARCH_LABEL,
+    provenance: "Retrieved directly from source",
+    retrieverStrategy: "fts5",
+    summaryProviderId: null,
+    summaryProviderName: null,
+    embeddingProviderId: null,
+    embeddingProviderName: null,
+    capabilities: {
+      ...mode.capabilities,
+      summary: false,
+      safeChat: false,
+      embeddings: false,
+      reranking: false,
+      requiresCustomDevBuild: false,
+      unavailableReasons: [...mode.capabilities.unavailableReasons, reason],
+      notes: [...mode.capabilities.notes, reason]
+    },
+    fallbackReason: reason
+  };
+}
+
+async function createSelectedMode(): Promise<SelectedAIMode> {
+  await verifyFts5Baseline();
+  const registry = createLocalAIProviderRegistry();
+  activeRegistry = registry;
+  const detector = new DefaultCapabilityDetector(registry, disabledProviderIds);
+  const report = await detector.getCapabilityReport();
+  capabilityReportPromise = Promise.resolve(report);
+  const mode = report.selectedMode;
+  const execuTorchReport = report.providers.find((provider) => provider.id === "executorch");
+
+  if (report.platform === "android" && (mode.id === "fts5-only" || mode.id === "fallback-fts5-only")) {
+    logger.ai.warn("Using FTS5 because ExecuTorch was not selected.", {
+      execuTorchRuntimeAvailable: execuTorchReport?.runtimeAvailable ?? false,
+      execuTorchAvailable: execuTorchReport?.available ?? false,
+      modelAssetsAvailable: execuTorchReport?.modelAssetsAvailable ?? null,
+      modelName: execuTorchReport?.modelName ?? null,
+      modelTier: execuTorchReport?.modelTier ?? "unknown",
+      recommendedModelTier: execuTorchReport?.recommendedModelTier ?? "unknown",
+      reasons: execuTorchReport?.unavailableReasons.slice(0, 6) ?? report.unavailableReasons.slice(0, 6)
+    });
+  } else {
+    logger.ai.log("Selected device AI mode.", {
+      modeId: mode.id,
+      summaryProviderId: mode.summaryProviderId,
+      embeddingProviderId: mode.embeddingProviderId,
+      modelTier: mode.capabilities.modelTier ?? "unknown",
+      recommendedModelTier: mode.capabilities.recommendedModelTier ?? "unknown"
+    });
+  }
+
+  return {
+    mode,
+    summaryProvider: registry.byId(mode.summaryProviderId),
+    embeddingProvider: registry.byId(mode.embeddingProviderId)
+  };
+}
+
+function clearCachedSelection(): void {
+  selectedModePromise = null;
+  capabilityReportPromise = null;
+}
+
+function disposeActiveRegistry(reason: string): void {
+  const registry = activeRegistry;
+  activeRegistry = null;
+  if (!registry) {
+    return;
+  }
+
+  void registry.dispose().catch((error) => {
+    logger.ai.warn("Local AI provider cleanup failed.", {
+      reason,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  });
+}
+
+/**
+ * Returns the cached selected AI mode, running capability detection on first call.
+ * Subsequent calls return the same promise, making this safe to call from multiple components.
+ */
+export async function getSelectedAIMode(): Promise<SelectedAIMode> {
+  if (!selectedModePromise) {
+    logger.ai.log("Detecting device AI capabilities...");
+    selectedModePromise = createSelectedMode();
+  }
+
+  return selectedModePromise;
+}
+
+export async function getCurrentAIMode(): Promise<DeviceAIMode> {
+  const selected = await getSelectedAIMode();
+  return selected.mode;
+}
+
+export async function getDeviceCapabilityReport(): Promise<DeviceCapabilityReport> {
+  if (!capabilityReportPromise) {
+    await verifyFts5Baseline();
+    const registry = createLocalAIProviderRegistry();
+    const detector = new DefaultCapabilityDetector(registry, disabledProviderIds);
+    capabilityReportPromise = detector.getCapabilityReport();
+  }
+
+  return capabilityReportPromise;
+}
+
+export async function refreshDeviceCapabilities(): Promise<DeviceAIMode> {
+  disposeActiveRegistry("Refreshing device capabilities.");
+  clearCachedSelection();
+  const selected = await getSelectedAIMode();
+  return selected.mode;
+}
+
+/**
+ * Marks a provider as failed for the remainder of the current app session,
+ * clears the mode cache so the next call re-selects without it, and logs the error.
+ */
+export function disableAIProviderForSession(providerId: string, error: unknown): void {
+  disabledProviderIds.add(providerId);
+  disposeActiveRegistry(`Provider disabled for session: ${providerId}`);
+  clearCachedSelection();
+  logger.ai.warn(`Provider disabled for session: ${providerId}`, {
+    error: error instanceof Error ? error.message : String(error)
+  });
+}
+
+export function forceFallbackModeForResponse(mode: DeviceAIMode, reason: string): DeviceAIMode {
+  return toFallbackMode(mode, reason);
+}
+
+export function resetModeSelectionForTests(): void {
+  disabledProviderIds.clear();
+  disposeActiveRegistry("Resetting mode selection for tests.");
+  clearCachedSelection();
+}

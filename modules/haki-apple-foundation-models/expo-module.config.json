@@ -1,0 +1,6 @@
+{
+  "name": "HakiAppleFoundationModels",
+  "ios": {
+    "modules": ["HakiAppleFoundationModelsModule"]
+  }
+}

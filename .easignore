@@ -1,0 +1,29 @@
+# Exclude local AI models from EAS upload to keep APK size small
+assets/models/
+android/app/src/main/assets/models/
+
+# Exclude large local data
+data/
+*.pte
+*.json
+!app.json
+!package.json
+!tsconfig.json
+
+# Standard ignores
+node_modules/
+tmp/
+.gradle/
+build/
+.expo/
+dist/
+android/build/
+android/.gradle/
+android/app/build/
+ios/build/
+*.log
+
+# Native artifacts
+**/*.so
+**/*.a
+**/*.o

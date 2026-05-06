@@ -1,0 +1,47 @@
+{
+  "name": "haki",
+  "version": "1.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "typecheck": "tsc --noEmit",
+    "test:golden": "tsx scripts/golden-retrieval.ts",
+    "test:local-models": "tsx scripts/test-local-model-manager.ts",
+    "executorch:download-aar": "powershell -ExecutionPolicy Bypass -File scripts/download-executorch-aar.ps1",
+    "model:download:qwen3": "powershell -ExecutionPolicy Bypass -File scripts/download-qwen3-executorch-model.ps1",
+    "model:download:all": "powershell -ExecutionPolicy Bypass -File scripts/download-all-models.ps1",
+    "apk:inspect": "powershell -ExecutionPolicy Bypass -File scripts/inspect-apk-assets.ps1",
+    "eas-build-pre-install": "bash scripts/download-executorch-aar.sh",
+    "postinstall": "node scripts/fix-expo-sqlite.js && patch-package"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-voice/voice": "^3.2.4",
+    "expo": "^55.0.18",
+    "expo-build-properties": "^55.0.13",
+    "expo-crypto": "~55.0.14",
+    "expo-dev-client": "^55.0.32",
+    "expo-document-picker": "~55.0.13",
+    "expo-file-system": "~55.0.17",
+    "expo-router": "~55.0.13",
+    "expo-sqlite": "55.0.15",
+    "llama.rn": "0.12.0-rc.9",
+    "lucide-react-native": "^1.14.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.6",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "react-native-svg": "15.15.3",
+    "zod": "^4.4.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "patch-package": "^8.0.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

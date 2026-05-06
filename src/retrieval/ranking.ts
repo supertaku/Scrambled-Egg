@@ -1,0 +1,70 @@
+import type { SearchResult } from "@/types/search";
+import { computeConfidenceScore } from "./confidence";
+
+import { normalizeQuery, tokenizeQuery } from "./queryNormalizer";
+
+function textIncludes(text: string | null, token: string): boolean {
+  return Boolean(text?.toLowerCase().includes(token));
+}
+
+function countTokenMatches(text: string | null, tokens: string[]): number {
+  if (!text) {
+    return 0;
+  }
+  const lower = text.toLowerCase();
+  return tokens.filter((token) => lower.includes(token)).length;
+}
+
+export function calculateRankScore(result: SearchResult, query: string): number {
+  const tokens = tokenizeQuery(query);
+  if (tokens.length === 0) {
+    return 0;
+  }
+
+  let score = 0;
+  score += countTokenMatches(result.sectionTitle, tokens) * 3;
+  score += countTokenMatches(result.processName, tokens) * 3;
+  score += countTokenMatches(result.office, tokens) * 2;
+  score += countTokenMatches(result.category, tokens) * 2;
+  score += countTokenMatches(result.documentTitle, tokens) * 2;
+  score += countTokenMatches(result.citation, tokens) * 1.5;
+  score += countTokenMatches(result.answer, tokens) * 1.2;
+  score += countTokenMatches(result.content, tokens);
+  score += countTokenMatches(result.tags.join(" "), tokens) * 2;
+  score += countTokenMatches(result.synonyms.join(" "), tokens) * 3;
+
+  const phrase = normalizeQuery(query);
+  const exactCandidate = normalizeQuery(
+    [result.sectionTitle, result.processName, result.answer, result.content].filter(Boolean).join(" ")
+  );
+  if (phrase.length >= 8 && exactCandidate.includes(phrase)) {
+    score += 5;
+  }
+
+  for (const token of tokens) {
+    if (textIncludes(result.office, token) || textIncludes(result.category, token)) {
+      score += 0.75;
+    }
+  }
+
+  if (Number.isFinite(result.bm25Score)) {
+    score += Math.min(Math.abs(result.bm25Score), 5);
+  }
+
+  return Number(score.toFixed(3));
+}
+
+export function rankSearchResults(results: SearchResult[], query: string): SearchResult[] {
+  return results
+    .map((result) => {
+      const rankScore = calculateRankScore(result, query);
+      const { raw, level } = computeConfidenceScore(result, query);
+      return {
+        ...result,
+        rankScore,
+        confidence: level,
+        confidenceScore: raw
+      };
+    })
+    .sort((a, b) => b.rankScore - a.rankScore);
+}
