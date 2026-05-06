@@ -6,7 +6,6 @@
     "orientation": "portrait",
     "scheme": "haki",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "plugins": [
       "expo-router",
       [
@@ -41,15 +40,15 @@
         }
       ]
     ],
-    "icon": "./assets/images/grayhawk.png",
+    "icon": "./assets/images/grayhawk.jpg",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tupt.haki",
-      "icon": "./assets/images/grayhawk.png"
+      "icon": "./assets/images/grayhawk.jpg"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/grayhawk.png",
+        "foregroundImage": "./assets/images/grayhawk.jpg",
         "backgroundColor": "#7A0019"
       },
       "package": "com.tupt.haki",
