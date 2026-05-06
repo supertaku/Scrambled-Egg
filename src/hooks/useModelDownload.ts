@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { modelManager, type DownloadProgress } from "@/ai/LocalModelManager";
+import { modelManager, type DownloadProgress } from "@/ai/localModelManager";
 import { getDeviceCapabilityReport } from "@/services/modeSelectionService";
 import type { LocalModelTier } from "@/ai/LocalAIProvider";
 import { logger } from "@/utils/logger";
