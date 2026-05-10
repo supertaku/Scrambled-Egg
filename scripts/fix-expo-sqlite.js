@@ -29,6 +29,10 @@ if (fs.existsSync(targetFile)) {
         content = lines.join('\n');
     }
 
+    // 3. Remove failing Ant Os import and replace Os.isFamily
+    content = content.replace(/import org\.apache\.tools\.ant\.taskdefs\.condition\.Os\r?\n/g, "");
+    content = content.replace(/Os\.isFamily\(Os\.FAMILY_WINDOWS\)/g, "System.properties['os.name'].toLowerCase().contains('windows')");
+
     fs.writeFileSync(targetFile, content, 'utf8');
     console.log('Successfully patched expo-sqlite.');
 } else {

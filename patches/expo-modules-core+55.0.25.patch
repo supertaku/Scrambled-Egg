@@ -1,0 +1,27 @@
+diff --git a/node_modules/expo-modules-core/expo-module-gradle-plugin/build/pluginDescriptors/expo-module-gradle-plugin.properties b/node_modules/expo-modules-core/expo-module-gradle-plugin/build/pluginDescriptors/expo-module-gradle-plugin.properties
+new file mode 100644
+index 0000000..08df140
+--- /dev/null
++++ b/node_modules/expo-modules-core/expo-module-gradle-plugin/build/pluginDescriptors/expo-module-gradle-plugin.properties
+@@ -0,0 +1 @@
++implementation-class=expo.modules.plugin.ExpoModulesGradlePlugin
+diff --git a/node_modules/expo-modules-core/expo-module-gradle-plugin/build/resources/main/META-INF/gradle-plugins/expo-module-gradle-plugin.properties b/node_modules/expo-modules-core/expo-module-gradle-plugin/build/resources/main/META-INF/gradle-plugins/expo-module-gradle-plugin.properties
+new file mode 100644
+index 0000000..08df140
+--- /dev/null
++++ b/node_modules/expo-modules-core/expo-module-gradle-plugin/build/resources/main/META-INF/gradle-plugins/expo-module-gradle-plugin.properties
+@@ -0,0 +1 @@
++implementation-class=expo.modules.plugin.ExpoModulesGradlePlugin
+diff --git a/node_modules/expo-modules-core/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/android/MavenPublicationExtension.kt b/node_modules/expo-modules-core/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/android/MavenPublicationExtension.kt
+index 127e7d6..a8dbd73 100644
+--- a/node_modules/expo-modules-core/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/android/MavenPublicationExtension.kt
++++ b/node_modules/expo-modules-core/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/android/MavenPublicationExtension.kt
+@@ -36,7 +36,7 @@ internal data class PublicationInfo(
+   constructor(
+     project: Project,
+   ) : this(
+-    components = project.components.getByName("release"),
++    components = project.components.findByName("release") ?: project.components.iterator().next(),
+     groupId = project.group.toString(),
+     artifactId = requireNotNull(project.androidLibraryExtension().namespace) {
+       "'android.namespace' is not defined"

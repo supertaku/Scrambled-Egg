@@ -1,6 +1,10 @@
-# Exclude local AI models from EAS upload to keep APK size small
-assets/models/
-android/app/src/main/assets/models/
+# Exclude local AI model scratch files, but allow the bundled default GGUF.
+assets/models/*
+!assets/models/
+!assets/models/README.md
+android/app/src/main/assets/models/*
+!android/app/src/main/assets/models/
+!android/app/src/main/assets/models/haki-default.gguf
 
 # Exclude large local data
 *.pte
