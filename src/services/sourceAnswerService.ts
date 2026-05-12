@@ -2,7 +2,6 @@ import type { SQLiteDatabase } from "expo-sqlite";
 
 import { provenanceForSummaryProvider } from "@/ai/DeviceAIMode";
 import type { AnswerProvenance, DeviceAIMode } from "@/ai/DeviceAIMode";
-import type { SourceChunkForSummary } from "@/ai/LocalAIProvider";
 import { MEDIUM_CONFIDENCE_NOTE, SAFE_FALLBACK_MESSAGE, STRICT_LOCAL_SUMMARIZATION_INSTRUCTION } from "@/ai/prompts";
 import { getDatabase } from "@/db/database";
 import { FTSRetriever } from "@/retrieval/FTSRetriever";
@@ -13,7 +12,7 @@ import { calculateConfidence } from "@/retrieval/confidence";
 import { normalizeQuery } from "@/retrieval/queryNormalizer";
 import type { SearchOptions, SearchResponse, SearchResult } from "@/types/search";
 import { getPreferredModelTier } from "@/utils/aiUtils";
-import { DEFAULT_RETRIEVAL_LIMIT, MAX_PROVIDER_RETRIES, MAX_SUMMARY_SOURCES } from "@/utils/constants";
+import { DEFAULT_RETRIEVAL_LIMIT, MAX_PROVIDER_RETRIES } from "@/utils/constants";
 
 import {
   disableAIProviderForSession,
@@ -21,6 +20,8 @@ import {
   getSelectedAIMode,
   type SelectedAIMode
 } from "./modeSelectionService";
+import { getDirectAnswer } from "./searchResultText";
+import { sourceChunksForSafeChat } from "./sourceChunkAdapter";
 
 export interface SourceAnswerDraft {
   confidence: SearchResponse["confidence"];
@@ -38,27 +39,6 @@ class StaticRetriever implements Retriever {
   async search(_query: string, _options?: SearchOptions): Promise<SearchResult[]> {
     return this.results;
   }
-}
-
-function toSourceChunk(result: SearchResult): SourceChunkForSummary {
-  return {
-    citationId: result.chunkId,
-    chunkId: result.chunkId,
-    documentTitle: result.documentTitle,
-    sectionTitle: result.sectionTitle,
-    processName: result.processName,
-    content: result.content,
-    answer: result.answer,
-    citation: result.citation,
-    pageNumber: result.pageNumber,
-    category: result.category,
-    office: result.office,
-    lastUpdated: result.lastUpdated
-  };
-}
-
-function getDirectAnswer(result: SearchResult): string {
-  return result.answer?.trim() || result.content;
 }
 
 // getPreferredModelTier is imported from @/utils/aiUtils (shared with safeLocalChatService)
@@ -83,10 +63,6 @@ function responseForNoReliableAnswer(
   };
 }
 
-export function sourceChunksForSafeChat(results: SearchResult[]): SourceChunkForSummary[] {
-  return results.slice(0, MAX_SUMMARY_SOURCES).map(toSourceChunk);
-}
-
 async function runRetrieval(
   db: SQLiteDatabase,
   question: string,
@@ -107,7 +83,7 @@ async function runRetrieval(
   }
 
   try {
-    const vectorRetriever = new VectorRetriever(embeddingProvider);
+    const vectorRetriever = new VectorRetriever(db, embeddingProvider);
     const vectorResults = await vectorRetriever.search(question, options);
 
     if (vectorResults.length === 0) {
@@ -170,8 +146,16 @@ async function maybeSummarizeFromSources(
   }
 
   try {
-    const sources = results.slice(0, MAX_SUMMARY_SOURCES).map(toSourceChunk);
     const preferredModelTier = getPreferredModelTier(mode);
+    const sources = sourceChunksForSafeChat(results, preferredModelTier);
+    if (sources.length === 0) {
+      return {
+        ok: false,
+        noReliableAnswer: true,
+        mode,
+        provenance: provenanceForSummaryProvider(mode.summaryProviderId)
+      };
+    }
     const summary = await summaryProvider.summarizeFromSources({
       question,
       instruction: STRICT_LOCAL_SUMMARIZATION_INSTRUCTION,

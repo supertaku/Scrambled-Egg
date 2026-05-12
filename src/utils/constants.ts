@@ -12,8 +12,12 @@ export const STORAGE_KEYS = {
   ADMIN_MODE: "tupt_wiki_admin_mode",
   /** Stores the last N questions the student asked, as a JSON string array. */
   RECENT_QUESTIONS: "tupt_wiki_recent_questions",
-  /** Stores the saved student profile as a JSON string. */
-  STUDENT_PROFILE: "tupt_wiki_student_profile"
+  /** Stores bounded local thumbs up/down feedback for Haki chat answers. */
+  CHAT_FEEDBACK: "tupt_wiki_chat_feedback",
+  /** Legacy: full profile JSON in plaintext. Migrated to SecureStore + avatar key on read. */
+  STUDENT_PROFILE: "tupt_wiki_student_profile",
+  /** Local avatar path/URI only (PII core fields use SecureStore when available). */
+  STUDENT_PROFILE_AVATAR_URI: "tupt_wiki_student_profile_avatar_uri"
 } as const;
 
 // ─── Database ─────────────────────────────────────────────────────────────────
@@ -38,12 +42,6 @@ export const MAX_RECENT_QUESTIONS = 8;
  * Default maximum number of retrieval results to fetch from the database.
  */
 export const DEFAULT_RETRIEVAL_LIMIT = 8;
-
-/**
- * Maximum number of source chunks passed to the local summary model.
- * Keeping this low reduces prompt length and inference time.
- */
-export const MAX_SUMMARY_SOURCES = 4;
 
 // ─── Confidence Score Thresholds ─────────────────────────────────────────────
 //

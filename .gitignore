@@ -27,5 +27,4 @@ build_error.json
 tmp/
 .gradle/
 build/
-node_modules/
 *.apk

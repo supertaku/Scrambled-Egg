@@ -1,6 +1,8 @@
 import type { DeviceAIMode } from "./DeviceAIMode";
 import type { LocalAIProvider } from "./LocalAIProvider";
 import type { DeviceCapabilityClass, LocalAIProviderId, LocalModelTier } from "./LocalAIProvider";
+import { getDeviceHardwareProfile } from "./deviceHardwareProfile";
+import { deviceCapabilityClassForTier, recommendedDeviceModelTier } from "./localModelMetadata";
 import { selectDeviceAIMode, type ProviderProbe } from "./modeSelectionPolicy";
 import {
   getDeviceCapabilitySnapshot,
@@ -38,6 +40,9 @@ export interface ProviderCapabilityReport {
   modelRejectionReasons: string[];
   modelLoadTimeMs: number | null;
   lastInferenceTimeMs: number | null;
+  contextWindowTokens: number | null;
+  safeInputBudgetTokens: number | null;
+  maxOutputTokens: number | null;
   streamingSupported: boolean;
   approximateDeviceCapability: DeviceCapabilityClass;
   architecture: string | null;
@@ -53,7 +58,6 @@ export interface DeviceCapabilityReport {
   osVersion: string;
   baseFtsAvailable: boolean;
   appleFoundationModelsAvailable: boolean;
-  executorchAvailable: boolean;
   llamaRnAvailable: boolean;
   embeddingsAvailable: boolean;
   safeChatAvailable: boolean;
@@ -63,6 +67,12 @@ export interface DeviceCapabilityReport {
   lastCheckedAt: string;
   approximateDeviceCapability: DeviceCapabilityClass;
   memoryClass: string | null;
+  supportedAbis: string[];
+  architecture: string | null;
+  memoryGB: number | null;
+  freeStorageGB: number | null;
+  lowMemory: boolean | null;
+  recommendedModelTier: LocalModelTier;
   providers: ProviderCapabilityReport[];
 }
 
@@ -83,8 +93,9 @@ export class DefaultCapabilityDetector implements CapabilityDetector {
 
   async getCapabilityReport(): Promise<DeviceCapabilityReport> {
     const fallbackCapabilities = await this.registry.fallback.getCapabilities();
-    const reportOrder = [this.registry.appleFoundationModels, this.registry.llamaRn, this.registry.execuTorch];
+    const reportOrder = [this.registry.appleFoundationModels, this.registry.llamaRn];
     const device = getDeviceCapabilitySnapshot();
+    const hardware = await getDeviceHardwareProfile();
 
     const reportProbes: ProviderProbe[] = [];
     for (const provider of reportOrder) {
@@ -105,6 +116,11 @@ export class DefaultCapabilityDetector implements CapabilityDetector {
     });
     const { selectedMode, summaryProbe, embeddingProbe } = selection;
     const providerReports = reportProbes.map((probe) => this.toProviderReport(probe));
+    const recommendedModelTier = recommendedDeviceModelTier(hardware);
+    const approximateDeviceCapability =
+      recommendedModelTier === "unknown"
+        ? selectedMode.capabilities.approximateDeviceCapability
+        : deviceCapabilityClassForTier(recommendedModelTier);
     const unavailableReasons = this.buildUnavailableReasons({
       summaryProbe,
       embeddingProbe,
@@ -119,9 +135,6 @@ export class DefaultCapabilityDetector implements CapabilityDetector {
       appleFoundationModelsAvailable: providerReports.some(
         (provider) => provider.id === "apple-foundation-models" && provider.runtimeAvailable
       ),
-      executorchAvailable: providerReports.some(
-        (provider) => provider.id === "executorch" && provider.runtimeAvailable
-      ),
       llamaRnAvailable: providerReports.some(
         (provider) => provider.id === "llama-rn" && provider.runtimeAvailable
       ),
@@ -131,8 +144,14 @@ export class DefaultCapabilityDetector implements CapabilityDetector {
       selectedMode,
       unavailableReasons,
       lastCheckedAt: now,
-      approximateDeviceCapability: selectedMode.capabilities.approximateDeviceCapability,
-      memoryClass: selectedMode.capabilities.memoryClass,
+      approximateDeviceCapability,
+      memoryClass: hardware.memoryClass ?? selectedMode.capabilities.memoryClass,
+      supportedAbis: hardware.supportedAbis,
+      architecture: hardware.architecture,
+      memoryGB: hardware.memoryGB,
+      freeStorageGB: hardware.freeStorageGB,
+      lowMemory: hardware.lowMemory,
+      recommendedModelTier,
       providers: providerReports
     };
   }
@@ -172,11 +191,6 @@ export class DefaultCapabilityDetector implements CapabilityDetector {
     }
 
     try {
-      if (provider.id === "executorch") {
-        const capabilities = await provider.getCapabilities();
-        return { provider, available: capabilities.providerReady, capabilities };
-      }
-
       const [available, capabilities] = await Promise.all([provider.isAvailable(), provider.getCapabilities()]);
       return { provider, available, capabilities };
     } catch (error) {
@@ -230,6 +244,9 @@ export class DefaultCapabilityDetector implements CapabilityDetector {
       modelRejectionReasons: probe.capabilities.modelRejectionReasons ?? [],
       modelLoadTimeMs: probe.capabilities.modelLoadTimeMs ?? null,
       lastInferenceTimeMs: probe.capabilities.lastInferenceTimeMs ?? null,
+      contextWindowTokens: probe.capabilities.contextWindowTokens ?? null,
+      safeInputBudgetTokens: probe.capabilities.safeInputBudgetTokens ?? null,
+      maxOutputTokens: probe.capabilities.maxOutputTokens ?? null,
       streamingSupported: probe.capabilities.streamingSupported ?? false,
       approximateDeviceCapability: probe.capabilities.approximateDeviceCapability,
       architecture: probe.capabilities.architecture ?? null,

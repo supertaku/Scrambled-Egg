@@ -6,7 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AdminGate } from "@/components/AdminGate";
 import { MascotHeader } from "@/components/MascotHeader";
-import { getDatabase } from "@/db/database";
+import { getAppDatabase } from "@/data/appRepository";
 import { getDocumentSummaries } from "@/db/documentRepository";
 import { colors } from "@/theme/colors";
 import type { DocumentSummary } from "@/types/document";
@@ -20,7 +20,7 @@ export default function DocumentsScreen() {
     setLoading(true);
     setError(null);
     try {
-      const db = await getDatabase();
+      const db = await getAppDatabase();
       setDocuments(await getDocumentSummaries(db));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load documents.");

@@ -550,51 +550,94 @@ function scenarioFallbackText(
   return "I can help with safe general questions. If this is about an official TUP requirement, include the office, document, or process so I can check the saved campus guide.";
 }
 
-function sourceMissText(question: string, scenario: QuestionScenario): string {
+const SOURCE_MISS_INTROS = [
+  "Looks like we still don't have that information in our database. Great job finding that! Let Haki's admin know via email.",
+  "That detail is not in Haki's database yet. Nice catch! Please email Haki's admin so it can be reviewed and added.",
+  "Haki does not have that saved source right now. Good find! Send Haki's admin an email about it.",
+  "That info is still missing from the current database. Sharp catch! Let Haki's admin know through email.",
+  "I checked the saved campus data and that detail is not there yet. Great eye! Please email Haki's admin.",
+  "That one is not available in Haki's current database. Nice discovery! Pass it to Haki's admin by email.",
+  "We have not stored that campus detail yet. Good catch! Haki's admin should hear about it through email.",
+  "That answer is not in the saved database at the moment. Solid find! Please notify Haki's admin via email.",
+  "Haki's database does not include that detail yet. Good spot! Send it to Haki's admin through email.",
+  "That campus info is still waiting to be added to Haki. Great catch! Let the admin know via email.",
+  "I cannot find that detail in the current saved sources. Nice one! Please email Haki's admin about it.",
+  "That item is not covered by Haki's database yet. Great find! Flag it to Haki's admin by email.",
+  "The saved campus guide does not have that information yet. Good catch! Tell Haki's admin via email.",
+  "That detail is missing from the database for now. Nice catch! Let Haki's admin know by email.",
+  "Haki does not have a reliable saved entry for that yet. Great job spotting the gap! Please email Haki's admin."
+];
+
+let sourceMissVariantCursor = 0;
+
+function nextSourceMissIntro(): string {
+  const intro =
+    SOURCE_MISS_INTROS[sourceMissVariantCursor % SOURCE_MISS_INTROS.length] ??
+    "Looks like we still don't have that information in our database. Great job finding that! Let Haki's admin know via email.";
+  sourceMissVariantCursor += 1;
+  return intro;
+}
+
+function sourceMissAdvice(question: string, scenario: QuestionScenario): string {
   const normalized = normalizeQuery(question);
-  const language = detectReplyLanguage(question);
   const asksAboutAddingUnits =
     /\b(add|adding|dagdag|magdagdag|kumuha|kuha)\b.*\b(units?|subjects?)\b|\badd load|load revision\b/i.test(question);
   const asksAboutDropping =
     /\b(dropout|drop out|mag[- ]?dropout|drop subject|dropping)\b/i.test(question);
 
   if (asksAboutAddingUnits) {
-    return isTagalogLike(language)
-      ? "Wala pa akong exact saved TUP rule for adding units, so verify this with your course adviser or department first. As a safe next step, prepare your COR, curriculum/checklist, target subject or units, and reason for adding before asking about add-load or load revision."
-      : "I do not have the exact saved TUP rule for adding units yet. Start with your course adviser or department, then prepare your COR, curriculum/checklist, target subject or units, and reason for adding before asking about add-load or load revision.";
+    return "Start with your course adviser or department. Prepare your COR, curriculum or checklist, target subject or units, and reason for adding before asking about add-load or load revision.";
   }
 
   if (asksAboutDropping) {
-    return isTagalogLike(language)
-      ? "Kung gusto mong mag-dropout or mag-drop, huwag muna mag-final decision nang walang adviser. Talk to your course adviser first, then Guidance if personal/mental load ang reason, and Registrar only for the official record process. Ask about options like leave, reduced load, shifting, or subject drop if available."
-      : "If you are thinking about dropping out or dropping subjects, talk to your course adviser before making it final. If the reason is personal, financial, or mental load, Guidance can also help you think through options. Verify the official record process with the Registrar after you know your best path.";
+    return "Talk to your course adviser before making it final. If the reason is personal, financial, or mental load, Guidance can help you think through options, then the Registrar can confirm any official record process.";
   }
 
   if (scenario === "wellbeing_safety") {
     if (/\bhurt|injured|injury|accident|sick|fainted|faint|dizzy|bleeding|chest pain|difficulty breathing\b/.test(normalized)) {
-      return "I do not have enough saved TUP info to cite the exact process, but if you are hurt or feel sick now, ask the nearest guard, faculty member, class officer, or office staff for help and go to the Clinic if you can. For severe symptoms or danger, seek emergency help immediately.";
+      return "If you are hurt or feel sick now, ask the nearest guard, faculty member, class officer, or office staff for help and go to the Clinic if you can. For severe symptoms or danger, seek emergency help immediately.";
     }
 
-    return "I do not have enough saved TUP info to cite the exact process. For safety, counseling, or urgent concerns, contact the relevant office directly, ask a trusted faculty member or guard for routing, and use emergency help if someone is in danger.";
+    return "For safety, counseling, or urgent concerns, contact the relevant office directly, ask a trusted faculty member or guard for routing, and use emergency help if someone is in danger.";
   }
 
   if (scenario === "student_admin" && /\bregistrar|cor|tor|transcript|records?\b/.test(normalized)) {
-    return "I do not have enough saved TUP info to cite that exact Registrar process. As a safe next step, prepare your student ID or temporary proof of enrollment, student number, program/year level, and the document or concern you need, then verify the current requirements with the Registrar.";
+    return "For Registrar-related questions, prepare your student ID or temporary proof of enrollment, student number, program/year level, and the document or concern you need, then verify the current requirements with the Registrar.";
   }
 
   if (scenario === "student_admin" && /\bid\b/.test(normalized)) {
-    return "I do not have enough saved TUP info to cite the exact ID process. For lost, damaged, or replacement ID concerns, prepare your student number, COR or registration form, proof of payment if required, and ask OSA about temporary ID or gate-pass options.";
+    return "For lost, damaged, or replacement ID concerns, prepare your student number, COR or registration form, proof of payment if required, and ask OSA about temporary ID or gate-pass options.";
   }
 
   if (scenario === "academic_support") {
-    return "I do not have enough saved TUP info to cite the exact academic process. If this is about grades, subjects, prerequisites, or academic standing, start with your instructor or course adviser, then verify record-related steps with the Registrar if needed.";
+    return "If this is about grades, subjects, prerequisites, or academic standing, start with your instructor or course adviser, then verify record-related steps with the Registrar if needed.";
   }
 
   if (scenario === "campus_life") {
-    return "I do not have enough saved TUP info for that campus-life detail yet. Try asking with a specific office, place, event, or service, or verify with the responsible office or official announcement.";
+    return "Try checking with the office, unit, or campus page that owns that place, event, service, or announcement.";
   }
 
-  return "I do not have enough saved TUP info for that yet. Try adding the specific office, document, deadline, place, or process, then verify final requirements with the relevant office or official announcement.";
+  return "Try asking the relevant office, checking official announcements, or sending the exact document, deadline, place, or process name to Haki's admin for review.";
+}
+
+function shouldAskSourceClarification(question: string, intent: SafeQuestionIntent): boolean {
+  if (intent.route !== "source_context" || intent.sourceScope) {
+    return false;
+  }
+
+  if (!["academic_support", "campus_life", "campus_office", "student_admin"].includes(intent.scenario)) {
+    return false;
+  }
+
+  return /\b(how (do|can|should) i|process|procedure|steps?|requirements?)\b/i.test(question);
+}
+
+function sourceClarificationText(): string {
+  return "I can check the saved TUPT sources, but I need 1 quick detail first: is this about a TUPT process, and which office or document should I look for?";
+}
+
+function sourceMissText(question: string, scenario: QuestionScenario): string {
+  return `${nextSourceMissIntro()}\n\nFor now, ${sourceMissAdvice(question, scenario)}`;
 }
 
 export function buildDeterministicSafeAnswerText(
@@ -637,6 +680,18 @@ export function buildSourceMissFallbackResponse(
   intent: SafeQuestionIntent,
   mode: DeviceAIMode
 ): SearchResponse {
+  if (shouldAskSourceClarification(question, intent)) {
+    return responseFromText({
+      answerText: sourceClarificationText(),
+      confidence: "low",
+      mode,
+      provenance: "No reliable saved source found",
+      question,
+      reliable: false,
+      responseType: "source"
+    });
+  }
+
   return responseFromText({
     answerText: sourceMissText(question, intent.scenario),
     confidence: "low",

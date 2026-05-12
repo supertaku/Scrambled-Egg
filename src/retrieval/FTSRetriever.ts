@@ -33,6 +33,48 @@ interface SearchRow {
   score: number;
 }
 
+function normalizeOffice(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/^tup-?taguig\s+/i, "")
+    .replace(/\boffice of the\b/g, "")
+    .replace(/\band\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function officeAliases(office: string): string[] {
+  const normalized = normalizeOffice(office);
+  const aliases = new Set([office]);
+
+  if (normalized.includes("student affairs")) {
+    aliases.add("Office of the Student Affairs");
+    aliases.add("Student Affairs");
+  }
+  if (normalized.includes("clinic")) {
+    aliases.add("TUP-Taguig Clinic");
+    aliases.add("Clinic");
+  }
+  if (normalized.includes("guidance")) {
+    aliases.add("Guidance and Counselling Office");
+    aliases.add("Guidance");
+  }
+
+  return Array.from(aliases);
+}
+
+function addOfficeScopeClause(
+  whereClause: string,
+  params: (string | number)[],
+  office: string | undefined
+): string {
+  if (!office) return whereClause;
+  const aliases = officeAliases(office);
+  params.push(...aliases);
+  return `${whereClause} AND c.office IN (${aliases.map(() => "?").join(", ")})`;
+}
+
 export function safeStringArrayFromJson(value: string | null): string[] | null {
   if (!value) {
     return null;
@@ -72,6 +114,29 @@ export class FTSRetriever implements Retriever {
       }
     }
 
+    // Scope relaxation: if a heuristic office scope was set but produced zero
+    // matches, retry once without the office filter (keep category/documentId).
+    // Office classification is regex-based and can mis-bucket queries; we'd
+    // rather return cross-office results than nothing.
+    if (options.scope?.office) {
+      const { office: _droppedOffice, ...scopeWithoutOffice } = options.scope;
+      void _droppedOffice;
+      const relaxedOptions: SearchOptions = {
+        ...options,
+        scope: scopeWithoutOffice
+      };
+      for (const ftsQuery of ftsQueries) {
+        try {
+          const rows = await this.runFtsSearch(ftsQuery, limit, relaxedOptions);
+          if (rows.length > 0) {
+            return this.toRankedResults(rows, query).slice(0, limit);
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+
     return this.fallbackLikeSearch(query, limit, options);
   }
 
@@ -79,10 +144,7 @@ export class FTSRetriever implements Retriever {
     let whereClause = "chunks_fts MATCH ?";
     const params: (string | number)[] = [ftsQuery];
 
-    if (options.scope?.office) {
-      whereClause += " AND c.office = ?";
-      params.push(options.scope.office);
-    }
+    whereClause = addOfficeScopeClause(whereClause, params, options.scope?.office);
     if (options.scope?.category) {
       whereClause += " AND c.category = ?";
       params.push(options.scope.category);
@@ -138,39 +200,36 @@ export class FTSRetriever implements Retriever {
       return [];
     }
 
-    const firstToken = tokens[0];
-    if (!firstToken) {
-      return [];
-    }
-
-    const pattern = `%${firstToken}%`;
-    let whereClause = `
-      (lower(c.section_title) LIKE ?
-      OR lower(c.process_name) LIKE ?
-      OR lower(c.content) LIKE ?
-      OR lower(c.answer) LIKE ?
-      OR lower(c.citation) LIKE ?
-      OR lower(c.category) LIKE ?
-      OR lower(c.office) LIKE ?
-      OR lower(c.tags) LIKE ?
-      OR lower(c.synonyms) LIKE ?)
-    `;
-    const params: (string | number)[] = [
-      pattern,
-      pattern,
-      pattern,
-      pattern,
-      pattern,
-      pattern,
-      pattern,
-      pattern,
-      pattern
+    // Build a LIKE-OR across up to the first 4 tokens (was: first token only).
+    // First-token-only fallback degenerated multi-word queries like
+    // "registrar office hours" into "%registrar%" matches over the entire
+    // corpus, which threw away the rest of the query's signal.
+    const candidateTokens = tokens.slice(0, 4);
+    const TOKEN_FIELDS = [
+      "lower(c.section_title)",
+      "lower(c.process_name)",
+      "lower(c.content)",
+      "lower(c.answer)",
+      "lower(c.citation)",
+      "lower(c.category)",
+      "lower(c.office)",
+      "lower(c.tags)",
+      "lower(c.synonyms)"
     ];
+    const params: (string | number)[] = [];
+    const orClause = candidateTokens
+      .map((token) => {
+        const pattern = `%${token}%`;
+        const clauses = TOKEN_FIELDS.map((field) => {
+          params.push(pattern);
+          return `${field} LIKE ?`;
+        });
+        return `(${clauses.join(" OR ")})`;
+      })
+      .join(" OR ");
+    let whereClause = `(${orClause})`;
 
-    if (options.scope?.office) {
-      whereClause += " AND c.office = ?";
-      params.push(options.scope.office);
-    }
+    whereClause = addOfficeScopeClause(whereClause, params, options.scope?.office);
     if (options.scope?.category) {
       whereClause += " AND c.category = ?";
       params.push(options.scope.category);
@@ -221,6 +280,7 @@ export class FTSRetriever implements Retriever {
   }
 
   private toRankedResults(rows: SearchRow[], query: string): SearchResult[] {
+    const rowByChunkId = new Map(rows.map((row) => [row.chunk_id, row]));
     const results = rows.map<SearchResult>((row) => ({
       id: row.id,
       chunkId: row.chunk_id,
@@ -237,8 +297,8 @@ export class FTSRetriever implements Retriever {
       office: row.office,
       tags: row.tags ? row.tags.split(" ").filter(Boolean) : [],
       synonyms: row.synonyms ? row.synonyms.split(" ").filter(Boolean) : [],
-      steps: safeStringArrayFromJson(row.steps),
-      prerequisites: safeStringArrayFromJson(row.prerequisites),
+      steps: null,
+      prerequisites: null,
       officeLocation: row.office_location,
       contactInfo: row.contact_info,
       priority: row.priority,
@@ -250,6 +310,18 @@ export class FTSRetriever implements Retriever {
       confidence: "low"
     }));
 
-    return rankSearchResults(results, query);
+    const ranked = rankSearchResults(results, query);
+    return ranked.map((result, index) => {
+      if (index >= 5) {
+        return result;
+      }
+
+      const row = rowByChunkId.get(result.chunkId);
+      return {
+        ...result,
+        steps: safeStringArrayFromJson(row?.steps ?? null),
+        prerequisites: safeStringArrayFromJson(row?.prerequisites ?? null)
+      };
+    });
   }
 }

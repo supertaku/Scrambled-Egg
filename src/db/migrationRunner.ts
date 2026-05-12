@@ -16,6 +16,14 @@ interface TableInfoRow {
   name: string;
 }
 
+function quoteIdentifier(identifier: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) {
+    throw new Error(`Unsafe SQLite identifier: ${identifier}`);
+  }
+
+  return `"${identifier}"`;
+}
+
 async function tableExists(db: SQLiteDatabase, tableName: string): Promise<boolean> {
   const row = await db.getFirstAsync<SqliteMasterRow>(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -25,7 +33,7 @@ async function tableExists(db: SQLiteDatabase, tableName: string): Promise<boole
 }
 
 async function getColumnNames(db: SQLiteDatabase, tableName: string): Promise<Set<string>> {
-  const rows = await db.getAllAsync<TableInfoRow>(`PRAGMA table_info(${tableName})`);
+  const rows = await db.getAllAsync<TableInfoRow>(`PRAGMA table_info(${quoteIdentifier(tableName)})`);
   return new Set(rows.map((row) => row.name));
 }
 
@@ -37,7 +45,7 @@ async function addColumnIfMissing(
 ): Promise<void> {
   const columns = await getColumnNames(db, tableName);
   if (!columns.has(columnName)) {
-    await db.execAsync(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition};`);
+    await db.execAsync(`ALTER TABLE ${quoteIdentifier(tableName)} ADD COLUMN ${quoteIdentifier(columnName)} ${definition};`);
   }
 }
 
@@ -140,6 +148,51 @@ async function upgradeToV2(db: SQLiteDatabase): Promise<void> {
   `);
 }
 
+async function upgradeToV3(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS conversation_memory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      scenario TEXT,
+      route TEXT,
+      source_scope_json TEXT,
+      keywords TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS conversation_memory_fts USING fts5(
+      question,
+      answer,
+      scenario,
+      keywords,
+      content='conversation_memory',
+      content_rowid='id',
+      tokenize='unicode61 remove_diacritics 2'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS conversation_memory_ai AFTER INSERT ON conversation_memory BEGIN
+      INSERT INTO conversation_memory_fts(rowid, question, answer, scenario, keywords)
+      VALUES (new.id, new.question, new.answer, new.scenario, new.keywords);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS conversation_memory_ad AFTER DELETE ON conversation_memory BEGIN
+      INSERT INTO conversation_memory_fts(conversation_memory_fts, rowid, question, answer, scenario, keywords)
+      VALUES ('delete', old.id, old.question, old.answer, old.scenario, old.keywords);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS conversation_memory_au AFTER UPDATE ON conversation_memory BEGIN
+      INSERT INTO conversation_memory_fts(conversation_memory_fts, rowid, question, answer, scenario, keywords)
+      VALUES ('delete', old.id, old.question, old.answer, old.scenario, old.keywords);
+      INSERT INTO conversation_memory_fts(rowid, question, answer, scenario, keywords)
+      VALUES (new.id, new.question, new.answer, new.scenario, new.keywords);
+    END;
+
+    CREATE INDEX IF NOT EXISTS idx_conversation_memory_created_at ON conversation_memory(created_at);
+    INSERT INTO conversation_memory_fts(conversation_memory_fts) VALUES ('rebuild');
+  `);
+}
+
 /**
  * List of all database migrations.
  * When adding a new migration, increment the version and add a new entry.
@@ -157,6 +210,13 @@ const migrations: Migration[] = [
     description: "Add vector-ready chunk embedding storage",
     up: async (db) => {
       await upgradeToV2(db);
+    }
+  },
+  {
+    version: 3,
+    description: "Add compact conversation memory for related prior-chat context",
+    up: async (db) => {
+      await upgradeToV3(db);
     }
   }
 ];

@@ -121,6 +121,18 @@ function getModelTierForParameterCount(parameterCountB: number | null | undefine
 
 export type LocalModelRole = "chat" | "embedding";
 
+export type ChatTemplateFamily = "llama" | "qwen" | "gemma" | "phi" | "unknown";
+export type ChatTemplateValidationStatus = "supported" | "unknown" | "mismatch";
+
+export interface ChatTemplateValidation {
+  status: ChatTemplateValidationStatus;
+  modelFamily: ChatTemplateFamily;
+  templateFamily: ChatTemplateFamily;
+  reason: string;
+  modelFamilySource: "gguf-metadata" | "model-name" | "filename" | "unknown";
+  templateFamilySource: "gguf-metadata" | "unknown";
+}
+
 export interface DeviceHardwareProfile {
   platform: NormalizedPlatform;
   osVersion: string;
@@ -138,12 +150,16 @@ export interface LocalModelMetadata {
   modelParameterCountB: number | null;
   modelQuantization: string | null;
   modelTier: LocalModelTier;
+  chatTemplate: ChatTemplateValidation;
   rawInfo: Record<string, unknown> | null;
 }
 
 export interface LocalModelManifest {
   version: 1;
   role: LocalModelRole;
+  source?: "bundled" | "downloaded" | "imported" | undefined;
+  sourceId?: string | undefined;
+  downloadId?: string | undefined;
   originalName: string;
   storedName: string;
   uri: string;
@@ -154,6 +170,7 @@ export interface LocalModelManifest {
   modelParameterCountB: number | null;
   modelQuantization: string | null;
   modelTier: LocalModelTier;
+  chatTemplate?: ChatTemplateValidation;
   recommendedModelTier: LocalModelTier;
   importedAt: string;
   validatedAt: string;
@@ -181,6 +198,9 @@ export interface LlamaContextSettings {
 
 export interface BuildManifestInput {
   role: LocalModelRole;
+  source?: LocalModelManifest["source"];
+  sourceId?: string | undefined;
+  downloadId?: string | undefined;
   originalName: string;
   storedName: string;
   uri: string;
@@ -219,6 +239,73 @@ export function parseQuantizationFromText(value: string | null | undefined): str
   return match?.[1]?.toLowerCase() ?? null;
 }
 
+export function inferChatTemplateFamilyFromText(value: string | null | undefined): ChatTemplateFamily {
+  if (!value) return "unknown";
+
+  const normalized = value.toLowerCase();
+  if (
+    normalized.includes("<|start_header_id|>") ||
+    normalized.includes("<|end_header_id|>") ||
+    normalized.includes("llama") ||
+    normalized.includes("[inst]") ||
+    normalized.includes("<<sys>>")
+  ) {
+    return "llama";
+  }
+
+  if (
+    normalized.includes("<|im_start|>") ||
+    normalized.includes("<|im_end|>") ||
+    normalized.includes("qwen") ||
+    normalized.includes("chatml")
+  ) {
+    return "qwen";
+  }
+
+  if (
+    normalized.includes("<start_of_turn>") ||
+    normalized.includes("<end_of_turn>") ||
+    normalized.includes("gemma")
+  ) {
+    return "gemma";
+  }
+
+  if (
+    normalized.includes("<|system|>") ||
+    normalized.includes("<|user|>") ||
+    normalized.includes("<|assistant|>") ||
+    normalized.includes("<|end|>") ||
+    /\bphi[-_\s]?[34]?\b/.test(normalized)
+  ) {
+    return "phi";
+  }
+
+  return "unknown";
+}
+
+export function inferModelFamilyFromText(value: string | null | undefined): ChatTemplateFamily {
+  if (!value) return "unknown";
+
+  const normalized = value.toLowerCase();
+  if (/\bqwen(?:[23]|2\.5|3)?\b/.test(normalized) || normalized.includes("qwen")) {
+    return "qwen";
+  }
+
+  if (/\bllama(?:[-_\s]?[23](?:\.\d+)?)?\b/.test(normalized) || normalized.includes("meta-llama")) {
+    return "llama";
+  }
+
+  if (/\bgemma(?:[-_\s]?[23])?\b/.test(normalized)) {
+    return "gemma";
+  }
+
+  if (/\bphi(?:[-_\s]?[34](?:\.\d+)?)?\b/.test(normalized)) {
+    return "phi";
+  }
+
+  return "unknown";
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -248,6 +335,18 @@ function firstStringFromInfo(info: Record<string, unknown> | null, patterns: Reg
   }
 
   return null;
+}
+
+function allStringsFromInfo(info: Record<string, unknown> | null, patterns: RegExp[]): string[] {
+  if (!info) return [];
+  const values: string[] = [];
+  for (const [key, value] of flattenModelInfo(info)) {
+    if (typeof value === "string" && patterns.some((pattern) => pattern.test(key))) {
+      values.push(value);
+    }
+  }
+
+  return values;
 }
 
 function firstNumberFromInfo(info: Record<string, unknown> | null, patterns: RegExp[]): number | null {
@@ -285,6 +384,96 @@ function normalizeParameterCount(value: number | null): number | null {
   return Number(value.toFixed(2));
 }
 
+function firstKnownModelFamily(
+  candidates: Array<{ value: string | null | undefined; source: ChatTemplateValidation["modelFamilySource"] }>
+): Pick<ChatTemplateValidation, "modelFamily" | "modelFamilySource"> {
+  for (const candidate of candidates) {
+    const modelFamily = inferModelFamilyFromText(candidate.value);
+    if (modelFamily !== "unknown") {
+      return { modelFamily, modelFamilySource: candidate.source };
+    }
+  }
+
+  return { modelFamily: "unknown", modelFamilySource: "unknown" };
+}
+
+function firstKnownTemplateFamily(
+  candidates: string[]
+): Pick<ChatTemplateValidation, "templateFamily" | "templateFamilySource"> {
+  for (const candidate of candidates) {
+    const templateFamily = inferChatTemplateFamilyFromText(candidate);
+    if (templateFamily !== "unknown") {
+      return { templateFamily, templateFamilySource: "gguf-metadata" };
+    }
+  }
+
+  return { templateFamily: "unknown", templateFamilySource: "unknown" };
+}
+
+export function inferChatTemplateValidation(input: {
+  rawInfo?: Record<string, unknown> | null;
+  modelName?: string | null;
+  fileName?: string | null;
+}): ChatTemplateValidation {
+  const rawInfo = input.rawInfo ?? null;
+  const metadataModelText = [
+    ...allStringsFromInfo(rawInfo, [/general\.architecture$/i, /architecture$/i]),
+    ...allStringsFromInfo(rawInfo, [/general\.name$/i, /model\.name$/i])
+  ].join(" ");
+  const chatTemplateTextValues = allStringsFromInfo(rawInfo, [/chat_?template$/i, /chat.*template/i]);
+  const { modelFamily, modelFamilySource } = firstKnownModelFamily([
+    { value: metadataModelText, source: "gguf-metadata" },
+    { value: input.modelName, source: "model-name" },
+    { value: input.fileName, source: "filename" }
+  ]);
+  const { templateFamily, templateFamilySource } = firstKnownTemplateFamily(chatTemplateTextValues);
+
+  if (modelFamily !== "unknown" && templateFamily !== "unknown" && modelFamily !== templateFamily) {
+    return {
+      status: "mismatch",
+      modelFamily,
+      templateFamily,
+      reason: `Model family appears to be ${modelFamily}, but GGUF chat template appears to be ${templateFamily}.`,
+      modelFamilySource,
+      templateFamilySource
+    };
+  }
+
+  if (templateFamily !== "unknown") {
+    return {
+      status: "supported",
+      modelFamily,
+      templateFamily,
+      reason:
+        modelFamily === "unknown"
+          ? `GGUF chat template appears to use the supported ${templateFamily} format.`
+          : `GGUF chat template appears compatible with the ${modelFamily} model family.`,
+      modelFamilySource,
+      templateFamilySource
+    };
+  }
+
+  if (modelFamily !== "unknown") {
+    return {
+      status: "unknown",
+      modelFamily,
+      templateFamily,
+      reason: `Model family appears to be ${modelFamily}, but GGUF chat template metadata was not found or was not recognized.`,
+      modelFamilySource,
+      templateFamilySource
+    };
+  }
+
+  return {
+    status: "unknown",
+    modelFamily,
+    templateFamily,
+    reason: "Model family and GGUF chat template metadata could not be recognized.",
+    modelFamilySource,
+    templateFamilySource
+  };
+}
+
 export function deriveModelMetadata(input: {
   originalName: string;
   modelInfo?: unknown;
@@ -303,12 +492,18 @@ export function deriveModelMetadata(input: {
     parseQuantizationFromText(modelName) ??
     parseQuantizationFromText(input.originalName) ??
     "gguf-quantized";
+  const chatTemplate = inferChatTemplateValidation({
+    rawInfo,
+    modelName,
+    fileName: input.originalName
+  });
 
   return {
     modelName,
     modelParameterCountB,
     modelQuantization,
     modelTier: getModelTierForParameterCount(modelParameterCountB),
+    chatTemplate,
     rawInfo
   };
 }
@@ -355,6 +550,10 @@ export function validateImportedModel(input: {
     if (!isQuantizedModel(metadata.modelQuantization)) {
       reasons.push("Chat model must be a quantized GGUF build such as q4, q5, q8, int4, or int8.");
     }
+
+    if (metadata.chatTemplate.status === "mismatch") {
+      reasons.push(`Chat model template mismatch: ${metadata.chatTemplate.reason}`);
+    }
   }
 
   if (hardware.platform === "android" && !hasArm64Abi(hardware.supportedAbis)) {
@@ -396,6 +595,9 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
   return {
     version: 1,
     role: input.role,
+    ...(input.source ? { source: input.source } : {}),
+    ...(input.sourceId ? { sourceId: input.sourceId } : {}),
+    ...(input.downloadId ? { downloadId: input.downloadId } : {}),
     originalName: input.originalName,
     storedName: input.storedName,
     uri: input.uri,
@@ -406,6 +608,7 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
     modelParameterCountB: input.metadata.modelParameterCountB,
     modelQuantization: input.metadata.modelQuantization,
     modelTier: input.metadata.modelTier,
+    chatTemplate: input.metadata.chatTemplate,
     recommendedModelTier,
     importedAt: input.now,
     validatedAt: input.now,

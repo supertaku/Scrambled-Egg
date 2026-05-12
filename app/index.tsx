@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "expo-router";
-import { Building2, IdCard, ListChecks, MessageCircle, ShieldCheck, User } from "lucide-react-native";
+import { Building2, IdCard, ListChecks, Map, MessageCircle, Settings, ShieldCheck, User } from "lucide-react-native";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AdminUnlockModal } from "@/components/AdminUnlockModal";
 import { MascotHeader } from "@/components/MascotHeader";
+import { getAdminMode, subscribeAdminMode } from "@/services/adminService";
 import { getSeedTriviaItems } from "@/services/triviaService";
 import { colors } from "@/theme/colors";
 
@@ -31,6 +32,7 @@ export default function HomeScreen() {
   const dialogueLines = useMemo(() => buildHomeDialogueLines(), []);
   const [hakiLine, setHakiLine] = useState(openingGreeting);
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminMode, setAdminMode] = useState(false);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -40,6 +42,23 @@ export default function HomeScreen() {
 
     return () => clearInterval(intervalId);
   }, [dialogueLines]);
+
+  useEffect(() => {
+    let mounted = true;
+    void getAdminMode().then((enabled) => {
+      if (mounted) {
+        setAdminMode(enabled);
+      }
+    });
+    const unsubscribe = subscribeAdminMode((enabled) => {
+      setAdminMode(enabled);
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
 
   const goToChat = useCallback(() => {
     router.push("/chat");
@@ -76,11 +95,20 @@ export default function HomeScreen() {
             <Text style={styles.headerTitle}>Haki Assistant</Text>
             <Text style={styles.headerSubtitle}>Your offline campus guide</Text>
           </View>
-          <Pressable onPress={() => router.push("/profile")} style={styles.profileButton}>
-            <View style={styles.profileIconCircle}>
-              <User color={colors.white} size={20} />
-            </View>
-          </Pressable>
+          <View style={styles.headerActions}>
+            {adminMode ? (
+              <Pressable accessibilityLabel="Admin settings" onPress={() => router.push("/settings")} style={styles.profileButton}>
+                <View style={styles.profileIconCircle}>
+                  <Settings color={colors.white} size={20} />
+                </View>
+              </Pressable>
+            ) : null}
+            <Pressable accessibilityLabel="Student profile" onPress={() => router.push("/profile")} style={styles.profileButton}>
+              <View style={styles.profileIconCircle}>
+                <User color={colors.white} size={20} />
+              </View>
+            </Pressable>
+          </View>
         </View>
         <MascotHeader
           message={hakiLine}
@@ -105,10 +133,10 @@ export default function HomeScreen() {
               <Text style={styles.primaryActionText}>Message Haki about enrollment, offices, clinic help, rules, and more.</Text>
             </Pressable>
 
-            <Pressable onPress={() => router.push("/organization")} style={styles.secondaryAction}>
-              <Building2 color={colors.maroon} size={23} />
-              <Text style={styles.secondaryActionTitle}>Organization</Text>
-              <Text style={styles.secondaryActionText}>Find colleges, offices, and where concerns usually go.</Text>
+            <Pressable onPress={() => router.push("/map" as never)} style={styles.secondaryAction}>
+              <Map color={colors.maroon} size={23} />
+              <Text style={styles.secondaryActionTitle}>Campus Map</Text>
+              <Text style={styles.secondaryActionText}>Peek at the map space while Haki builds navigation.</Text>
             </Pressable>
           </View>
 
@@ -170,6 +198,11 @@ const styles = StyleSheet.create({
   },
   headerTextWrap: {
     alignItems: "flex-start"
+  },
+  headerActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8
   },
   profileButton: {
     padding: 4

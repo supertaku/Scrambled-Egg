@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Lightbulb, Mail, Search, X } from "lucide-react-native";
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors } from "@/theme/colors";
+import { useDebouncedQuery } from "@/hooks/useDebouncedQuery";
 import { logger } from "@/utils/logger";
 
 interface Tip {
@@ -13,43 +14,91 @@ interface Tip {
   category: string;
 }
 
-const mockTips: Tip[] = [
+const studentTips: Tip[] = [
   {
-    id: "t1",
-    author: "Senior BSCS Student",
+    id: "student-tip-1",
+    author: "2nd year student",
+    category: "Documents",
+    content: "Keep a clear screenshot or PDF copy of your COR, student number, and receipts in one phone album before going to any office."
+  },
+  {
+    id: "student-tip-2",
+    author: "Irregular student",
     category: "Enrollment",
-    content: "Always bring extra 1x1 and 2x2 ID pictures during enrollment week. You never know when an office will ask for one."
+    content: "Before asking about subjects, write your exact program, year level, section, and the subject code so the adviser can route you faster."
   },
   {
-    id: "t2",
-    author: "Alumni 2025",
-    category: "Registrar",
-    content: "The best time to visit the Registrar is between 8:00 AM to 9:00 AM. Lines get super long after lunch break."
+    id: "student-tip-3",
+    author: "Class rep",
+    category: "Communication",
+    content: "When messaging an office or instructor, put your student number, full name, program, and short concern in the first message."
   },
   {
-    id: "t3",
-    author: "TUP Confessions",
-    category: "Survival",
-    content: "If you need cheap and fast printing, go to the stalls right outside the main gate. They offer bulk printing discounts."
+    id: "student-tip-4",
+    author: "Lab buddy",
+    category: "Study",
+    content: "After class, write three tiny notes: what was discussed, what confused you, and what to ask next meeting."
   },
   {
-    id: "t4",
-    author: "Student Council",
-    category: "Facilities",
-    content: "The library is air-conditioned and perfect for studying during vacant hours, but it fills up fast. Reserve a seat early!"
+    id: "student-tip-5",
+    author: "Commuter student",
+    category: "Routine",
+    content: "Pack your ID, pen, small notebook, charger, and water before leaving. The pen saves you more often than you think."
+  },
+  {
+    id: "student-tip-6",
+    author: "Graduating student",
+    category: "Clearance",
+    content: "Do not wait for the last week to check requirements. Ask early, list every missing item, and finish one small requirement per day."
+  },
+  {
+    id: "student-tip-7",
+    author: "Freshie",
+    category: "Campus Life",
+    content: "If you are lost, ask a guard, class officer, or nearby office politely. Most people can at least point you to the right building."
+  },
+  {
+    id: "student-tip-8",
+    author: "Scholarship applicant",
+    category: "Files",
+    content: "Name your files clearly, like LASTNAME_COR_2026.pdf. It makes email attachments easier to check and resend."
+  },
+  {
+    id: "student-tip-9",
+    author: "Working student",
+    category: "Time",
+    content: "Use a weekly checklist instead of a giant to-do list. Put deadlines, office errands, and review blocks in the same view."
+  },
+  {
+    id: "student-tip-10",
+    author: "Peer tutor",
+    category: "Review",
+    content: "Practice solving first, then reread. If you can explain the step out loud, you probably understand it better."
+  },
+  {
+    id: "student-tip-11",
+    author: "Student assistant",
+    category: "Office Visit",
+    content: "Bring context, not just the question. A clear timeline of what happened helps staff understand your concern faster."
+  },
+  {
+    id: "student-tip-12",
+    author: "Group leader",
+    category: "Teamwork",
+    content: "For group tasks, decide the owner, deadline, and output format in chat so everyone can check the same agreement later."
   }
 ];
 
 export default function TipsScreen() {
-  const [query, setQuery] = useState("");
+  const { clearQuery, debouncedQuery, query, setQuery } = useDebouncedQuery();
   const filteredTips = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) return mockTips;
+    const normalized = debouncedQuery.trim().toLowerCase();
+    if (!normalized) return studentTips;
 
-    return mockTips.filter((tip) =>
+    return studentTips.filter((tip) =>
       [tip.author, tip.category, tip.content].some((value) => value.toLowerCase().includes(normalized))
     );
-  }, [query]);
+  }, [debouncedQuery]);
 
   const handleEmailAdmin = async () => {
     const email = "admin@tup.edu.ph";
@@ -99,9 +148,9 @@ export default function TipsScreen() {
         <View style={styles.section}>
           <View style={styles.headerTitleRow}>
             <Lightbulb color={colors.maroon} size={22} />
-            <Text style={styles.sectionTitle}>Student Advice</Text>
+          <Text style={styles.sectionTitle}>Tips & Tricks from other students</Text>
           </View>
-          <Text style={styles.sectionDesc}>Real advice from real TUPians.</Text>
+          <Text style={styles.sectionDesc}>Mock peer advice while the community tips feature is being shaped.</Text>
 
           <View style={styles.searchBox}>
             <Search color={colors.muted} size={18} />
@@ -113,7 +162,7 @@ export default function TipsScreen() {
               style={styles.searchInput}
             />
             {query ? (
-              <Pressable accessibilityLabel="Clear search" onPress={() => setQuery("")} style={styles.clearButton}>
+              <Pressable accessibilityLabel="Clear search" onPress={clearQuery} style={styles.clearButton}>
                 <X color={colors.muted} size={18} />
               </Pressable>
             ) : null}
@@ -126,15 +175,15 @@ export default function TipsScreen() {
                   <View style={styles.categoryBadge}>
                     <Text style={styles.categoryText}>{tip.category}</Text>
                   </View>
-                  <Text style={styles.authorText}>from {tip.author}</Text>
+                <Text style={styles.authorText}>{tip.author}</Text>
                 </View>
-                <Text style={styles.tipContent}>"{tip.content}"</Text>
+                <Text style={styles.tipContent}>{tip.content}</Text>
               </View>
             ))}
             {filteredTips.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>No tips found</Text>
-                <Text style={styles.emptyText}>Try searching for enrollment, registrar, printing, or library.</Text>
+                <Text style={styles.emptyText}>Try searching for documents, enrollment, study, files, or time.</Text>
               </View>
             ) : null}
           </View>
@@ -142,8 +191,8 @@ export default function TipsScreen() {
 
         <View style={styles.actionSection}>
           <View style={styles.actionCard}>
-            <Text style={styles.actionTitle}>Have your own advice?</Text>
-            <Text style={styles.actionDesc}>Help other students by sharing your campus life hacks. Your tip might be featured in the next update!</Text>
+            <Text style={styles.actionTitle}>Got a student tip?</Text>
+            <Text style={styles.actionDesc}>Send a short peer tip for review before it becomes part of this screen.</Text>
             
             <Pressable style={styles.emailButton} onPress={handleEmailAdmin}>
               <Mail color={colors.white} size={18} />

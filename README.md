@@ -27,7 +27,7 @@ For native builds that report the tiny local-model requirements, Haki prefers lo
   - Uses a native local model for safe general chat when the provider exposes `answerSafeChat`.
   - School-specific questions can still retrieve saved source chunks before the model answers.
 - `Offline AI Mode: Local Summary Available`
-  - Uses Apple Foundation Models, llama.rn, or ExecuTorch only when the local runtime is available.
+  - Uses Apple Foundation Models or llama.rn when the local runtime is available.
   - Summarizes retrieved chunks only.
   - Can answer safe general chat prompts when the native provider exposes safe chat.
 - `Offline AI Mode: Hybrid Local AI`
@@ -39,9 +39,7 @@ Internal answer provenance is tracked as one of:
 
 - `Retrieved with semantic search`
 - `Retrieved with hybrid search`
-- `Locally summarized with ExecuTorch`
-- `Locally summarized with llama.rn`
-- `Locally summarized with Apple Intelligence`
+- `Locally summarized with llama.rn or Apple Intelligence`
 - `Answered with local safe chat`
 - `General chat unavailable without local AI`
 
@@ -52,17 +50,7 @@ Base FTS5 mode:
 - iOS 15+
 - Android 9+
 
-ExecuTorch AI mode:
-
-- Android 13+ / API 33+ for the recommended Android local-model path.
-- `arm64-v8a` / arm64 runtime.
-- Tiny tier: 4GB RAM, 3GB free storage, quantized 0.5B-1.5B local model assets.
-- Minimum tier: 6GB RAM, 4GB free storage, quantized 1B-3B local model assets.
-- Good tier: 8GB RAM, 6GB free storage, quantized 3B-4B local model assets.
-- Enhanced tier: 12GB+ RAM, 10GB+ free storage, quantized 4B-7B local model assets.
-- Flagship tier: 16GB+ RAM, 12GB+ free storage, quantized 7B-8B local model assets.
-- Requires a custom Expo development build with the `HakiExecuTorch` native module and local model assets.
-- Haki refuses ExecuTorch mode when the reported device, storage, model, or quantization values do not meet the active tier, then keeps FTS5 as fallback.
+Native GGUF (llama.rn) summary mode uses the same Android hardware tiers as below (RAM, storage, ABI). Local models are loaded from app-private GGUF files; configure filenames in `localModelMetadata` / Settings import flows.
 
 llama.rn / GGUF AI mode:
 
@@ -81,13 +69,13 @@ Apple Intelligence / Foundation Models mode:
 - Requires a custom Expo development build with the `HakiAppleFoundationModels` native module.
 - The current app includes the TypeScript provider and native-module placeholder only, so unsupported builds still compile and run.
 
-Expo Go is suitable for the FTS5 MVP path, but it cannot load custom native AI modules. Use a custom Expo development build before integrating llama.rn, ExecuTorch, or an Apple Foundation Models Swift bridge.
+Expo Go is suitable for the FTS5 MVP path, but it cannot load custom native AI modules. Use a custom Expo development build before integrating llama.rn or an Apple Foundation Models Swift bridge.
 
 ## Automatic Capability Detection
 
 Haki checks device capability at app startup and caches the safest selected mode for the session. The detector considers platform, OS version, native provider availability, ABI/architecture, RAM, free storage, local model asset availability, model size, model quantization, embedding support, summarization support, native-reported device class, memory/RAM class when exposed, and providers disabled after runtime failures.
 
-Before probing optional AI providers, Haki opens the local database and verifies that the SQLite FTS5 index is available. If FTS5 cannot initialize, Haki reports a database initialization error and does not attempt Apple Intelligence, llama.rn, or ExecuTorch.
+Before probing optional AI providers, Haki opens the local database and verifies that the SQLite FTS5 index is available. If FTS5 cannot initialize, Haki reports a database initialization error and does not attempt Apple Intelligence or llama.rn.
 
 The priority order is:
 
@@ -99,7 +87,7 @@ The priority order is:
 
 If detection is uncertain, Haki chooses the safer FTS5 path. The Settings/About screen shows the active mode, platform, OS version, active model tier, recommended model tier, provider status, unavailable reasons, and a button to re-check device capability without restarting the app.
 
-Hybrid mode uses one provider for both embeddings and summarization. Haki does not mix Apple, llama.rn, and ExecuTorch summarization or embeddings across providers.
+Hybrid mode uses one provider for both embeddings and summarization. Haki does not mix Apple and llama.rn summarization or embeddings across providers.
 
 ## Install
 
@@ -145,10 +133,9 @@ Native local AI providers are optional and are not required for the offline MVP.
 When implementing real native providers:
 
 1. Add `expo-dev-client` and the native module implementation.
-2. Add the native bridge expected by the TypeScript placeholders:
-   - `NativeModules.HakiExecuTorch`
-   - `NativeModules.HakiAppleFoundationModels`
-3. For llama.rn, keep the config plugin in `app.json` and place supported GGUF files under the app document `models/` directory.
+2. Add the native bridge expected by the TypeScript layer:
+   - `NativeModules.HakiAppleFoundationModels` (optional, Apple-only)
+3. For llama.rn, keep the config plugin in `app.json` and place supported GGUF files under the app document `models/` directory or bundled `assets/models/`.
 4. Make `getCapabilities()` report the values Haki requires before enabling real local AI:
 
 ```ts
@@ -167,7 +154,7 @@ When implementing real native providers:
   recommendedModelTier: "tiny",
   approximateDeviceCapability: "high",
   memoryClass: "4GB",
-  modelAssetPath: "android_asset/models/haki-0.6b-int4.pte",
+  modelAssetPath: "file:///path/to/model.gguf",
   modelLoadTimeMs: 1200,
   lastInferenceTimeMs: 0,
   streamingSupported: true
@@ -305,7 +292,6 @@ interface LocalAIProvider {
 Implemented provider classes:
 
 - `FallbackProvider`
-- `ExecuTorchProvider`
 - `LlamaRnProvider`
 - `AppleFoundationModelsProvider`
 
@@ -331,19 +317,16 @@ npm run typecheck
 
 ## Current Limitations
 
-- The JavaScript capability gate for real local models is implemented, but the llama.rn model import/download UI is not included yet.
-- The ExecuTorch native module is experimental and still needs crash hardening before it should be preferred for streaming chat.
-- The Apple Foundation Models Swift bridge is not included yet.
-- Vector search is a placeholder until chunk embeddings are generated and ranked.
+- The JavaScript capability gate for real local models is implemented; larger GGUF flows rely on Settings import/download where available.
+- The Apple Foundation Models Swift bridge is optional and build-specific.
+- Vector search activates when `chunk_embeddings` rows exist for the active embedding model (automatic backfill runs when a provider exposes `embedText`).
 - The bundled seed data is demo content, not official policy.
 - Official school offices remain the final authority.
 
 ## Roadmap
 
-- Real ExecuTorch embedding model
-- Real ExecuTorch local summarization model
-- llama.rn GGUF model import/download flow
-- llama.rn embedding-backed hybrid retrieval
+- llama.rn GGUF model import/download flow refinements
+- Embedding-backed hybrid retrieval tuning
 - Apple Foundation Models Swift native bridge
 - Hybrid vector search
 - Better reranking

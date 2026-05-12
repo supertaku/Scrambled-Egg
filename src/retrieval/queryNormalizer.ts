@@ -41,8 +41,10 @@ const STOP_WORDS = new Set([
   "the",
   "there",
   "to",
-  "tup",
-  "tupt",
+  // "tup" / "tupt" intentionally NOT stop words: removing them used to throw
+  // away the school name disambiguation token, so titles like "TUP Manila
+  // Enrollment 2024" lost their BM25 title-token boost. They contribute
+  // signal when present and are harmless when not.
   "university",
   "what",
   "where",

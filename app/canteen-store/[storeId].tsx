@@ -1,27 +1,28 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, MapPin, Search, Store, Utensils, X } from "lucide-react-native";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getCanteenStoreById } from "@/data/canteenStores";
+import { useDebouncedQuery } from "@/hooks/useDebouncedQuery";
 import { colors } from "@/theme/colors";
 
 export default function CanteenStoreScreen() {
   const router = useRouter();
   const { storeId } = useLocalSearchParams<{ storeId: string }>();
   const store = getCanteenStoreById(storeId);
-  const [query, setQuery] = useState("");
+  const { clearQuery, debouncedQuery, query, setQuery } = useDebouncedQuery();
   const filteredFoods = useMemo(() => {
     if (!store) return [];
 
-    const normalized = query.trim().toLowerCase();
+    const normalized = debouncedQuery.trim().toLowerCase();
     if (!normalized) return store.foods;
 
     return store.foods.filter((food) =>
       [food.name, food.description, String(food.price)].some((value) => value.toLowerCase().includes(normalized))
     );
-  }, [query, store]);
+  }, [debouncedQuery, store]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -103,7 +104,7 @@ export default function CanteenStoreScreen() {
                   style={styles.searchInput}
                 />
                 {query ? (
-                  <Pressable accessibilityLabel="Clear search" onPress={() => setQuery("")} style={styles.clearButton}>
+                  <Pressable accessibilityLabel="Clear search" onPress={clearQuery} style={styles.clearButton}>
                     <X color={colors.muted} size={18} />
                   </Pressable>
                 ) : null}

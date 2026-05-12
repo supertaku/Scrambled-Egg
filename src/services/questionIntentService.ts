@@ -63,7 +63,8 @@ const SAFETY_PATTERNS: Array<{ category: SafetyCategory; patterns: RegExp[]; rea
     reason: "Violence or weaponization request",
     patterns: [
       /\b(build|make|create|hide|use)\b.*\b(weapon|bomb|explosive|poison|molotov)\b/i,
-      /\b(how (do|can) i|help me)\b.*\b(kill|hurt|attack|beat up|stab)\b/i,
+      /\b(how (do|can) i|help me|need to)\b.*\b(kill|hurt|attack|beat up|stab|slap|hit|punch)\b/i,
+      /\b(slap|hit|punch)\b.*\b(someone|classmate|teacher|professor|student|person)\b/i,
       /\b(paano|pano|tulungan mo ako)\b.*\b(saktan|patayin|bugbugin|saksakin)\b/i
     ]
   },
@@ -122,6 +123,160 @@ const SAFETY_PATTERNS: Array<{ category: SafetyCategory; patterns: RegExp[]; rea
     ]
   }
 ];
+
+const SEMANTIC_SAFETY_CONCEPTS: Array<{ category: SafetyCategory; terms: string[]; reason: string }> = [
+  {
+    category: "self_harm",
+    reason: "Self-harm method request",
+    terms: ["kms", "unalive myself", "end it all", "hurt myself", "magpakamatay", "saktan sarili"]
+  },
+  {
+    category: "violence",
+    reason: "Violence or weaponization request",
+    terms: ["make bomb", "build explosive", "hurt someone", "attack classmate", "slap someone", "hit someone", "punch someone", "patayin", "saksakin"]
+  },
+  {
+    category: "cyber_abuse",
+    reason: "Cyber abuse or credential theft request",
+    terms: ["hack account", "hack password", "steal password", "phish password", "bypass login"]
+  },
+  {
+    category: "privacy_invasion",
+    reason: "Privacy invasion request",
+    terms: ["stalk crush", "track someone", "find location", "spy messages", "itrack location"]
+  },
+  {
+    category: "harassment",
+    reason: "Harassment, coercion, or manipulation request",
+    terms: ["blackmail classmate", "threaten teacher", "humiliate someone", "spread rumor"]
+  },
+  {
+    category: "sexual_exploitation",
+    reason: "Sexual exploitation request",
+    terms: ["leak nudes", "revenge porn", "minor nudes", "underage nude"]
+  },
+  {
+    category: "academic_dishonesty",
+    reason: "Academic dishonesty request",
+    terms: ["cheat exam", "cheat quiz", "copy answers", "answer key", "fake excuse", "forge id", "mangopya", "kodigo"]
+  },
+  {
+    category: "dangerous_illegal",
+    reason: "Dangerous or illegal activity request",
+    terms: ["fake documents", "sell drugs", "break into", "shoplift", "counterfeit"]
+  }
+];
+
+const SEMANTIC_ACTION_TERMS = new Set([
+  "how",
+  "paano",
+  "pano",
+  "teach",
+  "turuan",
+  "help",
+  "gusto",
+  "make",
+  "build",
+  "create",
+  "bypass",
+  "get",
+  "find",
+  "steal",
+  "track",
+  "cheat",
+  "copy"
+]);
+
+function normalizeSafetyText(question: string): string {
+  return question
+    .toLowerCase()
+    .replace(/[0@]/g, "o")
+    .replace(/[1!|]/g, "i")
+    .replace(/3/g, "e")
+    .replace(/4/g, "a")
+    .replace(/5/g, "s")
+    .replace(/7/g, "t")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function editDistanceAtMostOne(left: string, right: string): boolean {
+  if (left === right) return true;
+  if (Math.abs(left.length - right.length) > 1) return false;
+
+  let edits = 0;
+  let i = 0;
+  let j = 0;
+
+  while (i < left.length && j < right.length) {
+    if (left[i] === right[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+
+    edits += 1;
+    if (edits > 1) return false;
+
+    if (left.length > right.length) i += 1;
+    else if (right.length > left.length) j += 1;
+    else {
+      i += 1;
+      j += 1;
+    }
+  }
+
+  return true;
+}
+
+function hasActionIntent(normalized: string): boolean {
+  return normalized.split(" ").some((token) => SEMANTIC_ACTION_TERMS.has(token));
+}
+
+function matchesSafetyTerm(normalized: string, term: string): boolean {
+  if (normalized.includes(term)) return true;
+
+  const tokens = normalized.split(" ");
+  const termTokens = term.split(" ");
+  if (termTokens.length === 1) {
+    const onlyTerm = termTokens[0];
+    if (!onlyTerm) return false;
+    return tokens.some((token) => token.length >= 4 && editDistanceAtMostOne(token, onlyTerm));
+  }
+
+  return termTokens.every((termToken) => {
+    if (!termToken) return false;
+    return tokens.some((token) => token === termToken || (termToken.length >= 4 && editDistanceAtMostOne(token, termToken)));
+  });
+}
+
+function semanticUnsafeIntentForQuestion(
+  question: string,
+  capability: StudentChatCapability,
+  language: ReplyLanguage,
+  route: QuestionRoute
+): StudentQuestionIntent | null {
+  const normalized = normalizeSafetyText(question);
+  if (!normalized || !hasActionIntent(normalized)) {
+    return null;
+  }
+
+  for (const concept of SEMANTIC_SAFETY_CONCEPTS) {
+    if (concept.terms.some((term) => matchesSafetyTerm(normalized, term))) {
+      return {
+        capability,
+        category: concept.category,
+        language,
+        reason: concept.reason,
+        route,
+        type: "unsafe_request"
+      };
+    }
+  }
+
+  return null;
+}
 
 function safeQuestion(
   capability: StudentChatCapability,
@@ -189,5 +344,9 @@ export function classifyStudentQuestionIntent(question: string): StudentQuestion
     return safeQuestion(capability, language, route, scenario, sourceScope);
   }
 
-  return unsafeIntentForQuestion(normalized, capability, language, route) ?? safeQuestion(capability, language, route, scenario, sourceScope);
+  return (
+    unsafeIntentForQuestion(normalized, capability, language, route) ??
+    semanticUnsafeIntentForQuestion(normalized, capability, language, route) ??
+    safeQuestion(capability, language, route, scenario, sourceScope)
+  );
 }

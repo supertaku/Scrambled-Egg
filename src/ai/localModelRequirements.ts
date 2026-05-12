@@ -2,13 +2,13 @@ import { Platform } from "react-native";
 
 import type { LocalModelTier } from "./LocalAIProvider";
 
-export const EXECUTORCH_ANDROID_REQUIREMENTS = {
-  label: "Android ExecuTorch local model",
+export const ANDROID_LOCAL_MODEL_REQUIREMENTS = {
+  label: "Android GGUF local model",
   minimumAndroidApi: 33,
   requiredAbi: "arm64-v8a"
 } as const;
 
-export const EXECUTORCH_ANDROID_MODEL_TIERS = {
+export const ANDROID_LOCAL_MODEL_TIERS = {
   tiny: {
     label: "Tiny local AI",
     minimumRamGB: 4,
@@ -130,36 +130,36 @@ export function getModelTierForParameterCount(parameterCountB: number | null | u
   }
 
   if (
-    parameterCountB >= EXECUTORCH_ANDROID_MODEL_TIERS.flagship.minimumModelParametersB &&
-    parameterCountB <= EXECUTORCH_ANDROID_MODEL_TIERS.flagship.maximumModelParametersB
+    parameterCountB >= ANDROID_LOCAL_MODEL_TIERS.flagship.minimumModelParametersB &&
+    parameterCountB <= ANDROID_LOCAL_MODEL_TIERS.flagship.maximumModelParametersB
   ) {
     return "flagship";
   }
 
   if (
-    parameterCountB >= EXECUTORCH_ANDROID_MODEL_TIERS.enhanced.minimumModelParametersB &&
-    parameterCountB <= EXECUTORCH_ANDROID_MODEL_TIERS.enhanced.maximumModelParametersB
+    parameterCountB >= ANDROID_LOCAL_MODEL_TIERS.enhanced.minimumModelParametersB &&
+    parameterCountB <= ANDROID_LOCAL_MODEL_TIERS.enhanced.maximumModelParametersB
   ) {
     return "enhanced";
   }
 
   if (
-    parameterCountB >= EXECUTORCH_ANDROID_MODEL_TIERS.good.minimumModelParametersB &&
-    parameterCountB <= EXECUTORCH_ANDROID_MODEL_TIERS.good.maximumModelParametersB
+    parameterCountB >= ANDROID_LOCAL_MODEL_TIERS.good.minimumModelParametersB &&
+    parameterCountB <= ANDROID_LOCAL_MODEL_TIERS.good.maximumModelParametersB
   ) {
     return "good";
   }
 
   if (
-    parameterCountB >= EXECUTORCH_ANDROID_MODEL_TIERS.minimum.minimumModelParametersB &&
-    parameterCountB <= EXECUTORCH_ANDROID_MODEL_TIERS.minimum.maximumModelParametersB
+    parameterCountB >= ANDROID_LOCAL_MODEL_TIERS.minimum.minimumModelParametersB &&
+    parameterCountB <= ANDROID_LOCAL_MODEL_TIERS.minimum.maximumModelParametersB
   ) {
     return "minimum";
   }
 
   if (
-    parameterCountB >= EXECUTORCH_ANDROID_MODEL_TIERS.tiny.minimumModelParametersB &&
-    parameterCountB <= EXECUTORCH_ANDROID_MODEL_TIERS.tiny.maximumModelParametersB
+    parameterCountB >= ANDROID_LOCAL_MODEL_TIERS.tiny.minimumModelParametersB &&
+    parameterCountB <= ANDROID_LOCAL_MODEL_TIERS.tiny.maximumModelParametersB
   ) {
     return "tiny";
   }
@@ -167,51 +167,51 @@ export function getModelTierForParameterCount(parameterCountB: number | null | u
   return "unknown";
 }
 
-export function getRecommendedExecuTorchModelTier(input: {
+export function recommendedAndroidLocalModelTier(input: {
   freeStorageGB: number | null;
   memoryGB: number | null;
 }): LocalModelTier {
   if (
     input.memoryGB !== null &&
-    input.memoryGB >= EXECUTORCH_ANDROID_MODEL_TIERS.flagship.minimumRamGB &&
+    input.memoryGB >= ANDROID_LOCAL_MODEL_TIERS.flagship.minimumRamGB &&
     input.freeStorageGB !== null &&
-    input.freeStorageGB >= EXECUTORCH_ANDROID_MODEL_TIERS.flagship.minimumFreeStorageGB
+    input.freeStorageGB >= ANDROID_LOCAL_MODEL_TIERS.flagship.minimumFreeStorageGB
   ) {
     return "flagship";
   }
 
   if (
     input.memoryGB !== null &&
-    input.memoryGB >= EXECUTORCH_ANDROID_MODEL_TIERS.enhanced.minimumRamGB &&
+    input.memoryGB >= ANDROID_LOCAL_MODEL_TIERS.enhanced.minimumRamGB &&
     input.freeStorageGB !== null &&
-    input.freeStorageGB >= EXECUTORCH_ANDROID_MODEL_TIERS.enhanced.minimumFreeStorageGB
+    input.freeStorageGB >= ANDROID_LOCAL_MODEL_TIERS.enhanced.minimumFreeStorageGB
   ) {
     return "enhanced";
   }
 
   if (
     input.memoryGB !== null &&
-    input.memoryGB >= EXECUTORCH_ANDROID_MODEL_TIERS.good.minimumRamGB &&
+    input.memoryGB >= ANDROID_LOCAL_MODEL_TIERS.good.minimumRamGB &&
     input.freeStorageGB !== null &&
-    input.freeStorageGB >= EXECUTORCH_ANDROID_MODEL_TIERS.good.minimumFreeStorageGB
+    input.freeStorageGB >= ANDROID_LOCAL_MODEL_TIERS.good.minimumFreeStorageGB
   ) {
     return "good";
   }
 
   if (
     input.memoryGB !== null &&
-    input.memoryGB >= EXECUTORCH_ANDROID_MODEL_TIERS.minimum.minimumRamGB &&
+    input.memoryGB >= ANDROID_LOCAL_MODEL_TIERS.minimum.minimumRamGB &&
     input.freeStorageGB !== null &&
-    input.freeStorageGB >= EXECUTORCH_ANDROID_MODEL_TIERS.minimum.minimumFreeStorageGB
+    input.freeStorageGB >= ANDROID_LOCAL_MODEL_TIERS.minimum.minimumFreeStorageGB
   ) {
     return "minimum";
   }
 
   if (
     input.memoryGB !== null &&
-    input.memoryGB >= EXECUTORCH_ANDROID_MODEL_TIERS.tiny.minimumRamGB &&
+    input.memoryGB >= ANDROID_LOCAL_MODEL_TIERS.tiny.minimumRamGB &&
     input.freeStorageGB !== null &&
-    input.freeStorageGB >= EXECUTORCH_ANDROID_MODEL_TIERS.tiny.minimumFreeStorageGB
+    input.freeStorageGB >= ANDROID_LOCAL_MODEL_TIERS.tiny.minimumFreeStorageGB
   ) {
     return "tiny";
   }
@@ -221,7 +221,7 @@ export function getRecommendedExecuTorchModelTier(input: {
 
 function getTierRequirements(tier: LocalModelTier) {
   if (ANDROID_MODEL_TIER_ORDER.includes(tier as AndroidLocalModelTier)) {
-    return EXECUTORCH_ANDROID_MODEL_TIERS[tier as AndroidLocalModelTier];
+    return ANDROID_LOCAL_MODEL_TIERS[tier as AndroidLocalModelTier];
   }
 
   return null;
@@ -237,7 +237,7 @@ export function isAndroidLocalModelTier(tier: LocalModelTier): tier is AndroidLo
 
 function summarizeSupportedAndroidTiers(): string {
   return ANDROID_MODEL_TIER_ORDER
-    .map((tier) => EXECUTORCH_ANDROID_MODEL_TIERS[tier].summary)
+    .map((tier) => ANDROID_LOCAL_MODEL_TIERS[tier].summary)
     .join(", ");
 }
 
@@ -257,13 +257,13 @@ function isHigherRecommendedTier(recommendedTier: LocalModelTier, modelTier: Loc
 
 export function getLocalModelRequirementSummary(): string[] {
   return [
-    `Android tiny AI: Android ${EXECUTORCH_ANDROID_REQUIREMENTS.minimumAndroidApi}+ / Android 13+, ${EXECUTORCH_ANDROID_REQUIREMENTS.requiredAbi}, ${EXECUTORCH_ANDROID_MODEL_TIERS.tiny.minimumRamGB}GB RAM, ${EXECUTORCH_ANDROID_MODEL_TIERS.tiny.minimumFreeStorageGB}GB free storage, ${EXECUTORCH_ANDROID_MODEL_TIERS.tiny.summary}.`,
-    `Android adaptive AI: ${EXECUTORCH_ANDROID_MODEL_TIERS.minimum.minimumRamGB}GB+ uses ${EXECUTORCH_ANDROID_MODEL_TIERS.minimum.summary}; ${EXECUTORCH_ANDROID_MODEL_TIERS.good.minimumRamGB}GB+ uses ${EXECUTORCH_ANDROID_MODEL_TIERS.good.summary}; ${EXECUTORCH_ANDROID_MODEL_TIERS.enhanced.minimumRamGB}GB+ uses ${EXECUTORCH_ANDROID_MODEL_TIERS.enhanced.summary}; ${EXECUTORCH_ANDROID_MODEL_TIERS.flagship.minimumRamGB}GB+ can use ${EXECUTORCH_ANDROID_MODEL_TIERS.flagship.summary}.`,
+    `Android tiny AI: Android ${ANDROID_LOCAL_MODEL_REQUIREMENTS.minimumAndroidApi}+ / Android 13+, ${ANDROID_LOCAL_MODEL_REQUIREMENTS.requiredAbi}, ${ANDROID_LOCAL_MODEL_TIERS.tiny.minimumRamGB}GB RAM, ${ANDROID_LOCAL_MODEL_TIERS.tiny.minimumFreeStorageGB}GB free storage, ${ANDROID_LOCAL_MODEL_TIERS.tiny.summary}.`,
+    `Android adaptive AI: ${ANDROID_LOCAL_MODEL_TIERS.minimum.minimumRamGB}GB+ uses ${ANDROID_LOCAL_MODEL_TIERS.minimum.summary}; ${ANDROID_LOCAL_MODEL_TIERS.good.minimumRamGB}GB+ uses ${ANDROID_LOCAL_MODEL_TIERS.good.summary}; ${ANDROID_LOCAL_MODEL_TIERS.enhanced.minimumRamGB}GB+ uses ${ANDROID_LOCAL_MODEL_TIERS.enhanced.summary}; ${ANDROID_LOCAL_MODEL_TIERS.flagship.minimumRamGB}GB+ can use ${ANDROID_LOCAL_MODEL_TIERS.flagship.summary}.`,
     `Apple local model path: ${APPLE_INTELLIGENCE_REQUIREMENTS.supportedDevices}; ${APPLE_INTELLIGENCE_REQUIREMENTS.minimumOS}; ${APPLE_INTELLIGENCE_REQUIREMENTS.minimumFreeStorageGB}GB free storage for Apple Intelligence assets.`
   ];
 }
 
-export function validateExecuTorchRuntime(input: {
+export function validateAndroidLocalModelRuntime(input: {
   architecture?: string | string[] | null;
   freeStorageGB?: number | string | null;
   memoryGB?: number | string | null;
@@ -281,36 +281,36 @@ export function validateExecuTorchRuntime(input: {
   const unavailableReasons = [...(input.nativeUnavailableReasons ?? [])];
   const notes: string[] = [];
   const modelTier = getModelTierForParameterCount(input.modelParameterCountB);
-  const recommendedModelTier = getRecommendedExecuTorchModelTier({ freeStorageGB, memoryGB });
+  const recommendedModelTier = recommendedAndroidLocalModelTier({ freeStorageGB, memoryGB });
   const selectedTierRequirements = getTierRequirements(modelTier);
 
   if (Platform.OS === "android") {
     if (!hasArm64Abi(input.architecture)) {
       unavailableReasons.push(
-        `ExecuTorch requires ${EXECUTORCH_ANDROID_REQUIREMENTS.requiredAbi}; native module did not report a supported arm64 ABI.`
+        `Android local AI requires ${ANDROID_LOCAL_MODEL_REQUIREMENTS.requiredAbi}; native module did not report a supported arm64 ABI.`
       );
     }
 
-    if (memoryGB === null || memoryGB < EXECUTORCH_ANDROID_MODEL_TIERS.tiny.minimumRamGB) {
+    if (memoryGB === null || memoryGB < ANDROID_LOCAL_MODEL_TIERS.tiny.minimumRamGB) {
       unavailableReasons.push(
-        `ExecuTorch requires at least ${EXECUTORCH_ANDROID_MODEL_TIERS.tiny.minimumRamGB}GB RAM for Haki tiny local AI.`
+        `Android local AI requires at least ${ANDROID_LOCAL_MODEL_TIERS.tiny.minimumRamGB}GB RAM for Haki tiny local AI.`
       );
     }
 
-    if (freeStorageGB === null || freeStorageGB < EXECUTORCH_ANDROID_MODEL_TIERS.tiny.minimumFreeStorageGB) {
+    if (freeStorageGB === null || freeStorageGB < ANDROID_LOCAL_MODEL_TIERS.tiny.minimumFreeStorageGB) {
       unavailableReasons.push(
-        `ExecuTorch requires at least ${EXECUTORCH_ANDROID_MODEL_TIERS.tiny.minimumFreeStorageGB}GB free storage for bundled model assets.`
+        `Android local AI requires at least ${ANDROID_LOCAL_MODEL_TIERS.tiny.minimumFreeStorageGB}GB free storage for bundled model assets.`
       );
     }
   }
 
   if (!input.modelAssetsAvailable) {
-    unavailableReasons.push("ExecuTorch model assets are not available on this device.");
+    unavailableReasons.push("Android local model assets are not available on this device.");
   }
 
   if (!selectedTierRequirements) {
     unavailableReasons.push(
-      `ExecuTorch model must match a supported quantized tier: ${summarizeSupportedAndroidTiers()}.`
+      `Android local model must match a supported quantized tier: ${summarizeSupportedAndroidTiers()}.`
     );
   } else if (Platform.OS === "android") {
     if (memoryGB === null || memoryGB < selectedTierRequirements.minimumRamGB) {
@@ -327,7 +327,7 @@ export function validateExecuTorchRuntime(input: {
   }
 
   if (!isQuantizedModel(input.modelQuantization)) {
-    unavailableReasons.push("ExecuTorch model must report an int4/q4 or int8/q8 quantized build.");
+    unavailableReasons.push("Android local model must report an int4/q4 or int8/q8 quantized build.");
   }
 
   if (isHigherRecommendedTier(recommendedModelTier, modelTier)) {

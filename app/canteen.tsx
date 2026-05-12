@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useRouter } from "expo-router";
 import { ChevronRight, MapPin, Search, Store, X } from "lucide-react-native";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { canteenStores } from "@/data/canteenStores";
+import { useDebouncedQuery } from "@/hooks/useDebouncedQuery";
 import { colors } from "@/theme/colors";
 
 export default function CanteenScreen() {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const { clearQuery, debouncedQuery, query, setQuery } = useDebouncedQuery();
   const filteredStores = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = debouncedQuery.trim().toLowerCase();
     if (!normalized) return canteenStores;
 
     return canteenStores.filter((store) =>
@@ -22,7 +23,7 @@ export default function CanteenScreen() {
         ...store.foods.map((food) => `${food.name} ${food.description}`)
       ].some((value) => value.toLowerCase().includes(normalized))
     );
-  }, [query]);
+  }, [debouncedQuery]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -67,7 +68,7 @@ export default function CanteenScreen() {
                   style={styles.searchInput}
                 />
                 {query ? (
-                  <Pressable accessibilityLabel="Clear search" onPress={() => setQuery("")} style={styles.clearButton}>
+                  <Pressable accessibilityLabel="Clear search" onPress={clearQuery} style={styles.clearButton}>
                     <X color={colors.muted} size={18} />
                   </Pressable>
                 ) : null}

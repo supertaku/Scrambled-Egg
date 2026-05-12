@@ -2,7 +2,7 @@
 
 This guide explains how to rebuild Haki from an empty folder into the current offline-first Expo React Native app. It is written for an engineer who needs to understand both the React Native app and the mobile AI runtime decisions behind it.
 
-Haki is a client-only student assistant. It does not depend on a backend, cloud database, hosted search API, or online LLM API. The app starts with a local document corpus, indexes it with SQLite FTS5, and then optionally upgrades answers with on-device AI providers such as llama.rn, ExecuTorch, or an Apple Foundation Models bridge.
+Haki is a client-only student assistant. It does not depend on a backend, cloud database, hosted search API, or online LLM API. The app starts with a local document corpus, indexes it with SQLite FTS5, and then optionally upgrades answers with on-device AI via **llama.rn (GGUF)** or an **Apple Foundation Models** bridge when present in a custom dev build.
 
 The important design rule is simple: source search must always work, and local AI is an enhancement. If the model, bridge, assets, storage, RAM, or runtime fails, Haki falls back to deterministic SQLite source search.
 
@@ -115,8 +115,6 @@ scripts/
   golden-retrieval.ts
   chat-scenario-eval.ts
   test-edge-cases.ts
-  download-executorch-aar.ps1
-  download-qwen3-executorch-model.ps1
   inspect-apk-assets.ps1
 ```
 
@@ -147,7 +145,7 @@ The purpose of each major area:
 - iOS bundle identifier is `com.tupt.haki`.
 - Android requests `android.permission.RECORD_AUDIO`.
 
-Expo Go can run the baseline JavaScript and FTS5 experience, but it cannot load custom native AI bridges or voice modules that require native code. The moment you need `llama.rn`, ExecuTorch, Apple Foundation Models, or native voice, you need a custom native build:
+Expo Go can run the baseline JavaScript and FTS5 experience, but it cannot load custom native AI bridges or voice modules that require native code. The moment you need `llama.rn`, Apple Foundation Models, or native voice, you need a custom native build:
 
 ```bash
 npx expo prebuild
@@ -169,10 +167,11 @@ The chat screen is `app/chat.tsx`. It does four jobs:
 `useChatMessages` is the chat state owner:
 
 - Starts with a greeting.
+- Loads committed chat history from AsyncStorage and persists the latest committed messages.
 - Rejects too-short messages.
 - Builds short conversation context from the last few turns.
 - Calls `answerStudentQuestion`.
-- Supports token streaming through `onToken`.
+- Supports token streaming through `onToken` with a separate streaming draft message.
 - Replaces streamed draft text with the final response payload.
 - Saves recent questions in local history.
 - Marks failed messages and supports retry.
@@ -340,12 +339,9 @@ Medium confidence responses include a verification note asking the student to ve
 
 ### Vector And Hybrid Retrieval
 
-`VectorRetriever` is currently a placeholder. It calls `provider.embedText(query)` so provider failures are visible, but it does not yet rank stored vectors. The planned implementation is:
+`VectorRetriever` is the first functional semantic retrieval path. It calls `provider.embedText(query)`, loads compatible rows from `chunk_embeddings`, ranks them in memory by cosine similarity, and hydrates `SearchResult` rows. This is sufficient for the current bundled campus corpus, but it is not the long-term scaling implementation for large indexes.
 
-1. Generate query embedding with the local provider.
-2. Load compatible `chunk_embeddings`.
-3. Rank by cosine similarity or sqlite-vec.
-4. Hydrate `SearchResult` rows.
+The next production hardening step is to add an embedding generation job for chunks that still have `embedding_status = 'not_generated'`, then replace in-memory ranking with `sqlite-vec` or another native ANN path once the corpus grows beyond a few thousand chunks.
 
 `HybridRetriever` combines multiple result sets with Reciprocal Rank Fusion. Today it can combine static FTS and vector result sets. In a full local AI build, FTS and vector search should be fused instead of letting vector search replace FTS.
 
@@ -372,14 +368,12 @@ The current provider registry creates:
 - `FallbackProvider`
 - `AppleFoundationModelsProvider`
 - `LlamaRnProvider`
-- `ExecuTorchProvider`
 
 Provider IDs are:
 
 - `fallback`
 - `apple-foundation-models`
 - `llama-rn`
-- `executorch`
 
 The provider contract separates capability detection from generation. A provider should not be selected just because a JavaScript module exists. It must report that the bridge, model assets, runtime, device requirements, and method support are all usable.
 
@@ -389,14 +383,14 @@ The provider contract separates capability detection from generation. A provider
 
 1. Verifies SQLite and FTS5 baseline.
 2. Creates a provider registry.
-3. Probes Apple, llama.rn, and ExecuTorch.
+3. Probes Apple Foundation Models and llama.rn.
 4. Selects the safest mode.
 5. Caches the result for the session.
 
 The mode selection policy prefers richer local AI when it is genuinely usable:
 
-- On iOS: Apple Foundation Models first, then llama.rn, then ExecuTorch.
-- On Android: llama.rn first, then ExecuTorch.
+- On iOS: Apple Foundation Models first, then llama.rn.
+- On Android: llama.rn first.
 - On all platforms: FTS5 fallback if no provider qualifies.
 
 The selected mode records:
@@ -428,7 +422,6 @@ Answer provenance is separate from mode. A response can say:
 - `Retrieved directly from source`
 - `Retrieved with semantic search`
 - `Retrieved with hybrid search`
-- `Locally summarized with ExecuTorch`
 - `Locally summarized with llama.rn`
 - `Locally summarized with Apple Intelligence`
 - `Answered with local safe chat`
@@ -442,7 +435,7 @@ This distinction is useful in the UI because the student can see not only what m
 
 Haki treats local AI as tiered because mobile hardware varies widely.
 
-The Android ExecuTorch requirements are:
+The Android local GGUF requirements are:
 
 - Android 13 or API 33+
 - `arm64-v8a`
@@ -471,140 +464,6 @@ The validation code checks:
 
 The native provider can load a smaller model on a large phone, but it should report both `modelTier` and `recommendedModelTier`. The app passes `preferredModelTier` into summary and safe-chat calls so the native side can choose the best matching asset.
 
-## 13. ExecuTorch Concepts
-
-ExecuTorch is the experimental Android `.pte` model path. The idea is:
-
-- Convert or obtain a mobile-ready model in ExecuTorch format.
-- Bundle the `.pte` model and tokenizer/config files under Android assets.
-- Add the ExecuTorch AAR to `android/app/libs/executorch.aar`.
-- Implement a React Native native module named `HakiExecuTorch`.
-- Expose capabilities and inference methods to TypeScript.
-
-The TypeScript provider expects the native module from `NativeModules.HakiExecuTorch`.
-
-The bridge shape is:
-
-```ts
-interface HakiLocalAIModule {
-  isAvailable?: () => Promise<boolean> | boolean;
-  getCapabilities?: () => Promise<Partial<LocalAICapabilities>>;
-  summarizeFromSources?: (input: SummarizeFromSourcesInput) => Promise<Partial<LocalSummaryResult> | string>;
-  answerSafeChat?: (input: SafeChatInput) => Promise<Partial<SafeChatResult> | string>;
-  streamSafeChat?: (input: SafeChatInput, streamIdOrCallback: string | ((token: string) => void)) => Promise<Partial<SafeChatResult> | string>;
-  embedText?: (text: string) => Promise<number[]>;
-  release?: () => Promise<void> | void;
-}
-```
-
-The minimum capability report for a real ExecuTorch build should look like this:
-
-```ts
-{
-  summary: true,
-  safeChat: true,
-  embeddings: true,
-  architecture: "arm64-v8a",
-  memoryGB: 4,
-  freeStorageGB: 3,
-  modelAssetsAvailable: true,
-  modelName: "haki-chat-0.6b-int4",
-  modelParameterCountB: 0.6,
-  modelQuantization: "int4",
-  modelTier: "tiny",
-  recommendedModelTier: "tiny",
-  approximateDeviceCapability: "high",
-  memoryClass: "4GB",
-  modelAssetPath: "android_asset/models/model.pte",
-  modelLoadTimeMs: 1200,
-  lastInferenceTimeMs: 0,
-  streamingSupported: true
-}
-```
-
-The current Android Gradle file contains a feature switch:
-
-```gradle
-def hakiEnableExecuTorchNative = (findProperty('haki.enableExecuTorchNative') ?: 'false').toBoolean()
-```
-
-When enabled, it includes:
-
-```gradle
-implementation(files("libs/executorch.aar"))
-```
-
-BuildConfig also receives:
-
-```gradle
-buildConfigField "boolean", "HAKI_EXECUTORCH_NATIVE_ENABLED", hakiEnableExecuTorchNative.toString()
-```
-
-From scratch, implement the Kotlin module before enabling the native path. The generated Android project currently has `HakiExecuTorchPackage` registered in `MainApplication`, so the package expects a `HakiExecuTorchModule` class to exist. In a complete build, that module owns model loading, tokenizer setup, generation, embedding calls, telemetry, and cleanup.
-
-## 14. Android Native Bridge
-
-The Android bridge has three moving parts:
-
-1. Native module class: `HakiExecuTorchModule`.
-2. React package: `HakiExecuTorchPackage`.
-3. Manual registration in `MainApplication`.
-
-The package registers the module:
-
-```kotlin
-class HakiExecuTorchPackage : ReactPackage {
-  override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-    return listOf(HakiExecuTorchModule(reactContext))
-  }
-
-  override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
-    return emptyList()
-  }
-}
-```
-
-`MainApplication` adds the package to React Native:
-
-```kotlin
-PackageList(this).packages.apply {
-  add(HakiExecuTorchPackage())
-}
-```
-
-The native module should expose `getName()` as `HakiExecuTorch`, because TypeScript calls `NativeModules.HakiExecuTorch`.
-
-Recommended Kotlin method set:
-
-- `isAvailable(promise)`
-- `getCapabilities(promise)`
-- `summarizeFromSources(input, promise)`
-- `answerSafeChat(input, promise)`
-- `streamSafeChat(input, streamId, promise)`
-- `embedText(text, promise)`
-- `release(promise)`
-
-For streaming, the TypeScript provider listens for `DeviceEventEmitter` events named `HakiExecuTorchToken`. The native side should emit:
-
-```json
-{
-  "streamId": "executorch-...",
-  "token": "partial text"
-}
-```
-
-The provider currently keeps ExecuTorch streaming disabled with a constant until the native runtime is hardened. It can still use `answerSafeChat`.
-
-Native implementation rules:
-
-- Load models lazily, not during app startup.
-- Keep one model context per model tier or release previous contexts before loading another.
-- Never report `safeChat: true` until a real generation call can complete.
-- Never report `summary: true` until source-grounded summarization can complete.
-- Never report `modelAssetsAvailable: true` until files are opened successfully.
-- Catch native exceptions and reject promises with clear error codes.
-- Use `release` to free model memory when the provider is disabled or capabilities refresh.
-
 ## 15. llama.rn GGUF Provider
 
 `LlamaRnProvider` is the local GGUF path. It is useful when you want an Off Grid-style local model without writing your own model runtime bridge.
@@ -631,15 +490,26 @@ Embeddings activate separately when an embedding GGUF manifest exists. The Andro
 The admin Settings screen owns the model import flow:
 
 ```text
-Pick .gguf
-  -> copy into app-private models/
+Bundled tiny GGUF, picked .gguf, or downloaded .gguf
+  -> copy into app-private models/ as a temp file
   -> load metadata with llama.rn.loadLlamaModelInfo
   -> derive model params, quantization, and tier
   -> read Android hardware profile
   -> reject unsafe model/device combinations
+  -> replace the active model only after validation succeeds
   -> write chat-model-manifest.json
   -> refresh capability detection
 ```
+
+The production Android path bundles a tiny GGUF at:
+
+```text
+android/app/src/main/assets/models/haki-tiny.gguf
+```
+
+On first capability detection, the Android `HakiDeviceInfo` native module streams that asset into app-private storage, then `localModelManager` validates and activates it through the same manifest path used by imported/downloaded models. Larger models remain downloadable from Settings and replace the active chat model only after validation succeeds. Startup cleanup removes stale `*.partial.gguf` files left by canceled or interrupted downloads before capability detection runs.
+
+Large GGUF files must not be hashed through Expo FileSystem's synchronous `md5` property. That property reads the full file into memory and can crash with `OutOfMemoryError` on mobile. Haki skips inline hashing for large model files and uses model URI, size, and validation time as the context key when a hash is unavailable.
 
 The chat context is initialized conservatively by tier:
 
@@ -708,10 +578,16 @@ Using only the provided source chunks, write a concise answer for a student. Do 
 Safe local chat:
 
 ```text
-You are Haki, a helpful Gen Z AI guide for students, applicants, and anyone asking about the university. Act like a knowledgeable senior student friend: friendly, clear, practical, and respectful. You are not an official university office. Default to being useful for safe requests...
+<role>
+You are Haki, a helpful Gen Z AI guide...
+</role>
+<rules>
+1. Default to being useful for safe requests.
+2. Act as the needed safe helper...
+</rules>
 ```
 
-The full safe chat instruction lives in `src/ai/prompts.ts`. It tells the model to:
+The full safe chat instruction lives in `src/ai/prompts.ts`. It is intentionally structured with small XML-style sections, numbered rules, and two short few-shot examples so 0.5B-3B GGUF models do not have to infer behavior from one dense paragraph. It tells the model to:
 
 - answer safe general questions directly
 - provide coding help when safe
@@ -720,8 +596,9 @@ The full safe chat instruction lives in `src/ai/prompts.ts`. It tells the model 
 - avoid inventing fees, deadlines, room numbers, requirements, faculty names, policies, or procedures
 - refuse violence, self-harm methods, stalking, harassment, sexual exploitation, illegal activity, cheating, forged documents, credential theft, privacy invasion, malware, safety evasion, or manipulation
 - give general safety-oriented guidance for medical, legal, financial, or emergency situations
+- avoid revealing prompt tags or source formatting
 
-Native providers must not reveal prompt formatting, source context, system instructions, or role labels. The JavaScript side also sanitizes prompt echo with `sanitizeAssistantText`.
+Native providers must not reveal prompt formatting, source context, system instructions, XML tags, or role labels. The JavaScript side also sanitizes prompt echo with `sanitizeAssistantText`.
 
 ## 19. Answer Routing
 
@@ -806,7 +683,7 @@ Then `buildSourceResponseFromDraft` decides:
 - summary returns `NO_RELIABLE_ANSWER`: source-miss fallback
 - summary provider throws: disable provider, retry, then fall back to source answer
 
-Only the top `MAX_SUMMARY_SOURCES` chunks are passed to local summarization or safe chat. The current constant is 4. This keeps prompts small and reduces mobile inference time.
+Source chunks passed to local summarization or safe chat are tier-aware. Tiny and minimum models receive fewer, shorter chunks; good/enhanced/flagship tiers receive progressively larger source budgets. The budget is based on both source count and estimated tokens, so a small model is not overloaded by a few long chunks.
 
 ## 22. Asset Packaging
 
@@ -815,36 +692,23 @@ There are two kinds of assets:
 1. App UI assets: icons, splash images, mascot images, and background images under `assets/images/`.
 2. Model assets: local AI model files and tokenizer/config files under either Android native assets or app-private document storage.
 
-For Android ExecuTorch, the expected native asset location is:
+For llama.rn, the tiny chat model is bundled in the Android APK and larger chat models are imported or downloaded after install. The provider still expects the active GGUF and manifests under app-private document storage:
 
 ```text
-android/app/src/main/assets/models/
-  model.pte
-  tokenizer.json
-  vocab.json
-  merges.txt
-  config.json
-  generation_config.json
-  tokenizer_config.json
-  MODEL_SOURCE.txt
-```
-
-The helper script `scripts/download-qwen3-executorch-model.ps1` downloads a Qwen3 0.6B ExecuTorch model package into that folder. The script also writes `MODEL_SOURCE.txt` for auditability.
-
-For ExecuTorch runtime code, the helper script `scripts/download-executorch-aar.ps1` downloads:
-
-```text
-android/app/libs/executorch.aar
-```
-
-For llama.rn, model files are imported after install instead of bundled into the APK. The provider expects GGUF files and manifests under app-private document storage:
-
-```text
+android/app/src/main/assets/models/haki-tiny.gguf
 <app document directory>/models/haki-chat.gguf
 <app document directory>/models/chat-model-manifest.json
 <app document directory>/models/haki-embed.gguf
 <app document directory>/models/embedding-model-manifest.json
 ```
+
+The bundled model is prepared with:
+
+```powershell
+npm run model:download:tiny-gguf
+```
+
+EAS production APK builds run `scripts/eas-build-pre-install.sh`, which downloads the same tiny GGUF into the Android assets folder on the build worker. Manual local Gradle builds must run the download script first.
 
 Do not commit licensed model files until you confirm:
 
@@ -860,6 +724,7 @@ For a stable Android release APK:
 
 ```bash
 npm install
+npm run model:download:tiny-gguf
 npm run typecheck
 npm run test:local-models
 npm run test:golden
@@ -874,7 +739,7 @@ The generated APK path is usually:
 android/app/build/outputs/apk/release/app-release.apk
 ```
 
-The stable APK keeps `BuildConfig.HAKI_EXECUTORCH_NATIVE_ENABLED=false`, includes `llama.rn` native libraries, and excludes disabled ExecuTorch `.pte` assets. GGUF models are imported through Settings after install so each Android phone can use the strongest compatible local model without rebuilding the APK.
+The stable APK includes `llama.rn` native libraries, includes `assets/models/haki-tiny.gguf`, and excludes legacy `.pte` assets. Larger GGUF models remain downloadable through Settings so each Android phone can use the strongest compatible model without rebuilding the APK.
 
 This repo also has `eas.json` with a `production-apk` profile:
 
@@ -882,30 +747,7 @@ This repo also has `eas.json` with a `production-apk` profile:
 npx eas build -p android --profile production-apk
 ```
 
-For an ExecuTorch APK:
-
-1. Download or provide `android/app/libs/executorch.aar`.
-2. Put model assets under `android/app/src/main/assets/models/`.
-3. Implement `HakiExecuTorchModule`.
-4. Enable the Gradle flag:
-
-```bash
-cd android
-.\gradlew.bat assembleRelease -Phaki.enableExecuTorchNative=true
-```
-
-5. Inspect the APK assets:
-
-```bash
-powershell -ExecutionPolicy Bypass -File scripts/inspect-apk-assets.ps1 -ApkPath android/app/build/outputs/apk/release/app-release.apk -AllowExecuTorchNative
-```
-
-For ExecuTorch builds, the inspect script verifies that the APK contains at least:
-
-- `assets/models/model.pte`
-- `assets/models/tokenizer.json`
-
-For stable llama.rn builds, run the same script without `-AllowExecuTorchNative`. It verifies that `librnllama` is packaged and disabled ExecuTorch assets/native libraries are absent.
+Run the APK inspection script after local release builds. It verifies that `librnllama` and `assets/models/haki-tiny.gguf` are packaged and legacy `.pte` assets/native libraries are absent.
 
 For production signing, replace the debug signing config with a real release keystore. The current generated `release` build type signs with the debug keystore, which is acceptable for internal experiments but not final production distribution.
 
@@ -914,7 +756,7 @@ For production signing, replace the debug signing config with a real release key
 Local AI native crashes are usually caused by one of these:
 
 - ABI mismatch
-- missing AAR or native `.so`
+- missing native `.so`
 - model asset missing from APK
 - tokenizer/config missing or incompatible
 - loading too large a model for RAM
@@ -962,7 +804,7 @@ Run:
 powershell -ExecutionPolicy Bypass -File scripts/inspect-apk-assets.ps1 -ApkPath path/to/app-release.apk
 ```
 
-If `model.pte` or tokenizer files are missing, the native module cannot load the model regardless of TypeScript capability logic.
+For stable llama.rn builds, `assets/models/haki-tiny.gguf` must be present in the APK and legacy `.pte` files must be absent.
 
 ### 4. Use Logcat
 
@@ -975,7 +817,7 @@ adb logcat
 Filter by package or likely tags:
 
 ```bash
-adb logcat | findstr /i "haki executorch reactnative AndroidRuntime libc fatal exception"
+adb logcat | findstr /i "haki llama reactnative AndroidRuntime libc fatal exception"
 ```
 
 Look for:
@@ -1186,19 +1028,7 @@ Success criteria: FTS5 mode is selected on devices without native AI.
 
 Success criteria: local safe chat works on a device with a small GGUF model, and source questions still prefer saved chunks.
 
-### Step 8: Add ExecuTorch
-
-- Download or build `executorch.aar`.
-- Bundle `.pte` and tokenizer/config assets.
-- Implement `HakiExecuTorchModule`.
-- Register `HakiExecuTorchPackage`.
-- Add capability reporting.
-- Enable `-Phaki.enableExecuTorchNative=true`.
-- Test loading, smoke generation, summary, safe chat, and release builds.
-
-Success criteria: Android local AI is selected only when the runtime, model assets, device tier, and methods pass validation.
-
-### Step 9: Add Apple Foundation Models
+### Step 8: Add Apple Foundation Models
 
 - Build `modules/haki-apple-foundation-models`.
 - Expose `HakiAppleFoundationModels`.
@@ -1208,7 +1038,7 @@ Success criteria: Android local AI is selected only when the runtime, model asse
 
 Success criteria: capable iOS devices can summarize or chat locally; unsupported devices still run FTS5.
 
-### Step 10: Package And Release
+### Step 9: Package And Release
 
 - Replace demo content with official documents.
 - Audit model licenses.

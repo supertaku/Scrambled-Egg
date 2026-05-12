@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as ImagePicker from "expo-image-picker";
 import { 
   ActivityIndicator,
   Animated, 
+  Image,
   KeyboardAvoidingView, 
   Platform, 
   Pressable, 
@@ -13,11 +15,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Save, User as UserIcon, BookOpen, GraduationCap, Calendar } from "lucide-react-native";
+import { ArrowLeft, Save, User as UserIcon, BookOpen, GraduationCap, Calendar, ImagePlus } from "lucide-react-native";
 
-import { getStudentProfile, saveStudentProfile } from "@/services/studentProfileService";
+import { getStudentProfile, importStudentAvatar, saveStudentProfile } from "@/services/studentProfileService";
 import { colors } from "@/theme/colors";
-import { ModelDownloader } from "@/components/ai/ModelDownloader";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function ProfileScreen() {
   const [studentId, setStudentId] = useState("");
   const [course, setCourse] = useState("");
   const [year, setYear] = useState("");
+  const [avatarUri, setAvatarUri] = useState("");
   const [profileLoading, setProfileLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -62,6 +64,7 @@ export default function ProfileScreen() {
         setStudentId(profile.studentId);
         setCourse(profile.course);
         setYear(profile.year);
+        setAvatarUri(profile.avatarUri ?? "");
       })
       .catch(() => {
         if (mounted) {
@@ -84,14 +87,48 @@ export default function ProfileScreen() {
     setProfileError(null);
 
     try {
-      await saveStudentProfile({ name, studentId, course, year });
+      await saveStudentProfile({ avatarUri, name, studentId, course, year });
       router.back();
     } catch {
       setProfileError("Could not save your profile. Please try again.");
     } finally {
       setSavingProfile(false);
     }
-  }, [course, name, router, studentId, year]);
+  }, [avatarUri, course, name, router, studentId, year]);
+
+  const handlePickAvatar = useCallback(async () => {
+    setProfileError(null);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setProfileError("Allow photo access to upload your avatar.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      mediaTypes: ["images"],
+      quality: 0.82
+    });
+
+    if (result.canceled || result.assets.length === 0) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    if (!asset?.uri) {
+      setProfileError("Could not read the selected image.");
+      return;
+    }
+
+    try {
+      const nextAvatarUri = await importStudentAvatar(asset.uri, avatarUri);
+      setAvatarUri(nextAvatarUri);
+      await saveStudentProfile({ avatarUri: nextAvatarUri, name, studentId, course, year });
+    } catch {
+      setProfileError("Could not save the selected avatar.");
+    }
+  }, [avatarUri, course, name, studentId, year]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
@@ -114,9 +151,21 @@ export default function ProfileScreen() {
               contentContainerStyle={styles.scrollContent}
             >
               <View style={styles.avatarContainer}>
-                <View style={styles.avatarCircle}>
-                  <UserIcon color={colors.maroon} size={48} />
-                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={profileLoading || savingProfile}
+                  onPress={handlePickAvatar}
+                  style={styles.avatarCircle}
+                >
+                  {avatarUri ? (
+                    <Image resizeMode="cover" source={{ uri: avatarUri }} style={styles.avatarImage} />
+                  ) : (
+                    <UserIcon color={colors.maroon} size={48} />
+                  )}
+                  <View style={styles.avatarEditBadge}>
+                    <ImagePlus color={colors.maroonDark} size={16} />
+                  </View>
+                </Pressable>
                 <Text style={styles.avatarLabel}>
                   {profileLoading ? "Loading profile..." : `Student ID: ${studentId || "Not set"}`}
                 </Text>
@@ -185,8 +234,6 @@ export default function ProfileScreen() {
               </View>
 
               {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
-
-              <ModelDownloader />
 
               <Pressable
                 accessibilityRole="button"
@@ -270,6 +317,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     marginBottom: 12
+  },
+  avatarImage: {
+    height: "100%",
+    width: "100%"
+  },
+  avatarEditBadge: {
+    alignItems: "center",
+    backgroundColor: colors.gold,
+    borderColor: colors.white,
+    borderRadius: 16,
+    borderWidth: 2,
+    bottom: 0,
+    height: 32,
+    justifyContent: "center",
+    position: "absolute",
+    right: 0,
+    width: 32
   },
   avatarLabel: {
     color: colors.muted,

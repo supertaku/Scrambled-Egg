@@ -126,7 +126,7 @@ export default function OrganizationScreen() {
             <View style={styles.introCopy}>
               <Text style={styles.introTitle}>University organization</Text>
               <Text style={styles.introText}>
-                Browse offices and academic groups. Current entries are mock placeholders for the offline MVP.
+                Browse common offices and academic groups used for routing campus concerns.
               </Text>
             </View>
           </View>
@@ -170,7 +170,7 @@ export default function OrganizationScreen() {
           <View style={styles.noteCard}>
             <Text style={styles.noteTitle}>Data note</Text>
             <Text style={styles.noteText}>
-              This org chart is prepared for replacement. Later, each group can be loaded from official campus files.
+              Office routing should still be verified with official campus announcements or the responsible office.
             </Text>
           </View>
         </View>

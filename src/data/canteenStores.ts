@@ -16,8 +16,8 @@ export interface CanteenStore {
 export const canteenStores: CanteenStore[] = [
   {
     id: "ate-joy",
-    name: "Ate Joy's Eatery",
-    description: "Home-cooked rice meals, silog plates, and warm student favorites for a quick lunch.",
+    name: "Rice Meal Stall",
+    description: "Campus food note for common rice meals and quick lunch options.",
     location: "Main canteen area",
     foods: [
       { id: "s1", name: "Sisig Silog", price: 75, description: "Crispy pork sisig with egg and fried rice." },
@@ -27,8 +27,8 @@ export const canteenStores: CanteenStore[] = [
   },
   {
     id: "tup-coop",
-    name: "TUP Cooperative",
-    description: "Fast snacks, drinks, and basic supplies for students between classes.",
+    name: "Cooperative Counter",
+    description: "Campus food note for fast snacks, drinks, and basic student supplies.",
     location: "Cooperative counter",
     foods: [
       { id: "c1", name: "Pancit Canton", price: 20, description: "Instant noodles in Sweet & Spicy or Chilimansi." },
@@ -38,8 +38,8 @@ export const canteenStores: CanteenStore[] = [
   },
   {
     id: "siomai-house",
-    name: "Siomai House",
-    description: "Steamed dimsum, budget rice meals, and cold drinks for short breaks.",
+    name: "Dimsum Stall",
+    description: "Campus food note for budget rice meals and short-break snacks.",
     location: "Canteen stall row",
     foods: [
       { id: "sh1", name: "Siomai Rice", price: 55, description: "4 pcs pork siomai with chili garlic, served with rice." },
@@ -49,8 +49,8 @@ export const canteenStores: CanteenStore[] = [
   },
   {
     id: "brew-corner",
-    name: "Brew Corner",
-    description: "Coffee, coolers, and light snacks for long vacant periods and study sessions.",
+    name: "Drink and Snack Stall",
+    description: "Campus food note for drinks and light snacks during vacant periods.",
     location: "Near study tables",
     foods: [
       { id: "b1", name: "Iced Coffee", price: 45, description: "Cold coffee with milk and light sweetness." },

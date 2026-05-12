@@ -48,6 +48,17 @@ CREATE TABLE IF NOT EXISTS chunk_embeddings (
   FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS conversation_memory (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  scenario TEXT,
+  route TEXT,
+  source_scope_json TEXT,
+  keywords TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
   section_title,
   process_name,
@@ -59,6 +70,16 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
   tags,
   synonyms,
   content='chunks',
+  content_rowid='id',
+  tokenize='unicode61 remove_diacritics 2'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS conversation_memory_fts USING fts5(
+  question,
+  answer,
+  scenario,
+  keywords,
+  content='conversation_memory',
   content_rowid='id',
   tokenize='unicode61 remove_diacritics 2'
 );
@@ -81,6 +102,23 @@ CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
   VALUES (new.id, new.section_title, new.process_name, new.content, new.answer, new.citation, new.category, new.office, new.tags, new.synonyms);
 END;
 
+CREATE TRIGGER IF NOT EXISTS conversation_memory_ai AFTER INSERT ON conversation_memory BEGIN
+  INSERT INTO conversation_memory_fts(rowid, question, answer, scenario, keywords)
+  VALUES (new.id, new.question, new.answer, new.scenario, new.keywords);
+END;
+
+CREATE TRIGGER IF NOT EXISTS conversation_memory_ad AFTER DELETE ON conversation_memory BEGIN
+  INSERT INTO conversation_memory_fts(conversation_memory_fts, rowid, question, answer, scenario, keywords)
+  VALUES ('delete', old.id, old.question, old.answer, old.scenario, old.keywords);
+END;
+
+CREATE TRIGGER IF NOT EXISTS conversation_memory_au AFTER UPDATE ON conversation_memory BEGIN
+  INSERT INTO conversation_memory_fts(conversation_memory_fts, rowid, question, answer, scenario, keywords)
+  VALUES ('delete', old.id, old.question, old.answer, old.scenario, old.keywords);
+  INSERT INTO conversation_memory_fts(rowid, question, answer, scenario, keywords)
+  VALUES (new.id, new.question, new.answer, new.scenario, new.keywords);
+END;
+
 CREATE TABLE IF NOT EXISTS app_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
@@ -91,4 +129,5 @@ CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_office ON chunks(office);
 CREATE INDEX IF NOT EXISTS idx_chunks_category ON chunks(category);
 CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model_name ON chunk_embeddings(model_name);
+CREATE INDEX IF NOT EXISTS idx_conversation_memory_created_at ON conversation_memory(created_at);
 `;

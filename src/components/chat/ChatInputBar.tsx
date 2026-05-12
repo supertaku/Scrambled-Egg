@@ -1,17 +1,18 @@
-import { RefreshCw, SendHorizontal, Mic } from "lucide-react-native";
+import { Mic, RefreshCw, SendHorizontal, Square } from "lucide-react-native";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { colors } from "@/theme/colors";
 
 interface VoiceState {
   message: string | null;
-  status: "idle" | "listening" | "processing" | "error" | "unsupported";
+  status: "idle" | "listening" | "processing" | "error" | "unsupported" | "sending_countdown";
 }
 
 interface ChatInputBarProps {
   draft: string;
   onDraftChange: (text: string) => void;
   onSend: () => void;
+  onStopResponse: () => void;
   canSend: boolean;
   loading: boolean;
   initializing: boolean;
@@ -22,12 +23,14 @@ interface ChatInputBarProps {
   isListening: boolean;
   speechSupport: { supported: boolean };
   onVoicePress: () => void;
+  onCancelVoice: () => void;
 }
 
 export function ChatInputBar({
   draft,
   onDraftChange,
   onSend,
+  onStopResponse,
   canSend,
   loading,
   initializing,
@@ -37,7 +40,8 @@ export function ChatInputBar({
   voiceState,
   isListening,
   speechSupport,
-  onVoicePress
+  onVoicePress,
+  onCancelVoice
 }: ChatInputBarProps) {
   return (
     <View style={styles.inputBarWrapper}>
@@ -68,16 +72,23 @@ export function ChatInputBar({
           ) : null}
 
           {voiceState.message ? (
-            <Text
-              style={[
-                styles.voiceStatusText,
-                voiceState.status === "error" || voiceState.status === "unsupported"
-                  ? styles.voiceStatusWarning
-                  : undefined
-              ]}
-            >
-              {voiceState.message}
-            </Text>
+            <View style={styles.voiceStatusContainer}>
+              <Text
+                style={[
+                  styles.voiceStatusText,
+                  voiceState.status === "error" || voiceState.status === "unsupported"
+                    ? styles.voiceStatusWarning
+                    : undefined
+                ]}
+              >
+                {voiceState.message}
+              </Text>
+              {voiceState.status === "sending_countdown" ? (
+                <Pressable accessibilityRole="button" onPress={onCancelVoice} style={styles.cancelVoiceButton}>
+                  <Text style={styles.cancelVoiceText}>Cancel</Text>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -123,14 +134,15 @@ export function ChatInputBar({
         />
 
         <Pressable
+          accessibilityLabel={loading ? "Stop Haki's response" : "Send message"}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !canSend }}
-          disabled={!canSend}
-          onPress={onSend}
-          style={[styles.sendButton, !canSend ? styles.sendButtonDisabled : undefined]}
+          accessibilityState={{ disabled: !loading && !canSend }}
+          disabled={!loading && !canSend}
+          onPress={loading ? onStopResponse : onSend}
+          style={[styles.sendButton, loading ? styles.stopButton : undefined, !loading && !canSend ? styles.sendButtonDisabled : undefined]}
         >
           {loading ? (
-            <ActivityIndicator color={colors.white} />
+            <Square color={colors.white} fill={colors.white} size={16} />
           ) : (
             <SendHorizontal color={colors.white} size={20} />
           )}
@@ -196,8 +208,11 @@ const styles = StyleSheet.create({
   },
   retryButtonDisabled: { opacity: 0.55 },
   retryButtonText: { color: colors.maroon, fontSize: 12, fontWeight: "900" },
-  voiceStatusText: { color: colors.grayhawkDark, fontSize: 12, fontWeight: "800", lineHeight: 17 },
+  voiceStatusContainer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  voiceStatusText: { color: colors.grayhawkDark, fontSize: 12, fontWeight: "800", lineHeight: 17, flex: 1 },
   voiceStatusWarning: { color: colors.warning },
+  cancelVoiceButton: { backgroundColor: colors.surface, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
+  cancelVoiceText: { color: colors.maroon, fontSize: 11, fontWeight: "800" },
   inputBar: {
     alignItems: "flex-end",
     backgroundColor: colors.white,
@@ -239,6 +254,9 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: "center",
     width: 44
+  },
+  stopButton: {
+    backgroundColor: colors.danger
   },
   sendButtonDisabled: { backgroundColor: colors.grayhawk }
 });

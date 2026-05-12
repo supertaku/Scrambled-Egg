@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   createSpeechToTextSession,
@@ -8,12 +8,16 @@ import {
 import { detectReplyLanguage, speechLocaleForReplyLanguage } from "@/services/replyLanguageService";
 import { logger } from "@/utils/logger";
 
-export type VoiceStatus = "error" | "idle" | "listening" | "processing" | "unsupported";
+import { getVoiceAutoSend } from "@/services/voiceSettingsService";
+
+export type VoiceStatus = "error" | "idle" | "listening" | "processing" | "unsupported" | "sending_countdown";
 
 export interface VoiceState {
   message: string | null;
   status: VoiceStatus;
 }
+
+const AUTO_SEND_COUNTDOWN_MS = 300;
 
 export interface UseVoiceInputResult {
   voiceState: VoiceState;
@@ -23,12 +27,14 @@ export interface UseVoiceInputResult {
     currentDraft: string,
     onDraftChange: (value: string) => void,
     onErrorClear: () => void,
+    onAutoSend: (finalText: string) => void,
     isLoading: boolean,
     isInitializing: boolean,
     isInFlight: boolean,
     abortOnPress?: () => void
   ) => Promise<void>;
   abortVoiceSession: () => void;
+  cancelAutoSend: () => void;
 }
 
 function mergeTranscript(baseDraft: string, transcript: string): string {
@@ -43,24 +49,55 @@ export function useVoiceInput(): UseVoiceInputResult {
   const voiceSessionRef = useRef<SpeechToTextSession | null>(null);
   const voiceBaseDraftRef = useRef("");
   const voiceHadResultRef = useRef(false);
+  const autoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirrors voiceState.status so callbacks/closures always see the latest value
+  // without forcing handleVoicePress to recreate on every status change.
+  const voiceStatusRef = useRef<VoiceStatus>("idle");
+  // Mirrors the live draft text. The auto-send timeout reads from this so it
+  // dispatches the user's latest edits (not the transcript captured 300ms ago).
+  const currentDraftRef = useRef("");
   const speechSupport = getSpeechToTextSupport();
 
   const isListening = voiceState.status === "listening";
 
+  useEffect(() => {
+    voiceStatusRef.current = voiceState.status;
+  }, [voiceState.status]);
+
   const abortVoiceSession = useCallback(() => {
+    if (autoSendTimeoutRef.current) {
+      clearTimeout(autoSendTimeoutRef.current);
+      autoSendTimeoutRef.current = null;
+    }
     voiceSessionRef.current?.abort();
     voiceSessionRef.current = null;
+  }, []);
+
+  const cancelAutoSend = useCallback(() => {
+    if (autoSendTimeoutRef.current) {
+      clearTimeout(autoSendTimeoutRef.current);
+      autoSendTimeoutRef.current = null;
+      setVoiceState({ message: "Auto-send canceled.", status: "idle" });
+    }
   }, []);
 
   const handleVoicePress = useCallback(async (
     currentDraft: string,
     onDraftChange: (value: string) => void,
     onErrorClear: () => void,
+    onAutoSend: (finalText: string) => void,
     isLoading: boolean,
     isInitializing: boolean,
     isInFlight: boolean,
     abortOnPress?: () => void
   ) => {
+    currentDraftRef.current = currentDraft;
+
+    if (voiceStatusRef.current === "sending_countdown") {
+      cancelAutoSend();
+      return;
+    }
+
     if (isListening) {
       try {
         await voiceSessionRef.current?.stop();
@@ -94,6 +131,13 @@ export function useVoiceInput(): UseVoiceInputResult {
     voiceHadResultRef.current = false;
     const voiceLocale = speechLocaleForReplyLanguage(detectReplyLanguage(currentDraft));
 
+    // Wrap onDraftChange so we always know what's currently in the input
+    // even if the user types after the final transcript arrives.
+    const handleDraftChange = (value: string) => {
+      currentDraftRef.current = value;
+      onDraftChange(value);
+    };
+
     const session = createSpeechToTextSession({
       onEnd: () => {
         voiceSessionRef.current = null;
@@ -111,17 +155,32 @@ export function useVoiceInput(): UseVoiceInputResult {
         logger.voice.warn("Speech recognition error", { message });
         setVoiceState({ message, status: "error" });
       },
-      onFinalResult: (transcript) => {
+      onFinalResult: async (transcript) => {
         const nextDraft = mergeTranscript(voiceBaseDraftRef.current, transcript);
         voiceBaseDraftRef.current = nextDraft;
         voiceHadResultRef.current = true;
-        onDraftChange(nextDraft);
+        handleDraftChange(nextDraft);
         onErrorClear();
-        setVoiceState({ message: "Voice captured. Review it, then send when ready.", status: "idle" });
+
+        const autoSendEnabled = await getVoiceAutoSend();
+        if (autoSendEnabled) {
+          setVoiceState({ message: "Sending voice message...", status: "sending_countdown" });
+          autoSendTimeoutRef.current = setTimeout(() => {
+            // Clear the ref BEFORE firing so cancelAutoSend after this point
+            // is a no-op rather than racing with the in-flight send.
+            autoSendTimeoutRef.current = null;
+            setVoiceState({ message: null, status: "idle" });
+            // Read the latest draft so edits during the countdown are respected.
+            const latestDraft = currentDraftRef.current.trim();
+            onAutoSend(latestDraft || nextDraft);
+          }, AUTO_SEND_COUNTDOWN_MS);
+        } else {
+          setVoiceState({ message: "Voice captured. Review it, then send when ready.", status: "idle" });
+        }
       },
       onInterimResult: (transcript) => {
         voiceHadResultRef.current = true;
-        onDraftChange(mergeTranscript(voiceBaseDraftRef.current, transcript));
+        handleDraftChange(mergeTranscript(voiceBaseDraftRef.current, transcript));
         onErrorClear();
       },
       onStart: () => {
@@ -149,5 +208,5 @@ export function useVoiceInput(): UseVoiceInputResult {
     }
   }, [isListening]);
 
-  return { voiceState, speechSupport, isListening, handleVoicePress, abortVoiceSession };
+  return { voiceState, speechSupport, isListening, handleVoicePress, abortVoiceSession, cancelAutoSend };
 }

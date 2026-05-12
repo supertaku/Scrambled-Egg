@@ -5,6 +5,7 @@ import {
 import { DefaultCapabilityDetector, type DeviceCapabilityReport } from "@/ai/CapabilityDetector";
 import type { LocalAIProvider } from "@/ai/LocalAIProvider";
 import { createLocalAIProviderRegistry, type LocalAIProviderRegistry } from "@/ai/providerRegistry";
+import { ensureBundledDefaultChatModel } from "@/ai/localModelManager";
 import { getDatabase } from "@/db/database";
 import { assertFts5Available } from "@/db/ftsHealth";
 import { logger } from "@/utils/logger";
@@ -58,17 +59,10 @@ async function createSelectedMode(): Promise<SelectedAIMode> {
   const report = await detector.getCapabilityReport();
   capabilityReportPromise = Promise.resolve(report);
   const mode = report.selectedMode;
-  const execuTorchReport = report.providers.find((provider) => provider.id === "executorch");
 
   if (report.platform === "android" && (mode.id === "fts5-only" || mode.id === "fallback-fts5-only")) {
-    logger.ai.warn("Using FTS5 because ExecuTorch was not selected.", {
-      execuTorchRuntimeAvailable: execuTorchReport?.runtimeAvailable ?? false,
-      execuTorchAvailable: execuTorchReport?.available ?? false,
-      modelAssetsAvailable: execuTorchReport?.modelAssetsAvailable ?? null,
-      modelName: execuTorchReport?.modelName ?? null,
-      modelTier: execuTorchReport?.modelTier ?? "unknown",
-      recommendedModelTier: execuTorchReport?.recommendedModelTier ?? "unknown",
-      reasons: execuTorchReport?.unavailableReasons.slice(0, 6) ?? report.unavailableReasons.slice(0, 6)
+    logger.ai.warn("Using FTS5 because no local AI provider was selected.", {
+      reasons: report.unavailableReasons.slice(0, 6)
     });
   } else {
     logger.ai.log("Selected device AI mode.", {
@@ -107,6 +101,16 @@ function disposeActiveRegistry(reason: string): void {
   });
 }
 
+function releaseAllLlamaContextsBestEffort(): void {
+  void import("llama.rn")
+    .then((mod) => {
+      if (typeof mod.releaseAllLlama === "function") {
+        return mod.releaseAllLlama();
+      }
+    })
+    .catch(() => undefined);
+}
+
 /**
  * Returns the cached selected AI mode, running capability detection on first call.
  * Subsequent calls return the same promise, making this safe to call from multiple components.
@@ -143,6 +147,12 @@ export async function refreshDeviceCapabilities(): Promise<DeviceAIMode> {
   return selected.mode;
 }
 
+export function releaseLocalAIForMemoryPressure(reason: string): void {
+  disposeActiveRegistry(reason);
+  clearCachedSelection();
+  releaseAllLlamaContextsBestEffort();
+}
+
 /**
  * Marks a provider as failed for the remainder of the current app session,
  * clears the mode cache so the next call re-selects without it, and logs the error.
@@ -158,6 +168,28 @@ export function disableAIProviderForSession(providerId: string, error: unknown):
 
 export function forceFallbackModeForResponse(mode: DeviceAIMode, reason: string): DeviceAIMode {
   return toFallbackMode(mode, reason);
+}
+
+/**
+ * Eagerly loads the active local AI provider's chat model so the first user
+ * message doesn't pay the cold-start cost. Safe to call repeatedly; safe to
+ * call even when local AI isn't available (it just no-ops).
+ */
+export async function prewarmLocalAIForChat(): Promise<void> {
+  try {
+    const bundleStatus = await ensureBundledDefaultChatModel();
+    let selected = await getSelectedAIMode();
+    if (bundleStatus.state === "available" && !selected.mode.capabilities.safeChat) {
+      await refreshDeviceCapabilities();
+      selected = await getSelectedAIMode();
+    }
+    if (!selected.mode.capabilities.safeChat) return;
+    await selected.summaryProvider?.prewarm?.();
+  } catch (error) {
+    logger.ai.warn("Local AI prewarm skipped due to error.", {
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 }
 
 export function resetModeSelectionForTests(): void {

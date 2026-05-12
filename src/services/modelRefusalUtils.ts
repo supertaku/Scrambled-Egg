@@ -72,8 +72,8 @@ export function buildSafeRetryQuestion(
     framing,
     scenarioHint,
     replyLanguageInstruction(language),
-    "Do not refuse unless the request asks for harm, cheating, stalking, privacy invasion, illegal activity, coercion, harassment, sexual exploitation, or manipulation.",
-    "Answer naturally, briefly, and helpfully. Act as a capable helper for the relevant safe field. If details are missing and truly block the answer, say the number of clarifying questions and ask 1 to 3 questions only.",
+    "Answer naturally, briefly, and helpfully. Only refuse if the request could cause real harm to a person.",
+    "If details are missing and truly block the answer, say how many clarifying questions you have and ask 1 to 3 questions only.",
     "",
     `Student question: ${question}`
   ].filter(Boolean).join("\n");

@@ -23,6 +23,12 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Haki to choose a profile avatar from your photos."
+        }
+      ],
+      [
         "llama.rn",
         {
           "enableEntitlements": true,
@@ -63,8 +69,9 @@
       "offlineMvp": true,
       "router": {},
       "eas": {
-        "projectId": "702732cf-9b30-40ce-a5b7-b6bd5547e708"
+        "projectId": "233976fb-2e89-4155-b84a-05b0a0d26d3d"
       }
-    }
+    },
+    "owner": "lelouch.0714"
   }
 }

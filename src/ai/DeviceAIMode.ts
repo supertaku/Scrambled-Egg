@@ -12,7 +12,6 @@ export type RetrieverStrategy = "fts5" | "semantic" | "hybrid";
 
 export type AnswerProvenance =
   | "Retrieved directly from source"
-  | "Locally summarized with ExecuTorch"
   | "Locally summarized with llama.rn"
   | "Locally summarized with Apple Intelligence"
   | "Answered with local safe chat"
@@ -48,10 +47,6 @@ export const FALLBACK_SEARCH_LABEL = "Fallback Mode: Source Search Only";
 export function provenanceForSummaryProvider(providerId: LocalAIProviderId | null): AnswerProvenance {
   if (providerId === "apple-foundation-models") {
     return "Locally summarized with Apple Intelligence";
-  }
-
-  if (providerId === "executorch") {
-    return "Locally summarized with ExecuTorch";
   }
 
   if (providerId === "llama-rn") {

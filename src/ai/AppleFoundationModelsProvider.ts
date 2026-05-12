@@ -155,4 +155,19 @@ export class AppleFoundationModelsProvider implements LocalAIProvider {
 
     return nativeModule.embedText(text);
   }
+
+  async dispose(): Promise<void> {
+    const nativeModule = getAppleFoundationModelsNativeModule();
+    if (!nativeModule?.release) {
+      return;
+    }
+
+    try {
+      await nativeModule.release();
+    } catch (error) {
+      logger.ai.warn("Apple Foundation Models release failed", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
 }

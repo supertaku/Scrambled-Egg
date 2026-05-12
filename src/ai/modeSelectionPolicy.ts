@@ -127,6 +127,21 @@ function mergeCapabilities(
       embeddingProbe?.capabilities.lastInferenceTimeMs ??
       fallbackCapabilities.lastInferenceTimeMs ??
       null,
+    contextWindowTokens:
+      summaryProbe?.capabilities.contextWindowTokens ??
+      embeddingProbe?.capabilities.contextWindowTokens ??
+      fallbackCapabilities.contextWindowTokens ??
+      null,
+    safeInputBudgetTokens:
+      summaryProbe?.capabilities.safeInputBudgetTokens ??
+      embeddingProbe?.capabilities.safeInputBudgetTokens ??
+      fallbackCapabilities.safeInputBudgetTokens ??
+      null,
+    maxOutputTokens:
+      summaryProbe?.capabilities.maxOutputTokens ??
+      embeddingProbe?.capabilities.maxOutputTokens ??
+      fallbackCapabilities.maxOutputTokens ??
+      null,
     streamingSupported: Boolean(
       summaryProbe?.capabilities.streamingSupported ||
       embeddingProbe?.capabilities.streamingSupported ||
@@ -300,7 +315,6 @@ function buildFtsOnlyMode(input: ModeSelectionInput): ModeSelectionResult {
 export function selectDeviceAIMode(input: ModeSelectionInput): ModeSelectionResult {
   const appleProbe = findProbe(input.reportProbes, "apple-foundation-models");
   const llamaProbe = findProbe(input.reportProbes, "llama-rn");
-  const execProbe = findProbe(input.reportProbes, "executorch");
 
   if (input.platform === "ios") {
     if (appleProbe && isUsableSummaryProbe(appleProbe) && isUsableEmbeddingProbe(appleProbe)) {
@@ -318,15 +332,6 @@ export function selectDeviceAIMode(input: ModeSelectionInput): ModeSelectionResu
     if (llamaProbe && isUsableEmbeddingProbe(llamaProbe)) {
       return buildSemanticMode(input, llamaProbe);
     }
-    if (execProbe && isUsableSummaryProbe(execProbe) && isUsableEmbeddingProbe(execProbe)) {
-      return buildHybridMode(input, execProbe);
-    }
-    if (execProbe && isUsableSummaryProbe(execProbe)) {
-      return buildLocalSummaryMode(input, execProbe);
-    }
-    if (execProbe && isUsableEmbeddingProbe(execProbe)) {
-      return buildSemanticMode(input, execProbe);
-    }
   }
 
   if (input.platform === "android") {
@@ -338,15 +343,6 @@ export function selectDeviceAIMode(input: ModeSelectionInput): ModeSelectionResu
     }
     if (llamaProbe && isUsableEmbeddingProbe(llamaProbe)) {
       return buildSemanticMode(input, llamaProbe);
-    }
-    if (execProbe && isUsableSummaryProbe(execProbe) && isUsableEmbeddingProbe(execProbe)) {
-      return buildHybridMode(input, execProbe);
-    }
-    if (execProbe && isUsableSummaryProbe(execProbe)) {
-      return buildLocalSummaryMode(input, execProbe);
-    }
-    if (execProbe && isUsableEmbeddingProbe(execProbe)) {
-      return buildSemanticMode(input, execProbe);
     }
   }
 

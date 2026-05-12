@@ -5,12 +5,9 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
-class HakiExecuTorchPackage : ReactPackage {
+class HakiDeviceInfoPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-    return listOf(
-      HakiDeviceInfoModule(reactContext),
-      HakiExecuTorchModule(reactContext)
-    )
+    return listOf(HakiDeviceInfoModule(reactContext))
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {

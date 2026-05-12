@@ -1,5 +1,3 @@
-import type { SearchOptions } from "@/types/search";
-
 export type QuestionRoute = "obvious_general" | "source_context";
 
 export type ReplyLanguage = "english" | "tagalog" | "taglish";
@@ -17,6 +15,7 @@ export type QuestionScenario =
   | "conversation_greeting"
   | "conversation_thanks"
   | "creative_brainstorm"
+  | "device_specification"
   | "general_knowledge"
   | "off_topic_silly"
   | "relationship_advice"
@@ -43,7 +42,11 @@ export type SafetyCategory =
   | "sexual_exploitation"
   | "violence";
 
-export type SourceScope = NonNullable<SearchOptions["scope"]>;
+export interface SourceScope {
+  office?: string;
+  category?: string;
+  documentId?: string;
+}
 
 export type StudentQuestionIntent =
   | {

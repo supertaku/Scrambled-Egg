@@ -33,9 +33,7 @@ expoAutolinking.useExpoModules()
 
 rootProject.name = 'Haki'
 
-expoAutolinking.useExpoVersionCatalog {
-  version("ndkVersion", "27.1.12297006")
-}
+expoAutolinking.useExpoVersionCatalog()
 
 include ':app'
 includeBuild(expoAutolinking.reactNativeGradlePlugin)

@@ -219,12 +219,7 @@ export function HakiTabPopup({ message, onDismiss, visibleKey }: HakiTabPopupPro
             }
           ]}
         >
-          <Pressable accessibilityRole="button" onPress={dismissImmediately} style={styles.cloudBubble}>
-            <View style={[styles.cloudPuff, styles.cloudPuffTop]} />
-            <View style={[styles.cloudPuff, styles.cloudPuffRight]} />
-            <View style={[styles.cloudPuff, styles.cloudPuffBottom]} />
-            <View style={styles.cloudTailLarge} />
-            <View style={styles.cloudTailSmall} />
+          <Pressable accessibilityRole="button" onPress={dismissImmediately} style={styles.speechBubble}>
             <Text style={styles.hakiName}>Haki</Text>
             <Text style={styles.message}>{renderedMessage}</Text>
           </Pressable>
@@ -259,10 +254,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     marginBottom: 48
   },
-  cloudBubble: {
+  speechBubble: {
     backgroundColor: colors.white,
     borderColor: colors.border,
-    borderRadius: 24,
+    borderRadius: 14,
     borderWidth: 1,
     elevation: 8,
     flexShrink: 1,
@@ -274,54 +269,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18,
     shadowRadius: 16
-  },
-  cloudPuff: {
-    backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    position: "absolute",
-    zIndex: -1
-  },
-  cloudPuffTop: {
-    height: 44,
-    left: 32,
-    top: -18,
-    width: 44
-  },
-  cloudPuffRight: {
-    height: 40,
-    right: 18,
-    top: -10,
-    width: 40
-  },
-  cloudPuffBottom: {
-    bottom: -10,
-    height: 34,
-    left: 58,
-    width: 34
-  },
-  cloudTailLarge: {
-    backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    bottom: 14,
-    height: 20,
-    left: -16,
-    position: "absolute",
-    width: 20
-  },
-  cloudTailSmall: {
-    backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    bottom: 2,
-    height: 11,
-    left: -30,
-    position: "absolute",
-    width: 11
   },
   hakiName: {
     color: colors.maroon,

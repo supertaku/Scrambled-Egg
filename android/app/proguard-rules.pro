@@ -11,6 +11,22 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
-# Add any project specific keep options here:
--keep class org.pytorch.executorch.** { *; }
--keepclassmembers class org.pytorch.executorch.** { *; }
+# Keep Android classes used via reflection (React Native new architecture / Expo)
+-keep class com.facebook.react.** { *; }
+-keep class com.facebook.hermes.** { *; }
+-keep class com.facebook.jni.** { *; }
+
+# Expo / SQLite
+-keep class expo.modules.** { *; }
+
+# llama.rn / native model bridges
+-keep class com.rnllama.** { *; }
+
+# Haki native modules (bundled GGUF copy, device profile)
+-keep class com.tupt.haki.** { *; }
+
+# Prevent stripping of serialization used by some native modules
+-keepattributes Signature,*Annotation*,EnclosingMethod,InnerClasses
+-keepclassmembers class * {
+    @com.facebook.react.bridge.ReactMethod <methods>;
+}

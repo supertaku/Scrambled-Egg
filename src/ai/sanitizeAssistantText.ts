@@ -20,3 +20,9 @@ export function sanitizeAssistantText(value: string): string {
     .replace(/<\|im_end\|>\s*$/i, "")
     .trim();
 }
+
+export function sanitizeAssistantDisplayText(value: string): string {
+  return sanitizeAssistantText(value)
+    .replace(/(?:^|\n)\s*(?:CITATIONS?|SOURCE_IDS?|SOURCES?)\s*:[\s\S]*$/i, "")
+    .trim();
+}

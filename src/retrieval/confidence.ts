@@ -90,33 +90,62 @@ export function computeConfidenceScore(result: SearchResult, query: string): Con
   const explicitAnswer = result.answer && result.answer.trim().length > 0 ? 1 : 0;
   const explicitCitation = result.citation && result.citation.trim().length > 0 ? 1 : 0;
   const explicitPage = result.pageNumber !== null ? 1 : 0;
+  // Semantic score is only present when vector retrieval ran AND produced a
+  // signal. In FTS-only deployments (no chunk_embeddings populated) it's
+  // always undefined; in that case we redistribute its weight back to the
+  // lexical signals instead of letting the score collapse against an
+  // always-zero contribution.
+  const hasSemantic = typeof result.semanticScore === "number";
+  const semanticScore = hasSemantic ? clamp(result.semanticScore ?? 0, 0, 1) : 0;
 
-  // Weighted Sum
+  // Weighted Sum (lexical-only path renormalizes to keep the max possible
+  // raw score at ~1.0 so the existing thresholds remain calibrated).
+  const lexicalWeights = {
+    tokenCoverage: hasSemantic ? 0.24 : 0.34,
+    exactPhraseMatch: hasSemantic ? 0.18 : 0.24,
+    bm25Magnitude: hasSemantic ? 0.1 : 0.14,
+    priorityCoverage: hasSemantic ? 0.17 : 0.22,
+    metadataCoverage: hasSemantic ? 0.07 : 0.1,
+    answerCoverage: hasSemantic ? 0.08 : 0.11,
+    citationCoverage: hasSemantic ? 0.04 : 0.05,
+    authorPriority: hasSemantic ? 0.06 : 0.08,
+    explicitAnswer: hasSemantic ? 0.03 : 0.04,
+    explicitCitation: hasSemantic ? 0.02 : 0.03,
+    explicitPage: hasSemantic ? 0.01 : 0.02
+  };
+
   const weightedSum =
-    tokenCoverage * 0.24 +
-    exactPhraseMatch * 0.18 +
-    bm25Magnitude * 0.1 +
-    priorityCoverage * 0.17 +
-    metadataCoverage * 0.07 +
-    answerCoverage * 0.08 +
-    citationCoverage * 0.04 +
-    authorPriority * 0.06 +
-    explicitAnswer * 0.03 +
-    explicitCitation * 0.02 +
-    explicitPage * 0.01;
+    tokenCoverage * lexicalWeights.tokenCoverage +
+    exactPhraseMatch * lexicalWeights.exactPhraseMatch +
+    bm25Magnitude * lexicalWeights.bm25Magnitude +
+    priorityCoverage * lexicalWeights.priorityCoverage +
+    metadataCoverage * lexicalWeights.metadataCoverage +
+    answerCoverage * lexicalWeights.answerCoverage +
+    citationCoverage * lexicalWeights.citationCoverage +
+    authorPriority * lexicalWeights.authorPriority +
+    explicitAnswer * lexicalWeights.explicitAnswer +
+    explicitCitation * lexicalWeights.explicitCitation +
+    explicitPage * lexicalWeights.explicitPage +
+    semanticScore * (hasSemantic ? 0.32 : 0);
 
   const raw = clamp(weightedSum, 0, 1);
   const hasMultipleTokenEvidence = tokens.length >= 2 && matchCount >= Math.min(2, tokens.length);
   const hasStrongPriorityEvidence = tokens.length >= 2 && priorityCoverage >= 0.6;
   const hasExplicitGrounding = explicitAnswer === 1 && explicitCitation === 1;
+  const hasStrongSemanticEvidence = semanticScore >= 0.82 && hasExplicitGrounding;
+  const hasMediumSemanticEvidence = semanticScore >= 0.68 && (explicitAnswer === 1 || explicitCitation === 1);
   let level: ConfidenceLevel = "low";
   if (
     (raw >= CONFIDENCE_HIGH_THRESHOLD_FULL && hasMultipleTokenEvidence && hasStrongPriorityEvidence && hasExplicitGrounding) ||
     (raw >= CONFIDENCE_HIGH_THRESHOLD_PHRASE && hasMultipleTokenEvidence && exactPhraseMatch === 1 && hasExplicitGrounding) ||
-    (raw >= CONFIDENCE_HIGH_THRESHOLD_COVERAGE && tokenCoverage >= 0.75 && hasStrongPriorityEvidence && hasExplicitGrounding)
+    (raw >= CONFIDENCE_HIGH_THRESHOLD_COVERAGE && tokenCoverage >= 0.75 && hasStrongPriorityEvidence && hasExplicitGrounding) ||
+    hasStrongSemanticEvidence
   ) {
     level = "high";
-  } else if (raw >= CONFIDENCE_MEDIUM_THRESHOLD && (hasMultipleTokenEvidence || priorityMatchCount > 0 || metadataCoverage >= 0.5)) {
+  } else if (
+    (raw >= CONFIDENCE_MEDIUM_THRESHOLD && (hasMultipleTokenEvidence || priorityMatchCount > 0 || metadataCoverage >= 0.5)) ||
+    hasMediumSemanticEvidence
+  ) {
     level = "medium";
   }
 

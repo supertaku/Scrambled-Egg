@@ -2,7 +2,7 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-n
 
 import { colors } from "@/theme/colors";
 import { AdminUnlockModal } from "./AdminUnlockModal";
-import { mascotImages, type MascotStatus } from "./mascot/mascotConfig";
+import { mascotImages, mascotTurnaroundImage, type MascotStatus } from "./mascot/mascotConfig";
 import { useMascotInteraction } from "./mascot/useMascotInteraction";
 
 export type { MascotStatus } from "./mascot/mascotConfig";
@@ -29,9 +29,10 @@ export function MascotHeader({
     isGroggy,
     resolvedMessage,
     resolvedStatus,
-    showAdminModal
+    showAdminModal,
+    turnaroundVisible
   } = useMascotInteraction({ message, onAdminRequest: onMascotPress, status });
-  const mascotSource = mascotImages[resolvedStatus] ?? mascotImages.idle;
+  const mascotSource = turnaroundVisible ? mascotTurnaroundImage : mascotImages[resolvedStatus] ?? mascotImages.idle;
 
   return (
     <View style={styles.container}>
@@ -53,16 +54,8 @@ export function MascotHeader({
       </Pressable>
 
       {resolvedMessage ? (
-        <Animated.View style={[styles.cloudBubbleWrap, { transform: [{ scale: bubbleScale }] }]}>
-          <View style={styles.cloudBubbleShadow}>
-            <View style={[styles.cloudPuff, styles.cloudPuffTopLeft]} />
-            <View style={[styles.cloudPuff, styles.cloudPuffTopCenter]} />
-            <View style={[styles.cloudPuff, styles.cloudPuffTopRight]} />
-            <View style={[styles.cloudPuff, styles.cloudPuffBottomRight]} />
-            <View style={[styles.cloudTrailPuff, styles.cloudTrailLarge]} />
-            <View style={[styles.cloudTrailPuff, styles.cloudTrailSmall]} />
-          </View>
-          <View style={styles.cloudBubble}>
+        <Animated.View style={[styles.speechBubbleWrap, { transform: [{ scale: bubbleScale }] }]}>
+          <View style={styles.speechBubble}>
             <Text style={styles.hakiName}>Haki</Text>
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
             <ScrollView 
@@ -116,7 +109,7 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%"
   },
-  cloudBubbleWrap: {
+  speechBubbleWrap: {
     left: 136,
     minWidth: 0,
     overflow: "visible",
@@ -126,81 +119,21 @@ const styles = StyleSheet.create({
     zIndex: 6,
     elevation: 6
   },
-  cloudBubbleShadow: {
+  speechBubble: {
     backgroundColor: colors.white,
-    borderRadius: 28,
-    bottom: 0,
+    borderColor: colors.maroonSoft,
+    borderRadius: 14,
+    borderWidth: 1,
     elevation: 3,
-    left: 0,
-    overflow: "visible",
-    position: "absolute",
-    right: 0,
-    shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    top: 0
-  },
-  cloudPuff: {
-    backgroundColor: colors.white,
-    borderColor: colors.maroonSoft,
-    borderRadius: 999,
-    borderWidth: 1,
-    position: "absolute"
-  },
-  cloudPuffTopLeft: {
-    height: 42,
-    left: 18,
-    top: -13,
-    width: 42
-  },
-  cloudPuffTopCenter: {
-    height: 54,
-    left: 58,
-    top: -20,
-    width: 54
-  },
-  cloudPuffTopRight: {
-    height: 46,
-    right: 22,
-    top: -14,
-    width: 46
-  },
-  cloudPuffBottomRight: {
-    bottom: -9,
-    height: 36,
-    right: 44,
-    width: 36
-  },
-  cloudTrailPuff: {
-    backgroundColor: colors.white,
-    borderColor: colors.maroonSoft,
-    borderRadius: 999,
-    borderWidth: 1,
-    position: "absolute"
-  },
-  cloudTrailLarge: {
-    height: 22,
-    left: -15,
-    top: 48,
-    width: 22
-  },
-  cloudTrailSmall: {
-    height: 12,
-    left: -31,
-    top: 62,
-    width: 12
-  },
-  cloudBubble: {
-    backgroundColor: colors.white,
-    borderColor: colors.maroonSoft,
-    borderRadius: 28,
-    borderWidth: 1,
     maxWidth: "100%",
     minWidth: 0,
     paddingHorizontal: 14,
     paddingVertical: 12,
     position: "relative",
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
     zIndex: 2
   },
   hakiName: {

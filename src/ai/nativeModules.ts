@@ -44,10 +44,6 @@ export interface HakiLocalAIModule {
   release?: () => Promise<void> | void;
 }
 
-export function getExecuTorchNativeModule(): HakiLocalAIModule | null {
-  return (NativeModules.HakiExecuTorch as HakiLocalAIModule | undefined) ?? null;
-}
-
 export function getAppleFoundationModelsNativeModule(): HakiLocalAIModule | null {
   try {
     const { requireNativeModule } = require("expo-modules-core");

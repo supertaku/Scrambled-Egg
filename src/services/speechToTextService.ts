@@ -8,6 +8,10 @@ import {
   isNativeVoiceModuleCandidate,
   resolveNativeVoiceExport
 } from "./nativeVoiceModuleGuard";
+import {
+  NEXT_SPEECH_RECOGNITION_TARGET,
+  type SpeechRecognitionAdapter
+} from "./speechRecognitionAdapter";
 
 type SpeechRecognitionErrorCode =
   | "aborted"
@@ -273,6 +277,18 @@ export function createSpeechToTextSession(
     stop: () => recognition.stop()
   };
 }
+
+export const speechRecognitionAdapter: SpeechRecognitionAdapter<
+  SpeechToTextSupport,
+  SpeechToTextCallbacks,
+  SpeechToTextSessionOptions,
+  SpeechToTextSession
+> = {
+  id: "react-native-voice",
+  migrationTarget: NEXT_SPEECH_RECOGNITION_TARGET,
+  getSupport: getSpeechToTextSupport,
+  createSession: createSpeechToTextSession
+};
 
 function getNativeTranscript(event: SpeechResultsEvent): string {
   return event.value?.find((value) => value.trim().length > 0)?.trim() ?? "";

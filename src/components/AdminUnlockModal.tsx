@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { LogOut, ShieldCheck } from "lucide-react-native";
 import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { disableAdminMode, getAdminMode, subscribeAdminMode, verifyAndEnableAdminMode } from "@/services/adminService";
+import { disableAdminMode, getAdminMode, subscribeAdminMode, tryUnlockAdminMode } from "@/services/adminService";
 import { colors } from "@/theme/colors";
 
 interface AdminUnlockModalProps {
@@ -39,8 +39,18 @@ export function AdminUnlockModal({ onClose, visible }: AdminUnlockModalProps) {
   }, [onClose]);
 
   const handleAdminSubmit = useCallback(async () => {
-    const unlocked = await verifyAndEnableAdminMode(adminCode);
-    if (!unlocked) {
+    const result = await tryUnlockAdminMode(adminCode);
+    if (result.ok) return;
+    if (typeof result.lockedForMs === "number" && result.lockedForMs > 0) {
+      const seconds = Math.ceil(result.lockedForMs / 1000);
+      setAdminError(`Too many attempts. Try again in ${seconds}s.`);
+    } else if (typeof result.attemptsRemaining === "number") {
+      setAdminError(
+        result.attemptsRemaining > 0
+          ? `Invalid admin code. ${result.attemptsRemaining} attempt${result.attemptsRemaining === 1 ? "" : "s"} left.`
+          : "Invalid admin code."
+      );
+    } else {
       setAdminError("Invalid admin code.");
     }
   }, [adminCode]);
@@ -73,11 +83,11 @@ export function AdminUnlockModal({ onClose, visible }: AdminUnlockModalProps) {
             </View>
           </View>
 
-          <Text style={styles.adminTitle}>{adminMode ? "Admin mode is active" : "Admin ka ba?"}</Text>
+          <Text style={styles.adminTitle}>{adminMode ? "Admin mode is active" : "Admin sign in"}</Text>
           <Text style={styles.adminText}>
             {adminMode
               ? "Admin-only pages are visible. Exit admin mode when done managing documents."
-              : "Enter the admin code para lumabas ang Documents, Import, and About tabs."}
+              : "Enter the admin code to unlock document management tools."}
           </Text>
 
           {adminMode ? (

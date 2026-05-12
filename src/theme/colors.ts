@@ -12,6 +12,8 @@ export const colors = {
   grayhawk: "#8E99A8",
   grayhawkDark: "#586474",
   success: "#147A3D",
+  successSoft: "#D1FADF",
   warning: "#9A6700",
-  danger: "#B42318"
+  danger: "#B42318",
+  dangerSoft: "#FEE4E2"
 } as const;

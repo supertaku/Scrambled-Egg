@@ -1,6 +1,6 @@
 import type { ChatContextTurn, ConfidenceLevel } from "@/types/search";
 
-export type LocalAIProviderId = "fallback" | "executorch" | "llama-rn" | "apple-foundation-models";
+export type LocalAIProviderId = "fallback" | "llama-rn" | "apple-foundation-models";
 
 export type DeviceCapabilityClass = "unknown" | "low" | "standard" | "high";
 
@@ -35,6 +35,9 @@ export interface LocalAICapabilities {
   modelRejectionReasons?: string[];
   modelLoadTimeMs?: number | null;
   lastInferenceTimeMs?: number | null;
+  contextWindowTokens?: number | null;
+  safeInputBudgetTokens?: number | null;
+  maxOutputTokens?: number | null;
   streamingSupported?: boolean;
   approximateDeviceCapability: DeviceCapabilityClass;
   architecture?: string | null;
@@ -83,12 +86,20 @@ export interface SafeChatInput {
   preferredModelTier?: LocalModelTier;
   appContext: string;
   conversationContext?: ChatContextTurn[];
+  profileContext?: string;
   sourceContext?: SourceChunkForSummary[];
   sourceConfidence?: ConfidenceLevel;
   sourceReliable?: boolean;
+  taskContext?: string;
+  /** Used by providers to select scenario-tuned sampling parameters. */
+  scenario?: string;
+  /** Used by providers to inject chain-of-thought or format hints. */
+  capability?: string;
+  /** When set, native runtimes should stop ongoing inference (best-effort). */
+  abortSignal?: AbortSignal;
 }
 
-export type SafeChatStatus = "ok" | "refused";
+export type SafeChatStatus = "input_too_large" | "ok" | "refused" | "incomplete";
 
 export interface SafeChatResult {
   status: SafeChatStatus;
@@ -107,6 +118,12 @@ export interface LocalAIProvider {
   answerSafeChat?(input: SafeChatInput): Promise<SafeChatResult>;
   streamSafeChat?(input: SafeChatInput, onToken: (token: string) => void): Promise<SafeChatResult>;
   embedText?(text: string): Promise<number[]>;
+  /**
+   * Best-effort eager initialization. Called by the chat screen on mount so
+   * the first user message doesn't pay the model-load cost. Implementations
+   * MUST be idempotent and safe to call concurrently with real requests.
+   */
+  prewarm?(): Promise<void>;
   dispose?(): Promise<void>;
 }
 
@@ -128,6 +145,9 @@ export function unavailableCapabilities(notes: string[], minimumOS: string | nul
     modelRejectionReasons: notes,
     modelLoadTimeMs: null,
     lastInferenceTimeMs: null,
+    contextWindowTokens: null,
+    safeInputBudgetTokens: null,
+    maxOutputTokens: null,
     streamingSupported: false,
     approximateDeviceCapability: "unknown",
     memoryClass: null,

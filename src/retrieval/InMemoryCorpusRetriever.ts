@@ -15,7 +15,7 @@ function toNullableList(items: string[] | undefined): string[] | null {
 }
 
 function matchesScope(result: SearchResult, options: SearchOptions): boolean {
-  if (options.scope?.office && result.office !== options.scope.office) {
+  if (options.scope?.office && !officeMatches(result.office, options.scope.office)) {
     return false;
   }
   if (options.scope?.category && result.category !== options.scope.category) {
@@ -25,6 +25,24 @@ function matchesScope(result: SearchResult, options: SearchOptions): boolean {
     return false;
   }
   return true;
+}
+
+function normalizeOffice(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/^tup-?taguig\s+/i, "")
+    .replace(/\boffice of the\b/g, "")
+    .replace(/\band\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function officeMatches(actual: string | null, requested: string): boolean {
+  const left = normalizeOffice(actual);
+  const right = normalizeOffice(requested);
+  if (!left || !right) return false;
+  return left === right || left.includes(right) || right.includes(left);
 }
 
 function buildHaystack(result: SearchResult): string {

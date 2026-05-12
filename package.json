@@ -9,20 +9,20 @@
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "test:golden": "tsx scripts/golden-retrieval.ts",
+    "test:unit": "vitest run",
     "test:local-models": "tsx scripts/test-local-model-manager.ts",
     "test:edge-cases": "tsx scripts/test-edge-cases.ts",
     "test:chat-scenarios": "tsx scripts/chat-scenario-eval.ts",
-    "test:all": "npm run typecheck && npm run test:local-models && npm run test:golden && npm run test:edge-cases && npm run test:chat-scenarios",
-    "executorch:download-aar": "powershell -ExecutionPolicy Bypass -File scripts/download-executorch-aar.ps1",
-    "model:download:qwen3": "powershell -ExecutionPolicy Bypass -File scripts/download-qwen3-executorch-model.ps1",
+    "test:all": "npm run typecheck && npm run test:unit && npm run test:local-models && npm run test:golden && npm run test:edge-cases && npm run test:chat-scenarios",
     "model:download:default-gguf": "powershell -ExecutionPolicy Bypass -File scripts/download-default-gguf-model.ps1",
     "model:download:tiny-gguf": "powershell -ExecutionPolicy Bypass -File scripts/download-tiny-gguf-model.ps1",
-    "model:download:all": "powershell -ExecutionPolicy Bypass -File scripts/download-all-models.ps1",
     "apk:inspect": "powershell -ExecutionPolicy Bypass -File scripts/inspect-apk-assets.ps1",
     "eas-build-pre-install": "bash scripts/eas-build-pre-install.sh",
+    "eas-build-post-install": "bash scripts/eas-build-pre-install.sh",
     "postinstall": "node scripts/fix-expo-sqlite.js && patch-package"
   },
   "dependencies": {
+    "@noble/hashes": "^2.2.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-voice/voice": "^3.2.4",
     "expo": "~55.0.23",
@@ -36,8 +36,11 @@
     "expo-linking": "~55.0.15",
     "expo-modules-core": "55.0.25",
     "expo-router": "~55.0.14",
+    "expo-secure-store": "^55.0.13",
+    "expo-sensors": "^55.0.14",
     "expo-sqlite": "55.0.15",
     "llama.rn": "0.12.0-rc.9",
+    "lottie-react-native": "^7.3.6",
     "lucide-react-native": "^1.14.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
@@ -52,6 +55,7 @@
     "babel-plugin-module-resolver": "^5.0.3",
     "patch-package": "^8.0.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
   }
 }

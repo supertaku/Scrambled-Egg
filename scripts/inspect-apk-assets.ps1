@@ -1,10 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string]$ApkPath,
-
-  [switch]$AllowExecuTorchNative,
-
-  [switch]$RequireExecuTorchAssets
+  [string]$ApkPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,7 +22,7 @@ if ($jar) {
 
 $entries = & $jarPath tf $ApkPath
 $modelEntries = $entries | Where-Object { $_ -like "assets/models/*" }
-$nativeEntries = $entries | Where-Object { $_ -like "lib/*" -and $_ -match "executorch|pytorch|fbjni|soloader|rnllama" }
+$nativeEntries = $entries | Where-Object { $_ -like "lib/*" -and $_ -match "pytorch|fbjni|soloader|rnllama" }
 $execuTorchNativeEntries = $nativeEntries | Where-Object { $_ -match "libexecutorch" }
 $llamaNativeEntries = $nativeEntries | Where-Object { $_ -match "librnllama" }
 
@@ -45,30 +41,21 @@ if ($nativeEntries) {
   Write-Host "  None found"
 }
 
-if ($execuTorchNativeEntries -and !$AllowExecuTorchNative) {
-  throw "APK packages ExecuTorch native libraries while ExecuTorch native loading is disabled. Rebuild without -Phaki.enableExecuTorchNative=true, or rerun this script with -AllowExecuTorchNative for an intentional native test build."
+if ($execuTorchNativeEntries) {
+  throw "APK packages ExecuTorch native libraries (libexecutorch). Stable Haki builds use llama.rn only. Rebuild without experimental ExecuTorch artifacts."
 }
 
 if (!$llamaNativeEntries) {
   throw "APK is missing llama.rn native libraries. Rebuild the custom native app with the llama.rn plugin enabled."
 }
 
-if ($RequireExecuTorchAssets -or $AllowExecuTorchNative) {
-  if (!($modelEntries -contains "assets/models/model.pte")) {
-    throw "APK is missing assets/models/model.pte"
-  }
-
-  if (!($modelEntries -contains "assets/models/tokenizer.json")) {
-    throw "APK is missing assets/models/tokenizer.json"
-  }
-
-  Write-Host ""
-  Write-Host "APK contains the required ExecuTorch model asset names."
-} else {
-  if ($modelEntries -contains "assets/models/model.pte") {
-    throw "Stable APK packages assets/models/model.pte even though ExecuTorch native loading is disabled."
-  }
-
-  Write-Host ""
-  Write-Host "Stable APK excludes ExecuTorch model assets and includes llama.rn native libraries."
+if ($modelEntries -contains "assets/models/model.pte") {
+  throw "APK packages assets/models/model.pte (legacy ExecuTorch). Remove .pte assets from release builds."
 }
+
+if (!($modelEntries -contains "assets/models/haki-default.gguf")) {
+  throw "Stable APK is missing the bundled default GGUF model at assets/models/haki-default.gguf."
+}
+
+Write-Host ""
+Write-Host "Stable APK check passed: bundled default GGUF present, llama.rn native libraries present, no ExecuTorch packaging."

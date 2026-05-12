@@ -24,6 +24,12 @@ const CLARIFICATION_PATTERNS = [
   /^(pwede magtanong|pwede ba magtanong|may tanong ako|hingi advice|pahingi advice|ano gagawin ko)[?.! ]*$/i
 ];
 
+const DEVICE_SPECIFICATION_PATTERNS = [
+  /\b(device|phone|hardware|system)\b.*\b(spec|specs|specification|specifications|capability|capabilities|status|ram|storage|model)\b/i,
+  /\b(what is|show|check|tell me)\b.*\b(my device|this phone|phone specs|device specs)\b/i,
+  /\b(active local ai|local ai status|model status|recommended model tier)\b/i
+];
+
 const WEAK_SCHOOL_CONTEXT_PATTERNS = [
   /\b(tup|technological university|campus|university|school|college)\b/i
 ];
@@ -33,6 +39,7 @@ const STRONG_SOURCE_CONTEXT_PATTERNS = [
   /\b(enrollment|registrar|clinic|accounting|cashier|library|guidance|osa|student affairs|canteen|cafeteria|office|department)\b/i,
   /\b(id|cor|certificate|clearance|scholarship|tuition|grades|records|permit|uniform|violation|discipline|shift|shifting)\b/i,
   /\b(orgs?|organizations?|council)\b/i,
+  /\b(feedback|complaints?|complainant|public assistance|complaints desk|customer feedback)\b/i,
   /\b(deadline|schedule)\b/i
 ];
 
@@ -88,7 +95,9 @@ const ACADEMIC_RECORD_PATTERNS = [
 
 export const LOST_ID_PATTERNS = [
   /\b(lost|lose|missing|misplaced|damaged|broken|replace|replacement|temporary)\b.*\b(id|student id|school id|identification)\b/i,
-  /\b(id|student id|school id|identification)\b.*\b(lost|missing|misplaced|damaged|broken|replace|replacement|temporary)\b/i
+  /\b(id|student id|school id|identification)\b.*\b(lost|missing|misplaced|damaged|broken|replace|replacement|temporary)\b/i,
+  /\b(nawala|naiwala|nawawala|wala|nasira|sira)\b.*\b(id|student id|school id|identification)\b/i,
+  /\b(id|student id|school id|identification)\b.*\b(nawala|naiwala|nawawala|wala|nasira|sira)\b/i
 ];
 
 const HEALTH_SAFETY_PATTERNS = [
@@ -97,7 +106,13 @@ const HEALTH_SAFETY_PATTERNS = [
 ];
 
 const GUIDANCE_WELLBEING_PATTERNS = [
-  /\b(guidance|counseling|counselling|counselor|mental health|stress|anxiety|burnout|overwhelmed|personal problem|family problem|grief)\b/i
+  /\b(guidance|counseling|counselling|counselor|mental health|stress|anxiety|burnout|overwhelmed|personal problem|family problem|grief|depressed|depression|lonely|hopeless)\b/i,
+  /\b(ayoko na|pagod na ako|gusto ko mawala|di ko na kaya|hindi ko na kaya)\b/i
+];
+
+const FEEDBACK_COMPLAINT_PATTERNS = [
+  /\b(feedback|complaints?|complainant|complaints desk|customer feedback|public assistance)\b/i,
+  /\b(file|send|submit|process|processed|handle|report)\b.*\b(complaints?|feedback)\b/i
 ];
 
 const REGISTRAR_PATTERNS = [
@@ -139,6 +154,7 @@ const CAMPUS_LIFE_PATTERNS = [
 
 const RELATIONSHIP_PATTERNS = [
   /\b(crush|confess|confession|relationship|love advice|friendship|avoid someone|avoid my|classmate conflict|roommate|boundaries|personal space)\b/i,
+  /\b(awkward|uncomfortable|embarrassing)\b.*\b(campus|school|class|classmate|situation)\b/i,
   /\b(ligaw|umamin|iwasan|iniiwasan|kaibigan|kaklase|personal space)\b/i
 ];
 
@@ -164,6 +180,7 @@ const OBVIOUS_GENERAL_SCENARIOS = new Set<QuestionScenario>([
   "conversation_greeting",
   "conversation_thanks",
   "creative_brainstorm",
+  "device_specification",
   "general_knowledge",
   "off_topic_silly",
   "relationship_advice",
@@ -199,9 +216,11 @@ export function classifyQuestionScenario(question: string): QuestionScenario {
   if (matchesAny(normalized, GOODBYE_PATTERNS)) return "conversation_goodbye";
   if (matchesAny(normalized, CAPABILITY_DISCOVERY_PATTERNS)) return "capability_discovery";
   if (matchesAny(normalized, CLARIFICATION_PATTERNS)) return "clarification";
+  if (matchesAny(normalized, DEVICE_SPECIFICATION_PATTERNS)) return "device_specification";
   if (isBasicArithmeticQuestion(normalized)) return "basic_math";
   if (matchesAny(normalized, ADVERSARIAL_PATTERNS)) return "adversarial";
   if (matchesAny(normalized, LOST_ID_PATTERNS)) return "student_admin";
+  if (matchesAny(normalized, FEEDBACK_COMPLAINT_PATTERNS)) return "student_admin";
   if (matchesAny(normalized, HEALTH_SAFETY_PATTERNS) || matchesAny(normalized, GUIDANCE_WELLBEING_PATTERNS)) {
     return "wellbeing_safety";
   }
@@ -224,10 +243,10 @@ export function classifyQuestionScenario(question: string): QuestionScenario {
       : "campus_office";
   }
 
-  if (matchesAny(normalized, CAMPUS_LIFE_PATTERNS)) return "campus_life";
   if (matchesAny(normalized, ACADEMIC_RECORD_PATTERNS)) return "academic_support";
   if (matchesAny(normalized, STUDY_ADVICE_PATTERNS)) return "study_advice";
   if (matchesAny(normalized, RELATIONSHIP_PATTERNS)) return "relationship_advice";
+  if (matchesAny(normalized, CAMPUS_LIFE_PATTERNS)) return "campus_life";
   if (matchesAny(normalized, CODING_PATTERNS)) return "coding_help";
   if (matchesAny(normalized, SUMMARY_TRANSLATION_PATTERNS)) return "summary_or_translation";
   if (matchesAny(normalized, CREATIVE_BRAINSTORM_PATTERNS)) return "creative_brainstorm";
@@ -239,6 +258,7 @@ export function classifyQuestionScenario(question: string): QuestionScenario {
 
 export function classifyRouteForScenario(question: string, scenario: QuestionScenario): QuestionRoute {
   if (matchesAny(question, LOST_ID_PATTERNS)) return "source_context";
+  if (matchesAny(question, FEEDBACK_COMPLAINT_PATTERNS)) return "source_context";
   if (OBVIOUS_GENERAL_SCENARIOS.has(scenario)) return "obvious_general";
   if (SOURCE_SCENARIOS.has(scenario)) return "source_context";
 
@@ -255,6 +275,7 @@ export function classifyRouteForScenario(question: string, scenario: QuestionSce
 
 export function sourceScopeForQuestionScenario(question: string, scenario: QuestionScenario): SourceScope | undefined {
   if (matchesAny(question, LOST_ID_PATTERNS)) return { office: "Student Affairs" };
+  if (matchesAny(question, FEEDBACK_COMPLAINT_PATTERNS)) return { documentId: "tup_taguig_feedback_complaints" };
 
   const scopeMatches = [
     matchesAny(question, HEALTH_SAFETY_PATTERNS),

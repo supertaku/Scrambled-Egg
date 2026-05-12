@@ -85,7 +85,7 @@ function inferDeviceCapabilityClass(): DeviceCapabilityClass {
   }
 
   if (Platform.OS === "android") {
-    // Android 13 (API 33) is the minimum for ExecuTorch ARM64 support.
+    // Android 13 (API 33) is the minimum baseline for Haki's Android local AI path.
     return majorVersion >= 33 ? "standard" : "unknown";
   }
 
@@ -128,21 +128,25 @@ export function coerceNativeSummaryResult(
   providerName: string
 ): LocalSummaryResult {
   if (typeof nativeResult === "string") {
-    if (nativeResult.trim() === NO_RELIABLE_ANSWER) {
+    const sanitized = sanitizeAssistantText(nativeResult);
+    if (sanitized.trim() === NO_RELIABLE_ANSWER) {
       return noReliableSummary(providerId, providerName);
     }
 
-    const citationIds = input.sources
+    const { text, citationIds: footerIds } = extractCitationFooter(sanitized);
+    const inlineIds = input.sources
       .map((source) => source.citationId)
-      .filter((citationId) => nativeResult.includes(citationId));
+      .filter((citationId) => text.includes(citationId) || text.includes(`[${citationId}]`));
+    const allowed = new Set(input.sources.map((source) => source.citationId));
+    const citationIds = Array.from(new Set([...footerIds, ...inlineIds].filter((id) => allowed.has(id))));
 
-    if (citationIds.length === 0) {
+    if (!text || citationIds.length === 0) {
       return noReliableSummary(providerId, providerName);
     }
 
     return {
       status: "ok",
-      text: nativeResult.trim(),
+      text,
       citationIds,
       providerId,
       providerName
@@ -158,18 +162,54 @@ export function coerceNativeSummaryResult(
     ? nativeResult.citationIds.filter((citationId) => allowedCitationIds.has(citationId))
     : [];
 
-  const text = nativeResult.text?.trim();
-  if (!text || citationIds.length === 0) {
+  const { text, citationIds: footerIds } = extractCitationFooter(sanitizeAssistantText(nativeResult.text ?? ""));
+  const mergedCitationIds = Array.from(new Set([...citationIds, ...footerIds].filter((citationId) => allowedCitationIds.has(citationId))));
+  if (!text || mergedCitationIds.length === 0) {
     return noReliableSummary(providerId, providerName);
   }
 
   return {
     status: "ok",
     text,
-    citationIds,
+    citationIds: mergedCitationIds,
     providerId,
     providerName
   };
+}
+
+/**
+ * Parses a trailing `CITATIONS: id1, id2` line from a model response.
+ *
+ * Models that follow instructions reliably will emit one line at the very end
+ * listing the chunk IDs they used. We parse and remove it so:
+ *   1. The displayed text doesn't show "CITATIONS: ..." plumbing to the user.
+ *   2. Downstream allowlist filtering (in `safeLocalChatService`) has high-
+ *      quality IDs even when the model's prose doesn't literally repeat them.
+ *
+ * Returns the original text + empty array if no footer is present.
+ * IDs are NOT allowlist-filtered here; that happens downstream where the
+ * caller knows the source set.
+ */
+export function extractCitationFooter(text: string): { text: string; citationIds: string[] } {
+  if (!text) {
+    return { text, citationIds: [] };
+  }
+
+  // Match the LAST occurrence of a CITATIONS: line so models that hallucinate
+  // an earlier "CITATIONS:" mid-paragraph don't trip us up.
+  const FOOTER_RE = /(^|\n)\s*(?:CITATIONS?|SOURCE_IDS?|SOURCES?)\s*:\s*([^\n]*)\s*$/i;
+  const match = text.match(FOOTER_RE);
+  if (!match) {
+    return { text, citationIds: [] };
+  }
+
+  const ids = (match[2] ?? "")
+    .split(/[,\s]+/)
+    .map((id) => id.replace(/^[\[(]|[\])]$/g, "").trim())
+    .filter((id) => id.length > 0 && id.length <= 80);
+
+  const stripped = text.replace(FOOTER_RE, "").trimEnd();
+  return { text: stripped, citationIds: ids };
 }
 
 export function coerceNativeSafeChatResult(
@@ -178,7 +218,7 @@ export function coerceNativeSafeChatResult(
   providerName: string
 ): SafeChatResult {
   if (typeof nativeResult === "string") {
-    const text = sanitizeAssistantText(nativeResult);
+    const { text } = extractCitationFooter(sanitizeAssistantText(nativeResult));
     return {
       status: text ? "ok" : "refused",
       text,
@@ -188,11 +228,14 @@ export function coerceNativeSafeChatResult(
     };
   }
 
-  const text = sanitizeAssistantText(nativeResult.text ?? "");
+  const { text, citationIds: footerIds } = extractCitationFooter(sanitizeAssistantText(nativeResult.text ?? ""));
+  const citationIds = Array.isArray(nativeResult.citationIds)
+    ? Array.from(new Set([...nativeResult.citationIds, ...footerIds]))
+    : footerIds;
   return {
     status: nativeResult.status === "refused" || !text ? "refused" : "ok",
     text,
-    citationIds: Array.isArray(nativeResult.citationIds) ? nativeResult.citationIds : [],
+    citationIds,
     providerId,
     providerName
   };

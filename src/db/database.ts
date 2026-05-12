@@ -1,6 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import type { SQLiteDatabase } from "expo-sqlite";
 
+import { scheduleChunkEmbeddingBackfill } from "./chunkEmbeddingBackfill";
 import { runMigrations } from "./migrationRunner";
 import { seedDatabase } from "./seed";
 import { assertFts5Available } from "./ftsHealth";
@@ -13,6 +14,7 @@ async function openDatabase(): Promise<SQLiteDatabase> {
   await runMigrations(db);
   await seedDatabase(db);
   await assertFts5Available(db);
+  scheduleChunkEmbeddingBackfill(db);
   return db;
 }
 

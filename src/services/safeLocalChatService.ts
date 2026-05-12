@@ -23,7 +23,9 @@ import { buildSafeRetryQuestion, looksLikeGenericSafetyRefusal } from "./modelRe
 import { classifyStudentQuestionIntent, type StudentQuestionIntent } from "./questionIntentService";
 import { buildUnsafeRequestMessageForCategory } from "./refusalResponseBuilder";
 import { detectReplyLanguage, replyLanguageInstruction } from "./replyLanguageService";
-import { sourceChunksForSafeChat, type SourceAnswerDraft } from "./sourceAnswerService";
+import type { SourceAnswerDraft } from "./sourceAnswerService";
+import { sourceChunksForSafeChat } from "./sourceChunkAdapter";
+import { formatConversationState } from "./conversationStateService";
 
 export function buildUnsafeRequestMessage(question: string): string {
   const intent = classifyStudentQuestionIntent(question);
@@ -45,11 +47,16 @@ function canUseSafeFallback(intent: StudentQuestionIntent): intent is Extract<
 }
 
 const APP_CONTEXT =
-  "Haki is an offline student assistant with a ChatGPT-like chat experience. The local SQLite university knowledge base is the source of truth for university-specific facts. General safe questions may be answered directly by the local on-device model, but official university details should come from retrieved saved sources or be verified with the relevant office.";
+  "You are Haki. The default campus is Technological University of the Philippines - Taguig (TUPT) in Taguig City, Metro Manila, Philippines. Help TUPT students with campus questions, study advice, and safe general knowledge. For TUPT-specific answers, use the provided source context when available. Never invent another university, country, campus building, office, deadline, fee, residence hall, website, or source.";
 
 function appContextForQuestion(question: string, options: SafeLocalChatOptions): string {
   const language = options.intent?.language ?? detectReplyLanguage(options.originalQuestion ?? question);
-  return `${APP_CONTEXT}\n${replyLanguageInstruction(language)}`;
+  const hasSourceContext = Boolean(options.sourceDraft?.results.length);
+  const conversationState = formatConversationState(options.conversationState);
+  const groundingInstruction = hasSourceContext
+    ? "When university source context is provided, base your TUPT-related answer on it. Do not contradict the sources. If sources are marked 'weak or uncertain', acknowledge that and suggest verifying with the relevant office."
+    : "";
+  return [APP_CONTEXT, groundingInstruction, conversationState, replyLanguageInstruction(language)].filter(Boolean).join("\n");
 }
 
 function toSafeChatResponse(input: {
@@ -63,6 +70,7 @@ function toSafeChatResponse(input: {
   reliable?: boolean;
   results?: SearchResult[] | undefined;
   topResult?: SearchResult | undefined;
+  isIncomplete?: boolean;
 }): SearchResponse {
   return {
     question: input.question,
@@ -75,16 +83,21 @@ function toSafeChatResponse(input: {
     answerText: input.answerText,
     citationsUsed: input.citationsUsed ?? [],
     provenance: input.provenance,
-    activeMode: input.mode
+    activeMode: input.mode,
+    ...(input.isIncomplete !== undefined ? { isIncomplete: input.isIncomplete } : {})
   };
 }
 
 export interface SafeLocalChatOptions {
   conversationContext?: SearchOptions["conversationContext"];
+  conversationState?: SearchOptions["conversationState"];
   intent?: StudentQuestionIntent;
   onToken?: SearchOptions["onToken"];
   originalQuestion?: string;
+  profileContext?: SearchOptions["profileContext"];
   sourceDraft?: SourceAnswerDraft;
+  taskContext?: string;
+  abortSignal?: AbortSignal;
 }
 
 function filterCitationIds(result: SafeChatResult, sourceDraft: SourceAnswerDraft | undefined): string[] {
@@ -133,9 +146,13 @@ async function runLocalSafeChat(
       ...(preferredModelTier ? { preferredModelTier } : {}),
       appContext: appContextForQuestion(question, options),
       ...(options.conversationContext?.length ? { conversationContext: options.conversationContext } : {}),
-      ...(options.sourceDraft?.results.length ? { sourceContext: sourceChunksForSafeChat(options.sourceDraft.results) } : {}),
+      ...(options.profileContext ? { profileContext: options.profileContext } : {}),
+      ...(options.sourceDraft?.results.length ? { sourceContext: sourceChunksForSafeChat(options.sourceDraft.results, preferredModelTier) } : {}),
       ...(options.sourceDraft ? { sourceConfidence: options.sourceDraft.confidence } : {}),
-      ...(options.sourceDraft ? { sourceReliable: options.sourceDraft.reliable } : {})
+      ...(options.sourceDraft ? { sourceReliable: options.sourceDraft.reliable } : {}),
+      ...(options.taskContext ? { taskContext: options.taskContext } : {}),
+      ...(options.intent?.type === "safe_question" ? { scenario: options.intent.scenario, capability: options.intent.capability } : {}),
+      ...(options.abortSignal ? { abortSignal: options.abortSignal } : {})
     };
     const result =
       options.onToken && summaryProvider.streamSafeChat
@@ -237,7 +254,8 @@ export async function answerSafeLocalChatWithContext(
       mode: localAnswer.mode,
       provenance: "Answered with local safe chat",
       results: sourceResults,
-      topResult: sourceDraft?.topResult
+      topResult: sourceDraft?.topResult,
+      isIncomplete: localAnswer.result.status === "incomplete"
     });
   }
 

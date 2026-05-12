@@ -9,11 +9,14 @@ export const synonymMap: Record<string, string[]> = {
   clearance: ["sign-off", "requirements", "accountability"],
   enrollment: ["registration", "admission"],
   id: ["identification card", "student card"],
+  lose: ["lost", "missing", "replacement", "damaged"],
+  lost: ["lose", "missing", "replacement", "damaged"],
+  missing: ["lost", "replacement"],
   nstp: ["national service training program"],
   pe: ["physical education"],
   accounting: ["finance", "payment", "cashier"],
   registrar: ["records", "student files"],
-  hurt: ["injury", "injured", "first aid", "clinic", "medical"],
+  hurt: ["injury", "injured", "first aid", "clinic", "medical", "regular medical consultation"],
   injured: ["injury", "hurt", "first aid", "clinic", "medical"],
   sick: ["clinic", "medical", "health"],
   fainted: ["faint", "clinic", "medical emergency"],
@@ -23,7 +26,23 @@ export const synonymMap: Record<string, string[]> = {
   counseling: ["guidance", "counselor"],
   org: ["organization", "club", "student affairs"],
   orgs: ["organizations", "clubs", "student affairs"],
-  canteen: ["cafeteria", "dining", "food"]
+  canteen: ["cafeteria", "dining", "food"],
+  // ── TUP-specific office acronyms ──────────────────────────────────────
+  // Keep these matched to the official office names indexed in the corpus.
+  csso: ["student services", "student services office", "scholarship", "student welfare"],
+  osa: ["student affairs", "office of student affairs"],
+  osas: ["student affairs and services", "office of student affairs"],
+  rgso: ["registrar", "registrar's office", "records office"],
+  ird: ["instructional resources", "instruction research"],
+  its: ["information technology services", "it services"],
+  // ── Campuses ──────────────────────────────────────────────────────────
+  tup: ["technological university of the philippines", "tupt", "tup manila", "tup taguig"],
+  tupt: ["tup taguig", "technological university of the philippines taguig"],
+  // ── Common student terms ──────────────────────────────────────────────
+  tuition: ["tuition fee", "tuition fees", "fee", "fees", "matricula"],
+  fee: ["fees", "tuition", "tuition fee", "miscellaneous fee"],
+  units: ["unit", "credit unit", "credit hours"],
+  schedule: ["schedules", "class schedule", "timetable", "block schedule"]
 };
 
 /**
