@@ -214,7 +214,7 @@ export default function ChatScreen() {
 
     const intervalId = setInterval(() => {
       setLoadingLineIndex((current) => (current + 1) % HAKI_LOADING_LINES.length);
-    }, 2000);
+    }, 1000);
 
     return () => clearInterval(intervalId);
   }, [loading, pendingQuestion, streaming]);
