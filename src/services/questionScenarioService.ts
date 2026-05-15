@@ -38,6 +38,7 @@ const STRONG_SOURCE_CONTEXT_PATTERNS = [
   /\b(student handbook|policy|policies|rules?|guidelines?|official document|memo|memorandum)\b/i,
   /\b(enrollment|registrar|clinic|accounting|cashier|library|guidance|osa|student affairs|canteen|cafeteria|office|department)\b/i,
   /\b(id|cor|certificate|clearance|scholarship|tuition|grades|records|permit|uniform|violation|discipline|shift|shifting)\b/i,
+  /\b(gmc|good moral|good moral character|good moral certificate|certificate of good moral|moral character)\b/i,
   /\b(orgs?|organizations?|council)\b/i,
   /\b(feedback|complaints?|complainant|public assistance|complaints desk|customer feedback)\b/i,
   /\b(deadline|schedule)\b/i
@@ -113,6 +114,11 @@ const GUIDANCE_WELLBEING_PATTERNS = [
 const FEEDBACK_COMPLAINT_PATTERNS = [
   /\b(feedback|complaints?|complainant|complaints desk|customer feedback|public assistance)\b/i,
   /\b(file|send|submit|process|processed|handle|report)\b.*\b(complaints?|feedback)\b/i
+];
+
+const GOOD_MORAL_PATTERNS = [
+  /\b(good moral|good moral character|good moral certificate|gmc|certificate of good moral|moral character)\b/i,
+  /\b(request|get|secure|apply|process|procedure|requirements?)\b.*\b(good moral|good moral certificate|gmc|moral character)\b/i
 ];
 
 const REGISTRAR_PATTERNS = [
@@ -221,6 +227,7 @@ export function classifyQuestionScenario(question: string): QuestionScenario {
   if (matchesAny(normalized, ADVERSARIAL_PATTERNS)) return "adversarial";
   if (matchesAny(normalized, LOST_ID_PATTERNS)) return "student_admin";
   if (matchesAny(normalized, FEEDBACK_COMPLAINT_PATTERNS)) return "student_admin";
+  if (matchesAny(normalized, GOOD_MORAL_PATTERNS)) return "student_admin";
   if (matchesAny(normalized, HEALTH_SAFETY_PATTERNS) || matchesAny(normalized, GUIDANCE_WELLBEING_PATTERNS)) {
     return "wellbeing_safety";
   }
@@ -276,6 +283,7 @@ export function classifyRouteForScenario(question: string, scenario: QuestionSce
 export function sourceScopeForQuestionScenario(question: string, scenario: QuestionScenario): SourceScope | undefined {
   if (matchesAny(question, LOST_ID_PATTERNS)) return { office: "Student Affairs" };
   if (matchesAny(question, FEEDBACK_COMPLAINT_PATTERNS)) return { documentId: "tup_taguig_feedback_complaints" };
+  if (matchesAny(question, GOOD_MORAL_PATTERNS)) return { office: "Student Affairs" };
 
   const scopeMatches = [
     matchesAny(question, HEALTH_SAFETY_PATTERNS),

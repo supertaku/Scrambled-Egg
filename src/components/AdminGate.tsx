@@ -53,7 +53,7 @@ export function AdminGate({ children, label = "This section is available in admi
       <View style={styles.card}>
         <LockKeyhole color={colors.maroon} size={24} />
         <Text style={styles.title}>Admin mode required</Text>
-        <Text style={styles.text}>{label} Go to Chat and enter the admin code by tapping Haki.</Text>
+        <Text style={styles.text}>{label} Open the Haki mascot admin prompt to unlock document tools.</Text>
       </View>
     );
   }

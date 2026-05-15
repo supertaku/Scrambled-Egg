@@ -1,12 +1,16 @@
-import { StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 
 import { colors } from "@/theme/colors";
 
 export function SettingsPreferencesSection({
   autoSendVoice,
+  clearingMemory,
+  onClearChatMemory,
   onToggleAutoSendVoice
 }: {
   autoSendVoice: boolean;
+  clearingMemory?: boolean;
+  onClearChatMemory?: () => void;
   onToggleAutoSendVoice: (value: boolean) => void;
 }) {
   return (
@@ -26,6 +30,29 @@ export function SettingsPreferencesSection({
           value={autoSendVoice}
         />
       </View>
+      {onClearChatMemory ? (
+        <View style={styles.settingRow}>
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>Clear local chat memory</Text>
+            <Text style={styles.settingDesc}>
+              Removes saved recent questions and reusable answer memories from this device.
+            </Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Clear local chat memory"
+            accessibilityRole="button"
+            disabled={clearingMemory}
+            onPress={onClearChatMemory}
+            style={({ pressed }) => [
+              styles.clearButton,
+              clearingMemory ? styles.clearButtonDisabled : undefined,
+              pressed ? styles.clearButtonPressed : undefined
+            ]}
+          >
+            <Text style={styles.clearButtonText}>{clearingMemory ? "Clearing" : "Clear"}</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -65,5 +92,26 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     lineHeight: 16
+  },
+  clearButton: {
+    alignItems: "center",
+    backgroundColor: colors.dangerSoft,
+    borderColor: "#FDA29B",
+    borderRadius: 12,
+    borderWidth: 1,
+    minHeight: 42,
+    justifyContent: "center",
+    paddingHorizontal: 14
+  },
+  clearButtonDisabled: {
+    opacity: 0.55
+  },
+  clearButtonPressed: {
+    opacity: 0.7
+  },
+  clearButtonText: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "900"
   }
 });

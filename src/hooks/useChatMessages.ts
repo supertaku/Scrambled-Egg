@@ -176,8 +176,6 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
     const hasPriorTurns = messageSnapshot.some((m) => m.id !== "opening" && m.text.trim().length > 0);
     const isFollowUp = isFollowUpQuestion(question, hasPriorTurns);
     const localConversationContext = isFollowUp ? buildConversationContext(messageSnapshot) : [];
-    const relatedConversationContext = await getRelatedConversationContext(question, intent).catch(() => []);
-    const conversationContext = mergeChatContext(relatedConversationContext, localConversationContext);
     const conversationState = buildConversationState({ intent, messages: messageSnapshot, question });
     let streamedMessageId: string | null = null;
 
@@ -204,6 +202,8 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
     void saveRecentQuestion(question).catch(() => undefined);
 
     try {
+      const relatedConversationContext = await getRelatedConversationContext(question, intent).catch(() => []);
+      const conversationContext = mergeChatContext(relatedConversationContext, localConversationContext);
       const arithmeticAnswer = buildArithmeticFollowUpAnswer(question, messageSnapshot);
       let response: SearchResponse;
 

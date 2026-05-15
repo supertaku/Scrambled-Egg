@@ -1,8 +1,9 @@
+import { useEffect, useRef } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { colors } from "@/theme/colors";
 import { AdminUnlockModal } from "./AdminUnlockModal";
-import { mascotImages, mascotTurnaroundImage, type MascotStatus } from "./mascot/mascotConfig";
+import { mascotImages, type MascotStatus } from "./mascot/mascotConfig";
 import { useMascotInteraction } from "./mascot/useMascotInteraction";
 
 export type { MascotStatus } from "./mascot/mascotConfig";
@@ -29,10 +30,31 @@ export function MascotHeader({
     isGroggy,
     resolvedMessage,
     resolvedStatus,
-    showAdminModal,
-    turnaroundVisible
+    showAdminModal
   } = useMascotInteraction({ message, onAdminRequest: onMascotPress, status });
-  const mascotSource = turnaroundVisible ? mascotTurnaroundImage : mascotImages[resolvedStatus] ?? mascotImages.idle;
+  const mascotSource = mascotImages[resolvedStatus] ?? mascotImages.idle;
+
+  // Gentle idle breathing animation
+  const breathAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const breathe = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathAnim, {
+          toValue: 1.025,
+          duration: 2200,
+          useNativeDriver: true
+        }),
+        Animated.timing(breathAnim, {
+          toValue: 1,
+          duration: 2200,
+          useNativeDriver: true
+        })
+      ])
+    );
+    breathe.start();
+    return () => breathe.stop();
+  }, [breathAnim]);
 
   return (
     <View style={styles.container}>
@@ -46,9 +68,9 @@ export function MascotHeader({
         delayLongPress={450}
         style={styles.mascotWrap}
       >
-        <Animated.Image 
-          source={mascotSource} 
-          style={[styles.mascotImage, { transform: imageTransform }]} 
+        <Animated.Image
+          source={mascotSource}
+          style={[styles.mascotImage, { transform: [...imageTransform, { scale: breathAnim }] }]}
           resizeMode="contain"
         />
       </Pressable>
@@ -56,10 +78,12 @@ export function MascotHeader({
       {resolvedMessage ? (
         <Animated.View style={[styles.speechBubbleWrap, { transform: [{ scale: bubbleScale }] }]}>
           <View style={styles.speechBubble}>
+            <View pointerEvents="none" style={styles.speechBubbleTailBorder} />
+            <View pointerEvents="none" style={styles.speechBubbleTail} />
             <Text style={styles.hakiName}>Haki</Text>
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-            <ScrollView 
-              style={styles.speechScroll} 
+            <ScrollView
+              style={styles.speechScroll}
               contentContainerStyle={styles.speechScrollContent}
               showsVerticalScrollIndicator={false}
               nestedScrollEnabled
@@ -121,28 +145,57 @@ const styles = StyleSheet.create({
   },
   speechBubble: {
     backgroundColor: colors.white,
-    borderColor: colors.maroonSoft,
-    borderRadius: 14,
-    borderWidth: 1,
-    elevation: 3,
+    borderColor: colors.ink,
+    borderRadius: 18,
+    borderTopLeftRadius: 8,
+    borderWidth: 1.5,
+    elevation: 4,
     maxWidth: "100%",
     minWidth: 0,
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
     paddingVertical: 12,
     position: "relative",
     shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
-    shadowRadius: 8,
+    shadowRadius: 12,
     zIndex: 2
+  },
+  speechBubbleTailBorder: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 13,
+    borderRightColor: colors.ink,
+    borderRightWidth: 18,
+    borderTopColor: "transparent",
+    borderTopWidth: 13,
+    height: 0,
+    left: -18,
+    position: "absolute",
+    top: 44,
+    width: 0,
+    zIndex: 1
+  },
+  speechBubbleTail: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 11,
+    borderRightColor: colors.white,
+    borderRightWidth: 16,
+    borderTopColor: "transparent",
+    borderTopWidth: 11,
+    height: 0,
+    left: -14,
+    position: "absolute",
+    top: 46,
+    width: 0,
+    zIndex: 3
   },
   hakiName: {
     color: colors.maroon,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "900",
     marginBottom: 4,
     textTransform: "uppercase",
-    letterSpacing: 0.5
+    letterSpacing: 0.8
   },
   subtitle: {
     color: colors.muted,

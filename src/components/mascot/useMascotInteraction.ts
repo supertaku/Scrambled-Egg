@@ -6,9 +6,7 @@ import {
   DOUBLE_TAP_DELAY_MS,
   GROGGY_DIALOGUE,
   GROGGY_RECOVERY_MS,
-  IDLE_TURN_INTERVAL_MS,
   SLEEPING_DIALOGUE,
-  TURNAROUND_VISIBLE_MS,
   WAKE_DIALOGUE,
   WAKE_DIALOGUE_VISIBLE_MS,
   type InteractiveMascotState,
@@ -29,7 +27,6 @@ export function useMascotInteraction({ message, onAdminRequest, status }: UseMas
   const [interactiveState, setInteractiveState] = useState<InteractiveMascotState>("awake");
   const [wakeDialogueVisible, setWakeDialogueVisible] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
-  const [turnaroundVisible, setTurnaroundVisible] = useState(false);
   const floatY = useRef(new Animated.Value(0)).current;
   const tapScale = useRef(new Animated.Value(1)).current;
   const groggyShake = useRef(new Animated.Value(0)).current;
@@ -37,7 +34,6 @@ export function useMascotInteraction({ message, onAdminRequest, status }: UseMas
   // Subsequent message changes still animate in via the spring effect below.
   const bubbleScale = useRef(new Animated.Value(message ? 1 : 0)).current;
   const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const turnaroundTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wakeDialogueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const groggyRecoveryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAccelerationRef = useRef<{ x: number; y: number; z: number } | null>(null);
@@ -137,9 +133,6 @@ export function useMascotInteraction({ message, onAdminRequest, status }: UseMas
       if (singleTapTimer.current) {
         clearTimeout(singleTapTimer.current);
       }
-      if (turnaroundTimer.current) {
-        clearTimeout(turnaroundTimer.current);
-      }
       if (wakeDialogueTimer.current) {
         clearTimeout(wakeDialogueTimer.current);
       }
@@ -159,27 +152,6 @@ export function useMascotInteraction({ message, onAdminRequest, status }: UseMas
     }).start();
   }, [tapScale]);
 
-  const hideTurnaroundLater = useCallback(() => {
-    if (turnaroundTimer.current) {
-      clearTimeout(turnaroundTimer.current);
-    }
-
-    turnaroundTimer.current = setTimeout(() => {
-      setTurnaroundVisible(false);
-    }, TURNAROUND_VISIBLE_MS);
-  }, []);
-
-  const runIdleTurnaround = useCallback(() => {
-    if (interactiveState !== "awake") {
-      return;
-    }
-
-    setWakeDialogueVisible(false);
-    setTurnaroundVisible(true);
-    runTapBounce();
-    hideTurnaroundLater();
-  }, [hideTurnaroundLater, interactiveState, runTapBounce]);
-
   const clearWakeDialogueLater = useCallback(() => {
     if (wakeDialogueTimer.current) {
       clearTimeout(wakeDialogueTimer.current);
@@ -191,7 +163,6 @@ export function useMascotInteraction({ message, onAdminRequest, status }: UseMas
   }, []);
 
   const triggerGroggy = useCallback(() => {
-    setTurnaroundVisible(false);
     setWakeDialogueVisible(false);
     setInteractiveState("groggy");
     runTapBounce();
@@ -204,15 +175,6 @@ export function useMascotInteraction({ message, onAdminRequest, status }: UseMas
       setInteractiveState("awake");
     }, GROGGY_RECOVERY_MS);
   }, [runTapBounce]);
-
-  useEffect(() => {
-    if (interactiveState !== "awake") {
-      return;
-    }
-
-    const intervalId = setInterval(runIdleTurnaround, IDLE_TURN_INTERVAL_MS);
-    return () => clearInterval(intervalId);
-  }, [interactiveState, runIdleTurnaround]);
 
   useEffect(() => {
     let active = true;
@@ -254,12 +216,12 @@ export function useMascotInteraction({ message, onAdminRequest, status }: UseMas
   }, [triggerGroggy]);
 
   const handleSingleTap = useCallback(() => {
-    runIdleTurnaround();
-  }, [runIdleTurnaround]);
+    setWakeDialogueVisible(false);
+    runTapBounce();
+  }, [runTapBounce]);
 
   const handleDoubleTap = useCallback(() => {
     runTapBounce();
-    setTurnaroundVisible(false);
 
     if (interactiveState === "sleeping") {
       setInteractiveState("awake");
@@ -331,7 +293,6 @@ export function useMascotInteraction({ message, onAdminRequest, status }: UseMas
     isGroggy,
     resolvedMessage,
     resolvedStatus,
-    showAdminModal,
-    turnaroundVisible
+    showAdminModal
   };
 }

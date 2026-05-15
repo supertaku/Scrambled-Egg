@@ -1,3 +1,16 @@
+/**
+ * @file canteenStores.ts
+ * @description List of canteen stalls and their menus available on campus.
+ *
+ * HOW TO REPLACE WITH REAL DATA
+ * ─────────────────────────────
+ * 1. Keep the `FoodItem` and `CanteenStore` interfaces to ensure the UI renders correctly.
+ * 2. Replace the `canteenStores` array with verified stall and menu data.
+ * 3. `id` for each store must be unique and used as the slug for navigation.
+ * 4. This data is currently bundled with the app; to make it dynamic, fetch it from
+ *    a remote API and update the Canteen screen to use a loading state.
+ */
+
 export interface FoodItem {
   id: string;
   name: string;

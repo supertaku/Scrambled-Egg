@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { useFocusEffect } from "expo-router";
-import { BookOpenText, RefreshCw } from "lucide-react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { BookOpenText, FilePlus, RefreshCw } from "lucide-react-native";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -12,6 +12,7 @@ import { colors } from "@/theme/colors";
 import type { DocumentSummary } from "@/types/document";
 
 export default function DocumentsScreen() {
+  const router = useRouter();
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +47,19 @@ export default function DocumentsScreen() {
               <BookOpenText color={colors.maroon} size={22} />
               <Text style={styles.title}>Local documents</Text>
             </View>
-            <Pressable accessibilityRole="button" onPress={loadDocuments} style={styles.refreshButton}>
-              <RefreshCw color={colors.maroon} size={18} />
-            </Pressable>
+            <View style={styles.toolbarActions}>
+              <Pressable
+                accessibilityLabel="Import source document JSON"
+                accessibilityRole="button"
+                onPress={() => router.push("/add-document")}
+                style={styles.refreshButton}
+              >
+                <FilePlus color={colors.maroon} size={18} />
+              </Pressable>
+              <Pressable accessibilityLabel="Refresh documents" accessibilityRole="button" onPress={loadDocuments} style={styles.refreshButton}>
+                <RefreshCw color={colors.maroon} size={18} />
+              </Pressable>
+            </View>
           </View>
 
           {loading ? (
@@ -125,6 +136,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 10
+  },
+  toolbarActions: {
+    flexDirection: "row",
+    gap: 8
   },
   title: {
     color: colors.ink,

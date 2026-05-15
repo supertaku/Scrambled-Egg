@@ -1,5 +1,5 @@
-import { memo } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { memo, useEffect, useRef } from "react";
+import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { RefreshCw, ThumbsDown, ThumbsUp, User as UserIcon } from "lucide-react-native";
 
 import { colors } from "@/theme/colors";
@@ -24,8 +24,27 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
   const helpfulSelected = message.feedbackRating === "helpful";
   const wrongSelected = message.feedbackRating === "wrong";
 
+  // Entry animation per bubble
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.94)).current;
+  const slideAnim = useRef(new Animated.Value(8)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 8, tension: 120, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 9, tension: 100, useNativeDriver: true })
+    ]).start();
+  }, [fadeAnim, scaleAnim, slideAnim]);
+
   return (
-    <View style={[styles.messageRow, fromUser ? styles.userRow : styles.hakiRow]}>
+    <Animated.View
+      style={[
+        styles.messageRow,
+        fromUser ? styles.userRow : styles.hakiRow,
+        { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }] }
+      ]}
+    >
       {!fromUser && (
         <View style={styles.hakiAvatarContainer}>
           <Image
@@ -36,8 +55,14 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
         </View>
       )}
 
-      <View style={styles.bubbleContent}>
+      <View style={[styles.bubbleContent, fromUser ? styles.userBubbleContent : styles.hakiBubbleContent]}>
         <View style={[styles.bubble, fromUser ? styles.userBubble : styles.hakiBubble]}>
+          {!fromUser ? (
+            <>
+              <View pointerEvents="none" style={styles.hakiBubbleTailBorder} />
+              <View pointerEvents="none" style={styles.hakiBubbleTail} />
+            </>
+          ) : null}
           {!fromUser ? <Text style={styles.senderName}>Haki</Text> : null}
           <Text style={[styles.messageText, fromUser ? styles.userMessageText : styles.hakiMessageText]}>
             {message.text}
@@ -48,14 +73,7 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
           {onContinue ? (
             <View style={styles.continueContainer}>
               <Text style={styles.continueText}>Response stopped. Continue?</Text>
-              <Pressable
-                accessibilityLabel="Continue the response"
-                accessibilityRole="button"
-                onPress={onContinue}
-                style={({ pressed }) => [styles.continueButton, pressed ? styles.continueButtonPressed : undefined]}
-              >
-                <Text style={styles.continueButtonText}>Continue</Text>
-              </Pressable>
+              <ContinueButton onPress={onContinue} />
             </View>
           ) : null}
         </View>
@@ -75,32 +93,18 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
 
         {canGiveFeedback ? (
           <View style={styles.feedbackRow}>
-            <Pressable
-              accessibilityLabel={helpfulSelected ? "Marked as helpful" : "Mark Haki response as helpful"}
-              accessibilityRole="button"
-              hitSlop={8}
+            <FeedbackButton
+              label={helpfulSelected ? "Marked as helpful" : "Mark Haki response as helpful"}
+              selected={helpfulSelected}
               onPress={() => onFeedback?.(message.id, "helpful")}
-              style={({ pressed }) => [
-                styles.feedbackButton,
-                helpfulSelected ? styles.feedbackButtonSelected : undefined,
-                pressed ? styles.feedbackButtonPressed : undefined
-              ]}
-            >
-              <ThumbsUp color={helpfulSelected ? colors.maroon : colors.muted} size={14} />
-            </Pressable>
-            <Pressable
-              accessibilityLabel={wrongSelected ? "Marked as wrong" : "Mark Haki response as wrong"}
-              accessibilityRole="button"
-              hitSlop={8}
+              icon={<ThumbsUp color={helpfulSelected ? colors.maroon : colors.muted} size={13} />}
+            />
+            <FeedbackButton
+              label={wrongSelected ? "Marked as wrong" : "Mark Haki response as wrong"}
+              selected={wrongSelected}
               onPress={() => onFeedback?.(message.id, "wrong")}
-              style={({ pressed }) => [
-                styles.feedbackButton,
-                wrongSelected ? styles.feedbackButtonSelected : undefined,
-                pressed ? styles.feedbackButtonPressed : undefined
-              ]}
-            >
-              <ThumbsDown color={wrongSelected ? colors.maroon : colors.muted} size={14} />
-            </Pressable>
+              icon={<ThumbsDown color={wrongSelected ? colors.maroon : colors.muted} size={13} />}
+            />
           </View>
         ) : null}
       </View>
@@ -110,11 +114,74 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
           {userAvatarUri ? (
             <Image resizeMode="cover" source={{ uri: userAvatarUri }} style={styles.userAvatarImage} />
           ) : (
-            <UserIcon color={colors.white} size={18} />
+            <UserIcon color={colors.white} size={17} />
           )}
         </View>
       )}
-    </View>
+    </Animated.View>
+  );
+}
+
+function FeedbackButton({
+  label,
+  selected,
+  onPress,
+  icon
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  icon: React.ReactNode;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () =>
+    Animated.spring(scale, { toValue: 0.85, useNativeDriver: true, friction: 6, tension: 200 }).start();
+  const handlePressOut = () =>
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 5, tension: 160 }).start();
+
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      hitSlop={8}
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+    >
+      <Animated.View
+        style={[
+          styles.feedbackButton,
+          selected ? styles.feedbackButtonSelected : undefined,
+          { transform: [{ scale }] }
+        ]}
+      >
+        {icon}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function ContinueButton({ onPress }: { onPress: () => void }) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () =>
+    Animated.spring(scale, { toValue: 0.95, useNativeDriver: true, friction: 7, tension: 200 }).start();
+  const handlePressOut = () =>
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 5, tension: 160 }).start();
+
+  return (
+    <Pressable
+      accessibilityLabel="Continue the response"
+      accessibilityRole="button"
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+    >
+      <Animated.View style={[styles.continueButton, { transform: [{ scale }] }]}>
+        <Text style={styles.continueButtonText}>Continue</Text>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -124,7 +191,7 @@ const styles = StyleSheet.create({
   messageRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    marginBottom: 16,
+    marginBottom: 14,
     gap: 8
   },
   hakiRow: {
@@ -142,7 +209,12 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden"
+    overflow: "hidden",
+    shadowColor: colors.gold,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3
   },
   hakiAvatar: {
     width: 34,
@@ -164,29 +236,75 @@ const styles = StyleSheet.create({
     width: "100%"
   },
   bubbleContent: {
-    maxWidth: "82%",
+    maxWidth: "82%"
+  },
+  hakiBubbleContent: {
+    alignItems: "flex-start"
+  },
+  userBubbleContent: {
     alignItems: "flex-end"
   },
   bubble: {
     borderRadius: 20,
     paddingHorizontal: 14,
-    paddingVertical: 10
+    paddingVertical: 11,
+    position: "relative"
   },
   hakiBubble: {
     backgroundColor: colors.white,
-    borderColor: colors.border,
+    borderBottomLeftRadius: 9,
+    borderColor: colors.borderStrong,
     borderWidth: 1,
-    alignSelf: "flex-start"
+    alignSelf: "flex-start",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2
+  },
+  hakiBubbleTailBorder: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 8,
+    borderRightColor: colors.borderStrong,
+    borderRightWidth: 12,
+    borderTopColor: "transparent",
+    borderTopWidth: 8,
+    bottom: 9,
+    height: 0,
+    left: -12,
+    position: "absolute",
+    width: 0,
+    zIndex: 1
+  },
+  hakiBubbleTail: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 7,
+    borderRightColor: colors.white,
+    borderRightWidth: 10,
+    borderTopColor: "transparent",
+    borderTopWidth: 7,
+    bottom: 10,
+    height: 0,
+    left: -9,
+    position: "absolute",
+    width: 0,
+    zIndex: 2
   },
   userBubble: {
     backgroundColor: colors.maroon,
-    alignSelf: "flex-end"
+    alignSelf: "flex-end",
+    shadowColor: colors.maroon,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    elevation: 3
   },
   senderName: {
     color: colors.maroon,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "900",
-    marginBottom: 3
+    marginBottom: 3,
+    letterSpacing: 0.5
   },
   messageText: {
     fontSize: 14,
@@ -214,27 +332,28 @@ const styles = StyleSheet.create({
   userMessageError: {
     color: colors.goldSoft,
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "800"
   },
   feedbackRow: {
     alignSelf: "flex-start",
     flexDirection: "row",
     gap: 6,
     marginLeft: 4,
-    marginTop: 6
+    marginTop: 8
   },
   feedbackButton: {
     alignItems: "center",
     borderRadius: 999,
-    height: 28,
+    height: 30,
     justifyContent: "center",
-    width: 28
-  },
-  feedbackButtonPressed: {
-    opacity: 0.65
+    width: 30,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border
   },
   feedbackButtonSelected: {
-    backgroundColor: colors.maroonSoft
+    backgroundColor: colors.maroonSoft,
+    borderColor: "#E8C7D0"
   },
   continueContainer: {
     marginTop: 12,
@@ -242,7 +361,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     alignItems: "center",
-    gap: 6
+    gap: 8
   },
   continueText: {
     fontSize: 12,
@@ -252,11 +371,10 @@ const styles = StyleSheet.create({
   continueButton: {
     backgroundColor: colors.maroonSoft,
     borderRadius: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 14
-  },
-  continueButtonPressed: {
-    opacity: 0.7
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#E8C7D0"
   },
   continueButtonText: {
     color: colors.maroon,

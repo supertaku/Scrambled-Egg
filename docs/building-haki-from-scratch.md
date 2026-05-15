@@ -15,6 +15,8 @@ Haki has four layers:
 3. Retrieval and answer layer: source search, confidence scoring, intent routing, safety routing, and response construction in `src/retrieval/` and `src/services/`.
 4. Local AI layer: provider interfaces, capability detection, native bridge adapters, prompt contracts, and model tier validation in `src/ai/`.
 
+The response layer now has one more load-bearing concept: the **Ability Router + Answer Contract**. `classifyStudentQuestionIntent` identifies the broad intent, then the answer contract decides whether the request is a `campus_source`, `student_support`, `general_fact`, `safety`, or `profile_app` answer. Official TUPT answers are source-first and deterministic. Student support and general conversation can use the local model when available. General facts are allowed, but Haki adds a short double-check notice because offline model facts can be wrong.
+
 The chat request path looks like this:
 
 ```mermaid
@@ -23,20 +25,25 @@ flowchart TD
   Chat --> Hook["useChatMessages"]
   Hook --> Answer["answerStudentQuestion"]
   Answer --> Intent["classifyStudentQuestionIntent"]
-  Intent --> Unsafe{"Unsafe?"}
+  Intent --> Contract["buildAnswerContract"]
+  Contract --> Unsafe{"Unsafe?"}
   Unsafe -->|yes| Refusal["refusalResponseBuilder"]
   Unsafe -->|no| Mode["getSelectedAIMode"]
-  Mode --> DB["SQLite + FTS5 health check"]
-  DB --> Route{"Source route?"}
+  Mode --> Special["deterministic special cases: profile, org, canteen, device, wellbeing"]
+  Special --> Route{"Contract ability?"}
   Route -->|yes| Retrieval["FTSRetriever, optional VectorRetriever, HybridRetriever"]
-  Route -->|no| SafeChat["Local safe chat or deterministic fallback"]
+  Route -->|student_support/general_fact| SafeChat["Local safe chat or deterministic fallback"]
+  Route -->|profile_app/special| SpecialAnswer["deterministic app response"]
   Retrieval --> Confidence["confidence scoring"]
-  Confidence --> Reliable{"Reliable source?"}
-  Reliable -->|yes| Summary["Optional local summarization"]
-  Reliable -->|no| General["Optional safe local chat or source miss fallback"]
-  Summary --> Response["SearchResponse"]
+  Confidence --> SourceDecision{"Reliable and unambiguous?"}
+  SourceDecision -->|yes| Official["deterministic official source answer"]
+  SourceDecision -->|ambiguous| Clarify["one short clarification"]
+  SourceDecision -->|no| SourceMiss["honest source-miss fallback"]
+  Official --> Response["SearchResponse"]
+  Clarify --> Response
+  SourceMiss --> Response
   SafeChat --> Response
-  General --> Response
+  SpecialAnswer --> Response
   Refusal --> Response
   Response --> Bubble["ChatMessageBubble"]
 ```
@@ -46,8 +53,8 @@ The same app can run in several modes:
 - FTS5-only source search.
 - Semantic search when a provider exposes embeddings.
 - Local safe chat when a provider exposes `answerSafeChat`.
-- Local summary when a provider can summarize retrieved source chunks.
-- Hybrid local AI when one provider can supply both embeddings and summarization.
+- Deterministic official-source answers for campus facts and procedures.
+- Hybrid local AI when one provider can supply both embeddings and safe chat.
 
 ## 2. Start The Expo Project
 
@@ -149,8 +156,8 @@ Expo Go can run the baseline JavaScript and FTS5 experience, but it cannot load 
 
 ```bash
 npx expo prebuild
-npm run android
-npm run ios
+npm.cmd run android
+npm.cmd run ios
 ```
 
 In this repo, `metro.config.js` also blocks generated Android build folders from Metro resolution. That matters because generated CMake and Gradle outputs can contain huge paths and native build files that Metro should never scan.
@@ -167,13 +174,15 @@ The chat screen is `app/chat.tsx`. It does four jobs:
 `useChatMessages` is the chat state owner:
 
 - Starts with a greeting.
-- Loads committed chat history from AsyncStorage and persists the latest committed messages.
+- Keeps the current chat session in memory and saves recent questions plus bounded conversation memory locally.
 - Rejects too-short messages.
-- Builds short conversation context from the last few turns.
+- Appends the user message immediately, then fetches persistent prior context only when it is related.
+- Builds short conversation context from the current turn plus related saved memory.
 - Calls `answerStudentQuestion`.
 - Supports token streaming through `onToken` with a separate streaming draft message.
 - Replaces streamed draft text with the final response payload.
 - Saves recent questions in local history.
+- Supports stopping an in-progress response through `AbortController`; user cancellation is not treated as a provider failure.
 - Marks failed messages and supports retry.
 
 The UI intentionally receives a single `SearchResponse` shape. Whether the answer came from FTS5, a deterministic fallback, a local model, a refusal builder, or a source-grounded summary, the chat bubble can still render text, citations, source cards, confidence, and provenance from the same response object.
@@ -181,6 +190,8 @@ The UI intentionally receives a single `SearchResponse` shape. Whether the answe
 ## 6. Local Data Model
 
 Haki's source of truth is structured JSON converted into SQLite rows.
+
+Most campus documents live in `src/data/seed-documents.json`. Canteen food/store data currently lives in `src/data/canteenStores.ts` and is labeled as Haki's official canteen sources for user testing. Replace that temporary data with imported verified source documents when the real canteen source material is ready.
 
 Each document has metadata:
 
@@ -237,7 +248,7 @@ At startup:
 
 1. `getDatabase()` opens `tupt_wiki.db`.
 2. `runMigrations()` enables WAL and foreign keys, then creates schema.
-3. `seedDatabase()` inserts `src/data/seed-documents.json` only when the database is empty.
+3. `seedDatabase()` inserts `src/data/seed-documents.json` on first run. When `SEED_VERSION` changes, it replaces only bundled seed document IDs and preserves admin-imported documents.
 4. `assertFts5Available()` verifies that FTS search can run.
 
 If FTS5 cannot initialize, Haki treats that as a startup failure. It does not try optional AI first because the source search fallback is the required baseline.
@@ -245,6 +256,8 @@ If FTS5 cannot initialize, Haki treats that as a startup failure. It does not tr
 ## 7. Document Import
 
 The admin import flow should be built on `documentImportService`.
+
+Admin mode exposes a saved document library and an import screen through Settings. Those routes are admin-only, and admin mode is cleared when the app process restarts or returns from the background so normal users do not reopen into admin tools accidentally.
 
 The import path is:
 
@@ -404,7 +417,7 @@ The selected mode records:
 - fallback reason when degraded
 - provenance label for answers
 
-If a provider fails during retrieval, summarization, safe chat, or embedding, Haki disables that provider for the rest of the session, clears the cached mode, and retries with a safer selection. This is the important mobile stability behavior: one native crash-prone provider should not poison the whole chat session when FTS5 can still answer source questions.
+If a provider fails during retrieval, summarization, safe chat, or embedding, Haki disables that provider for the rest of the session, clears the cached mode, and retries with a safer selection. User-initiated stop/cancel errors are excluded from that provider-failure path. This is the important mobile stability behavior: one native crash-prone provider should not poison the whole chat session when FTS5 can still answer source questions.
 
 ## 11. Device Modes
 
@@ -567,12 +580,22 @@ Its `summarizeFromSources` method simply returns the first source answer or cont
 
 ## 18. Prompt Contracts
 
-Haki uses two main instruction contracts.
+Haki uses three practical instruction contracts.
 
-Strict source summarization:
+Answer contract:
 
 ```text
-Using only the provided source chunks, write a concise answer for a student. Do not use outside knowledge. Do not guess. If the chunks do not contain enough information to answer the question, return NO_RELIABLE_ANSWER. Include the citation IDs used.
+Classify the request into one ability:
+- campus_source: official TUPT facts, offices, requirements, fees, procedures, canteen data, or campus processes.
+- student_support: advice, opinions, study help, student-life support, and normal conversation.
+- general_fact: safe factual questions outside the saved TUPT sources.
+- safety/profile_app: deterministic safety, profile, or app-specific handling.
+```
+
+Strict source rules:
+
+```text
+Answer only from the retrieved source chunks. Do not use outside knowledge. Do not guess. If the chunks do not contain enough information, ask one clarification question or say the answer is not in saved sources. Use concise mobile formatting and keep source cards as the citation layer.
 ```
 
 Safe local chat:
@@ -591,7 +614,7 @@ The full safe chat instruction lives in `src/ai/prompts.ts`. It is intentionally
 
 - answer safe general questions directly
 - provide coding help when safe
-- mirror English, Tagalog, or Taglish when practical
+- answer in English even when the user writes Tagalog or Taglish
 - use source context as authority for university-specific facts
 - avoid inventing fees, deadlines, room numbers, requirements, faculty names, policies, or procedures
 - refuse violence, self-harm methods, stalking, harassment, sexual exploitation, illegal activity, cheating, forged documents, credential theft, privacy invasion, malware, safety evasion, or manipulation
@@ -606,22 +629,25 @@ Native providers must not reveal prompt formatting, source context, system instr
 
 It does this:
 
-1. Classify the question intent.
+1. Classify the question intent and build an answer contract.
 2. Return a deterministic refusal for unsafe requests.
 3. Load selected AI mode.
-4. Apply source scope from intent when needed.
-5. Return deterministic image-generation guidance if the user asks for image generation.
+4. Return deterministic app/profile, device, organization, wellbeing, canteen, or image-generation responses when those special cases match.
+5. Apply source scope from intent when needed.
 6. Return quick deterministic responses for greetings, thanks, goodbye, basic math, capability discovery, clarification, and adversarial prompts.
-7. If no local safe chat exists:
+7. If the contract is `campus_source`:
+   - retrieve from SQLite
+   - reject mismatched results, such as Registrar document requests falling into OSA lost-ID chunks
+   - ask one short clarification for ambiguous process names, such as dental consultation vs treatment vs emergency treatment
+   - return a deterministic official-source answer when reliable
+   - say the answer is not in saved sources instead of guessing when unreliable
+8. If no local safe chat exists:
    - obvious general prompts use deterministic safe fallback responses
-   - source prompts retrieve from SQLite
-   - unreliable retrieval returns an honest source-miss fallback
-   - reliable retrieval returns source answer or deterministic summary/instructions
-8. If local safe chat exists:
+   - general facts use concise fallback text when possible
+9. If local safe chat exists:
    - obvious general prompts go straight to local safe chat
-   - source prompts retrieve first
-   - weak source results can fall back to safe local chat
-   - reliable source results are passed into local safe chat or summarization
+   - general facts include a short double-check notice
+   - official source prompts still prefer deterministic source answers
    - if local chat over-refuses, Haki retries with a clearer safe framing
 
 This is the key product behavior: Haki is not only a retrieval app and not only a chatbot. It routes between source-grounded answers, safe local chat, deterministic fallbacks, and refusals.
@@ -633,7 +659,7 @@ This is the key product behavior: Haki is not only a retrieval app and not only 
 - capability: university answer, summary, instruction, general advice, image generation
 - route: source context or obvious general
 - scenario: greeting, clinic, registrar, coding help, study advice, relationship advice, etc.
-- language: English, Tagalog, or Taglish
+- language signals, with final assistant replies kept in English
 - unsafe category when matched
 
 Unsafe categories include:
@@ -647,7 +673,7 @@ Unsafe categories include:
 - academic dishonesty
 - dangerous illegal activity
 
-Unsafe requests never go to retrieval or a local model first. Haki builds a deterministic category-specific refusal in English or Taglish. This keeps safety behavior stable even when local models are small, quantized, or inconsistent.
+Unsafe requests never go to retrieval or a local model first. Haki builds a deterministic category-specific refusal in English. This keeps safety behavior stable even when local models are small, quantized, or inconsistent.
 
 For safe prompts, deterministic scenario fallbacks prevent the app from becoming useless when local AI is unavailable. For example:
 
@@ -675,15 +701,24 @@ question
   -> source answer draft
 ```
 
-Then `buildSourceResponseFromDraft` decides:
+Then the source answer layer decides:
 
+- ambiguous process: ask one short clarification with concrete options
+- mismatched source: reject the result and continue searching or return source-miss
 - no reliable source: source-miss fallback
-- reliable source and no summary provider: top source answer/content
-- reliable source and summary provider: strict local summarization from top chunks
-- summary returns `NO_RELIABLE_ANSWER`: source-miss fallback
-- summary provider throws: disable provider, retry, then fall back to source answer
+- reliable source: build a deterministic official-source answer
+- repeated, drifting, or invented text: replace it with deterministic source text
 
-Source chunks passed to local summarization or safe chat are tier-aware. Tiny and minimum models receive fewer, shorter chunks; good/enhanced/flagship tiers receive progressively larger source budgets. The budget is based on both source count and estimated tokens, so a small model is not overloaded by a few long chunks.
+The current product policy is deterministic-first for official TUPT data on all tiers. This prevents small models from turning correct retrieved chunks into wrong offices, fake emails, invented portals, repeated sections, or unrelated procedures.
+
+Source answers are formatted for mobile:
+
+- Start with a short quick answer.
+- Use concise numbered steps, usually one line per step.
+- Show fees, requirements, contacts, or offices only when present in source data.
+- Keep source cards as the citation layer.
+
+The older local summarization hooks remain useful for future experiments, but official source answers should only be handed back to a model after citation allowlisting, repetition checks, and source-drift checks are strong enough to guarantee that unsupported claims are removed.
 
 ## 22. Asset Packaging
 
@@ -705,7 +740,7 @@ android/app/src/main/assets/models/haki-tiny.gguf
 The bundled model is prepared with:
 
 ```powershell
-npm run model:download:tiny-gguf
+npm.cmd run model:download:tiny-gguf
 ```
 
 EAS production APK builds run `scripts/eas-build-pre-install.sh`, which downloads the same tiny GGUF into the Android assets folder on the build worker. Manual local Gradle builds must run the download script first.
@@ -723,11 +758,11 @@ Do not commit licensed model files until you confirm:
 For a stable Android release APK:
 
 ```bash
-npm install
-npm run model:download:tiny-gguf
-npm run typecheck
-npm run test:local-models
-npm run test:golden
+npm.cmd install
+npm.cmd run model:download:tiny-gguf
+npm.cmd run typecheck
+npm.cmd run test:local-models
+npm.cmd run test:golden
 npx expo prebuild
 cd android
 .\gradlew.bat :app:assembleRelease -PreactNativeArchitectures=arm64-v8a
@@ -773,9 +808,9 @@ Use this triage order.
 Before debugging native AI, confirm FTS5 mode works:
 
 ```bash
-npm run typecheck
-npm run test:golden
-npm run android
+npm.cmd run typecheck
+npm.cmd run test:golden
+npm.cmd run android
 ```
 
 If source search is broken, fix the database or retrieval path first. Native AI should not be the baseline.
@@ -891,7 +926,7 @@ Use three levels of tests.
 ### Type Safety
 
 ```bash
-npm run typecheck
+npm.cmd run typecheck
 ```
 
 This uses strict TypeScript with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. Keep provider inputs and response shapes explicit because native modules often return partial or malformed data.
@@ -899,7 +934,7 @@ This uses strict TypeScript with `noUncheckedIndexedAccess` and `exactOptionalPr
 ### Golden Retrieval
 
 ```bash
-npm run test:golden
+npm.cmd run test:golden
 ```
 
 This runs `scripts/golden-retrieval.ts` against `src/data/golden-questions.json` and the in-memory retriever. It verifies expected top chunks, reliability, and confidence behavior without needing SQLite or a native device.
@@ -918,8 +953,10 @@ Run this after changing:
 The repo also contains:
 
 ```bash
-npx tsx scripts/chat-scenario-eval.ts
-npx tsx scripts/test-edge-cases.ts
+npm.cmd run test:chat-scenarios
+npm.cmd run test:edge-cases
+npm.cmd run test:local-models
+npm.cmd run test:all
 ```
 
 These cover:
@@ -928,13 +965,17 @@ These cover:
 - safe fallbacks
 - unsafe categories
 - source routing
-- Tagalog/Taglish language handling
+- English-only reply behavior for Tagalog/Taglish inputs
 - prompt echo sanitization
 - generic refusal detection
 - lost ID routing
 - coding fallback behavior
+- ability-router contracts
+- source ambiguity and mismatch handling
+- compact official-source formatting
+- local model provider behavior
 
-If you promote these into `package.json`, keep them fast and deterministic. They are valuable because small local models can be inconsistent, but routing and fallback behavior should stay stable.
+Keep these tests fast and deterministic. They are valuable because small local models can be inconsistent, but routing and fallback behavior should stay stable.
 
 ## 26. Debugging Answer Quality
 
@@ -945,7 +986,7 @@ When a student gets a bad answer, identify which layer failed:
 3. Retrieval: Did FTS find the relevant chunks?
 4. Ranking: Did the right chunk lose to a weaker metadata match?
 5. Confidence: Was a weak result treated as reliable?
-6. Summary: Did the model ignore citation rules or return unsupported claims?
+6. Contract: Did the ability router choose `campus_source`, `student_support`, `general_fact`, `safety`, or `profile_app` correctly?
 7. Safe chat: Did the model answer official facts without source support?
 8. UI: Did the bubble show stale streamed text instead of final response?
 
@@ -992,15 +1033,17 @@ Success criteria: representative questions return expected chunks and confidence
 - Add chat hook and UI.
 - Add conversation context.
 - Add source cards and provenance.
+- Add response stop/cancel support.
 
 Success criteria: chat can answer reliable source questions and honestly say when no saved source exists.
 
 ### Step 5: Add Intent And Safety Routing
 
 - Classify unsafe requests before retrieval or model calls.
-- Classify source vs obvious general questions.
+- Build the answer contract around source, support, general fact, safety, and profile/app abilities.
 - Add deterministic fallbacks for greetings, clarification, math, study advice, relationship advice, and coding help.
 - Add source scoping for known offices.
+- Add ambiguity and mismatch guards for official process answers.
 - Add scenario tests.
 
 Success criteria: common safe questions work without local AI, and unsafe requests are refused deterministically.
@@ -1055,15 +1098,18 @@ Success criteria: the release build answers offline, degrades safely, and does n
 The following contracts are load-bearing:
 
 - `SearchResponse` must remain the UI response envelope.
+- `AnswerContract` must decide whether the app needs sources, model chat, a fact notice, or clarification before generation.
 - `Retriever.search()` must stay small and strategy-agnostic.
 - `LocalAIProvider.getCapabilities()` must be conservative.
 - FTS5 must initialize before optional AI probing.
-- Native providers must be disabled for the session after runtime failures.
-- Source summarization must use only provided chunks.
+- Native providers must be disabled for real runtime failures, but user stop/cancel errors must not disable the provider.
+- Official campus answers must be deterministic source answers unless a future model rewrite layer proves source faithfulness.
 - Citation IDs from local models must be filtered against provided sources.
 - Unsafe requests must be handled deterministically before model calls.
-- Medium confidence source answers must tell the student to verify.
+- Ambiguous campus-source requests should ask one short clarification instead of guessing.
+- General fact answers must include a short double-check notice.
 - Model files must not be reported available until native code can open them.
+- Admin mode should not persist across app restarts.
 
 These rules let Haki feel like a helpful offline assistant without making unsupported claims or depending on fragile native AI paths.
 
@@ -1073,6 +1119,7 @@ Avoid these mistakes when rebuilding the app:
 
 - Selecting a local AI provider because the JavaScript class exists.
 - Letting a model answer official university details without retrieved source context.
+- Letting a model rewrite official source text into fake offices, emails, portals, fees, or repeated sections.
 - Treating a model answer as cited just because it mentions a citation-like string.
 - Passing too many chunks into a small local model.
 - Loading model assets during app startup.
@@ -1081,7 +1128,7 @@ Avoid these mistakes when rebuilding the app:
 - Letting vector search replace FTS search instead of fusing them.
 - Making unsafe classification depend on the local model.
 - Removing the deterministic fallback path.
-- Ignoring Tagalog and Taglish stop words in retrieval.
+- Answering Tagalog or Taglish prompts in Tagalog when the product rule requires English.
 - Letting generated Android build folders be scanned by Metro.
 
 ## 30. Final Architecture Summary
@@ -1091,14 +1138,16 @@ Haki is best understood as an offline source-grounded assistant with optional lo
 ```text
 Expo UI
   -> chat hook
-  -> intent and safety router
+  -> intent, safety, and ability contract router
   -> selected device AI mode
-  -> SQLite FTS5 retrieval
-  -> optional local embeddings and hybrid fusion
-  -> confidence gate
-  -> optional local source summarization or safe chat
+  -> deterministic special cases
+  -> SQLite FTS5 retrieval for official campus answers
+  -> optional local embeddings and hybrid fusion for retrieval quality
+  -> ambiguity, mismatch, and confidence gates
+  -> deterministic official source answer
+  -> optional safe local chat for support/general conversation
   -> deterministic fallback when needed
   -> SearchResponse for UI rendering
 ```
 
-The baseline app is SQLite plus FTS5. That is what makes Haki dependable offline. Local models improve the experience, but they are never trusted blindly. The app asks the model to work inside clear boundaries, filters its citations, retries or disables providers when they fail, and falls back to saved source answers whenever the native AI path is not ready.
+The baseline app is SQLite plus FTS5. That is what makes Haki dependable offline. Local models improve advice, opinions, study help, and general conversation, but they are never trusted blindly for official campus details. The app asks the model to work inside clear boundaries, filters its citations when model-generated citations exist, retries or disables providers when they truly fail, and falls back to saved source answers whenever the native AI path is not ready.

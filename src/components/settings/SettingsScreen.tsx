@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AdminGate } from "@/components/AdminGate";
 import type { DeviceCapabilityReport } from "@/ai/CapabilityDetector";
@@ -17,6 +17,7 @@ import type { GgufDownloadConfig } from "@/ai/modelDownloadConfig";
 import { getAppDatabase } from "@/data/appRepository";
 import { getAppMetaValue, getDatabaseStats, getDocumentSummaries, type DatabaseStats } from "@/db/documentRepository";
 import { getCurrentAIMode, getDeviceCapabilityReport, refreshDeviceCapabilities } from "@/services/modeSelectionService";
+import { clearChatMemory } from "@/services/historyService";
 import { getVoiceAutoSend, setVoiceAutoSend } from "@/services/voiceSettingsService";
 import { colors } from "@/theme/colors";
 import type { DocumentSummary } from "@/types/document";
@@ -28,11 +29,13 @@ import { SettingsModelsSection } from "./SettingsModelsSection";
 import { SettingsPreferencesSection } from "./SettingsPreferencesSection";
 
 export default function SettingsScreen() {
+  const insets = useSafeAreaInsets();
   const mountedRef = useRef(true);
   const [activeMode, setActiveMode] = useState<DeviceAIMode | null>(null);
   const [autoSendVoice, setAutoSendVoiceState] = useState(false);
   const [capabilityReport, setCapabilityReport] = useState<DeviceCapabilityReport | null>(null);
   const [chatModelStatus, setChatModelStatus] = useState<ImportedModelStatus | null>(null);
+  const [clearingMemory, setClearingMemory] = useState(false);
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -192,10 +195,43 @@ export default function SettingsScreen() {
     setExpandedProviders((current) => ({ ...current, [providerId]: !current[providerId] }));
   }, []);
 
+  const handleClearChatMemory = useCallback(() => {
+    Alert.alert(
+      "Clear local chat memory",
+      "This removes saved recent questions and reusable answer memories from this device. Your profile stays saved.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: () => {
+            setClearingMemory(true);
+            void clearChatMemory()
+              .then(() => setModelMessage("Local chat memory cleared."))
+              .catch((err) => {
+                setError(err instanceof Error ? err.message : "Failed to clear local chat memory.");
+              })
+              .finally(() => {
+                if (mountedRef.current) setClearingMemory(false);
+              });
+          }
+        }
+      ]
+    );
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <SettingsPreferencesSection autoSendVoice={autoSendVoice} onToggleAutoSendVoice={toggleAutoSendVoice} />
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 176 + insets.bottom }]}
+        scrollIndicatorInsets={{ bottom: 132 + insets.bottom }}
+      >
+        <SettingsPreferencesSection
+          autoSendVoice={autoSendVoice}
+          clearingMemory={clearingMemory}
+          onClearChatMemory={handleClearChatMemory}
+          onToggleAutoSendVoice={toggleAutoSendVoice}
+        />
         <AdminGate label="About and document details are available in admin mode only.">
           <SettingsAdminSection
             activeMode={activeMode}
@@ -238,6 +274,6 @@ const styles = StyleSheet.create({
   content: {
     backgroundColor: colors.surface,
     gap: 16,
-    paddingBottom: 28
+    paddingTop: 16
   }
 });

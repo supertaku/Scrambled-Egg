@@ -1,28 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
-import { 
+import {
   ActivityIndicator,
-  Animated, 
+  Alert,
+  Animated,
   Image,
-  KeyboardAvoidingView, 
-  Platform, 
-  Pressable, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  TextInput, 
-  View 
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Save, User as UserIcon, BookOpen, GraduationCap, Calendar, ImagePlus } from "lucide-react-native";
+import { ArrowLeft, BookOpen, Calendar, GraduationCap, ImagePlus, Save, Trash2, User as UserIcon } from "lucide-react-native";
 
-import { getStudentProfile, importStudentAvatar, saveStudentProfile } from "@/services/studentProfileService";
+import { clearStudentProfile, getStudentProfile, importStudentAvatar, saveStudentProfile } from "@/services/studentProfileService";
 import { colors } from "@/theme/colors";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  
+
   const [name, setName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [course, setCourse] = useState("");
@@ -31,21 +32,24 @@ export default function ProfileScreen() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+  const avatarScale = useRef(new Animated.Value(1)).current;
+  const saveButtonScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 400,
+        duration: 360,
         useNativeDriver: true
       }),
       Animated.spring(slideAnim, {
         toValue: 0,
-        friction: 8,
-        tension: 40,
+        friction: 9,
+        tension: 50,
         useNativeDriver: true
       })
     ]).start();
@@ -85,16 +89,26 @@ export default function ProfileScreen() {
   const handleSave = useCallback(async () => {
     setSavingProfile(true);
     setProfileError(null);
+    setSaveSuccess(false);
+
+    // Press animation
+    Animated.sequence([
+      Animated.spring(saveButtonScale, { toValue: 0.94, useNativeDriver: true, friction: 6, tension: 200 }),
+      Animated.spring(saveButtonScale, { toValue: 1, useNativeDriver: true, friction: 5, tension: 160 })
+    ]).start();
 
     try {
       await saveStudentProfile({ avatarUri, name, studentId, course, year });
-      router.back();
+      setSaveSuccess(true);
+      setTimeout(() => {
+        router.back();
+      }, 600);
     } catch {
       setProfileError("Could not save your profile. Please try again.");
     } finally {
       setSavingProfile(false);
     }
-  }, [avatarUri, course, name, router, studentId, year]);
+  }, [avatarUri, course, name, router, studentId, year, saveButtonScale]);
 
   const handlePickAvatar = useCallback(async () => {
     setProfileError(null);
@@ -121,6 +135,12 @@ export default function ProfileScreen() {
       return;
     }
 
+    // Pulse animation on avatar pick
+    Animated.sequence([
+      Animated.spring(avatarScale, { toValue: 1.08, useNativeDriver: true, friction: 6, tension: 200 }),
+      Animated.spring(avatarScale, { toValue: 1, useNativeDriver: true, friction: 5, tension: 120 })
+    ]).start();
+
     try {
       const nextAvatarUri = await importStudentAvatar(asset.uri, avatarUri);
       setAvatarUri(nextAvatarUri);
@@ -128,13 +148,41 @@ export default function ProfileScreen() {
     } catch {
       setProfileError("Could not save the selected avatar.");
     }
-  }, [avatarUri, course, name, studentId, year]);
+  }, [avatarUri, avatarScale, course, name, studentId, year]);
+
+  const handleClearProfile = useCallback(() => {
+    Alert.alert(
+      "Delete profile",
+      "This removes your saved profile and avatar from this device.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            setSavingProfile(true);
+            setProfileError(null);
+            void clearStudentProfile()
+              .then(() => {
+                setName("");
+                setStudentId("");
+                setCourse("");
+                setYear("");
+                setAvatarUri("");
+              })
+              .catch(() => setProfileError("Could not delete your profile. Please try again."))
+              .finally(() => setSavingProfile(false));
+          }
+        }
+      ]
+    );
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <View style={styles.headerArea}>
         <Pressable accessibilityLabel="Back" onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft color={colors.white} size={24} />
+          <ArrowLeft color={colors.white} size={22} />
         </Pressable>
         <Text style={styles.headerTitle}>Student Profile</Text>
         <View style={{ width: 40 }} />
@@ -146,103 +194,108 @@ export default function ProfileScreen() {
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={{ flex: 1 }}
           >
-            <ScrollView 
+            <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.scrollContent}
             >
+              {/* Avatar */}
               <View style={styles.avatarContainer}>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={profileLoading || savingProfile}
-                  onPress={handlePickAvatar}
-                  style={styles.avatarCircle}
-                >
-                  {avatarUri ? (
-                    <Image resizeMode="cover" source={{ uri: avatarUri }} style={styles.avatarImage} />
-                  ) : (
-                    <UserIcon color={colors.maroon} size={48} />
-                  )}
-                  <View style={styles.avatarEditBadge}>
-                    <ImagePlus color={colors.maroonDark} size={16} />
-                  </View>
-                </Pressable>
+                <Animated.View style={[styles.avatarRing, { transform: [{ scale: avatarScale }] }]}>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={profileLoading || savingProfile}
+                    onPress={handlePickAvatar}
+                    style={styles.avatarCircle}
+                  >
+                    {avatarUri ? (
+                      <Image resizeMode="cover" source={{ uri: avatarUri }} style={styles.avatarImage} />
+                    ) : (
+                      <UserIcon color={colors.maroon} size={44} />
+                    )}
+                    <View style={styles.avatarEditBadge}>
+                      <ImagePlus color={colors.white} size={14} />
+                    </View>
+                  </Pressable>
+                </Animated.View>
                 <Text style={styles.avatarLabel}>
-                  {profileLoading ? "Loading profile..." : `Student ID: ${studentId || "Not set"}`}
+                  {profileLoading ? "Loading profile..." : studentId ? `ID: ${studentId}` : "Tap to add a photo"}
                 </Text>
               </View>
 
+              {/* Form */}
               <View style={styles.form}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Full Name</Text>
-                  <View style={styles.inputWrapper}>
-                    <UserIcon color={colors.gold} size={18} style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter your full name"
-                      value={name}
-                      editable={!profileLoading && !savingProfile}
-                      onChangeText={setName}
-                      placeholderTextColor={colors.muted}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Student ID Number</Text>
-                  <View style={styles.inputWrapper}>
-                    <BookOpen color={colors.gold} size={18} style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="e.g. TUPM-21-XXXX"
-                      value={studentId}
-                      editable={!profileLoading && !savingProfile}
-                      onChangeText={setStudentId}
-                      placeholderTextColor={colors.muted}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Course / Program</Text>
-                  <View style={styles.inputWrapper}>
-                    <GraduationCap color={colors.gold} size={18} style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="e.g. BS in Computer Science"
-                      value={course}
-                      editable={!profileLoading && !savingProfile}
-                      onChangeText={setCourse}
-                      placeholderTextColor={colors.muted}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Year Level</Text>
-                  <View style={styles.inputWrapper}>
-                    <Calendar color={colors.gold} size={18} style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="e.g. 3rd Year"
-                      value={year}
-                      editable={!profileLoading && !savingProfile}
-                      onChangeText={setYear}
-                      placeholderTextColor={colors.muted}
-                    />
-                  </View>
-                </View>
+                <FormField
+                  label="Full Name"
+                  icon={<UserIcon color={colors.gold} size={17} />}
+                  value={name}
+                  placeholder="Enter your full name"
+                  editable={!profileLoading && !savingProfile}
+                  onChangeText={setName}
+                />
+                <FormField
+                  label="Student ID Number"
+                  icon={<BookOpen color={colors.gold} size={17} />}
+                  value={studentId}
+                  placeholder="e.g. TUPM-21-XXXX"
+                  editable={!profileLoading && !savingProfile}
+                  onChangeText={setStudentId}
+                />
+                <FormField
+                  label="Course / Program"
+                  icon={<GraduationCap color={colors.gold} size={17} />}
+                  value={course}
+                  placeholder="e.g. BS in Computer Science"
+                  editable={!profileLoading && !savingProfile}
+                  onChangeText={setCourse}
+                />
+                <FormField
+                  label="Year Level"
+                  icon={<Calendar color={colors.gold} size={17} />}
+                  value={year}
+                  placeholder="e.g. 3rd Year"
+                  editable={!profileLoading && !savingProfile}
+                  onChangeText={setYear}
+                />
               </View>
 
               {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
 
+              {/* Save button */}
               <Pressable
                 accessibilityRole="button"
                 disabled={profileLoading || savingProfile}
-                style={[styles.saveButton, profileLoading || savingProfile ? styles.saveButtonDisabled : undefined]}
                 onPress={handleSave}
               >
-                {savingProfile ? <ActivityIndicator color={colors.white} /> : <Save color={colors.white} size={20} />}
-                <Text style={styles.saveButtonText}>{savingProfile ? "Saving..." : "Save Profile"}</Text>
+                <Animated.View
+                  style={[
+                    styles.saveButton,
+                    profileLoading || savingProfile ? styles.saveButtonDisabled : undefined,
+                    saveSuccess ? styles.saveButtonSuccess : undefined,
+                    { transform: [{ scale: saveButtonScale }] }
+                  ]}
+                >
+                  {savingProfile ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : saveSuccess ? (
+                    <Text style={styles.saveButtonText}>✓ Saved!</Text>
+                  ) : (
+                    <>
+                      <Save color={colors.white} size={18} />
+                      <Text style={styles.saveButtonText}>Save Profile</Text>
+                    </>
+                  )}
+                </Animated.View>
+              </Pressable>
+
+              <Pressable
+                accessibilityLabel="Delete saved student profile"
+                accessibilityRole="button"
+                disabled={profileLoading || savingProfile}
+                onPress={handleClearProfile}
+                style={[styles.deleteButton, profileLoading || savingProfile ? styles.deleteButtonDisabled : undefined]}
+              >
+                <Trash2 color={colors.danger} size={16} />
+                <Text style={styles.deleteButtonText}>Delete Profile</Text>
               </Pressable>
 
               <View style={styles.footerInfo}>
@@ -258,6 +311,43 @@ export default function ProfileScreen() {
   );
 }
 
+function FormField({
+  label,
+  icon,
+  value,
+  placeholder,
+  editable,
+  onChangeText
+}: {
+  label: string;
+  icon: React.ReactNode;
+  value: string;
+  placeholder: string;
+  editable: boolean;
+  onChangeText: (text: string) => void;
+}) {
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={[styles.inputWrapper, focused ? styles.inputWrapperFocused : undefined]}>
+        <View style={styles.inputIcon}>{icon}</View>
+        <TextInput
+          style={styles.input}
+          placeholder={placeholder}
+          value={value}
+          editable={editable}
+          onChangeText={onChangeText}
+          placeholderTextColor={colors.mutedLight}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+        />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: colors.maroon,
@@ -268,13 +358,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 20
+    paddingVertical: 18
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: colors.overlayMedium,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -282,12 +372,12 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 20,
     fontWeight: "900",
-    letterSpacing: -0.5
+    letterSpacing: -0.4
   },
   sheetContainer: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
     flex: 1,
     overflow: "hidden"
   },
@@ -296,11 +386,23 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 24,
-    paddingBottom: 40
+    paddingBottom: 48
   },
   avatarContainer: {
     alignItems: "center",
-    marginBottom: 32
+    marginBottom: 28
+  },
+  avatarRing: {
+    padding: 3,
+    borderRadius: 57,
+    borderWidth: 2,
+    borderColor: colors.gold,
+    marginBottom: 12,
+    shadowColor: colors.gold,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 5
   },
   avatarCircle: {
     width: 100,
@@ -309,14 +411,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: colors.gold,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    marginBottom: 12
+    overflow: "hidden"
   },
   avatarImage: {
     height: "100%",
@@ -324,46 +419,55 @@ const styles = StyleSheet.create({
   },
   avatarEditBadge: {
     alignItems: "center",
-    backgroundColor: colors.gold,
+    backgroundColor: colors.maroon,
     borderColor: colors.white,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 2,
     bottom: 0,
-    height: 32,
+    height: 28,
     justifyContent: "center",
     position: "absolute",
     right: 0,
-    width: 32
+    width: 28
   },
   avatarLabel: {
     color: colors.muted,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600"
   },
   form: {
-    gap: 20,
-    marginBottom: 32
+    gap: 18,
+    marginBottom: 28
   },
   inputGroup: {
-    gap: 8
+    gap: 7
   },
   label: {
     color: colors.ink,
-    fontSize: 14,
-    fontWeight: "700",
-    marginLeft: 4
+    fontSize: 13,
+    fontWeight: "800",
+    marginLeft: 2,
+    letterSpacing: 0.1
   },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.white,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    paddingHorizontal: 16
+    paddingHorizontal: 14
+  },
+  inputWrapperFocused: {
+    borderColor: colors.maroon,
+    shadowColor: colors.maroon,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 2
   },
   inputIcon: {
-    marginRight: 12
+    marginRight: 10
   },
   input: {
     flex: 1,
@@ -380,20 +484,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    elevation: 4,
     shadowColor: colors.maroon,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6
   },
   saveButtonDisabled: {
     backgroundColor: colors.grayhawk,
     shadowOpacity: 0
   },
+  saveButtonSuccess: {
+    backgroundColor: colors.success,
+    shadowColor: colors.success
+  },
   saveButtonText: {
     color: colors.white,
     fontSize: 16,
     fontWeight: "800"
+  },
+  deleteButton: {
+    alignItems: "center",
+    backgroundColor: colors.dangerSoft,
+    borderColor: "#FDA29B",
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 7,
+    height: 46,
+    justifyContent: "center",
+    marginTop: 12
+  },
+  deleteButtonDisabled: {
+    opacity: 0.55
+  },
+  deleteButtonText: {
+    color: colors.danger,
+    fontSize: 14,
+    fontWeight: "900"
   },
   errorText: {
     color: colors.danger,
@@ -408,7 +536,7 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   footerText: {
-    color: colors.muted,
+    color: colors.mutedLight,
     fontSize: 12,
     textAlign: "center",
     fontStyle: "italic"

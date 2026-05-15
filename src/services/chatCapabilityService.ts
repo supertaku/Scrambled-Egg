@@ -35,29 +35,251 @@ function responseTypeForCapability(capability: StudentChatCapability): SearchRes
   }
 }
 
+const STEP_DETAIL_MAX_LENGTH = 150;
+const SUMMARY_POINT_MAX_LENGTH = 180;
+const EXTRA_DETAIL_MAX_LENGTH = 160;
+const MAX_VISIBLE_INSTRUCTION_STEPS = 6;
+
+interface FormattedSourceStep {
+  title: string;
+  detail?: string;
+}
+
+function normalizeInline(value: string | null | undefined): string {
+  return value?.replace(/\s+/g, " ").trim() ?? "";
+}
+
 function compact(value: string, maxLength = 700): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, maxLength - 3).trim()}...`;
+  const clipped = normalized.slice(0, maxLength - 3).trim();
+  const lastSpace = clipped.lastIndexOf(" ");
+  return `${(lastSpace > maxLength * 0.6 ? clipped.slice(0, lastSpace) : clipped).trim()}...`;
 }
 
-function firstSentences(value: string, maxSentences = 3): string {
-  const sentences = value
-    .replace(/\s+/g, " ")
+function splitSentences(value: string): string[] {
+  return normalizeInline(value)
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => sentence.trim())
     .filter(Boolean);
+}
 
-  return compact((sentences.length ? sentences.slice(0, maxSentences).join(" ") : value).trim());
+function firstSentences(value: string, maxSentences = 3, maxLength = 700): string {
+  const sentences = splitSentences(value);
+  return compact((sentences.length ? sentences.slice(0, maxSentences).join(" ") : value).trim(), maxLength);
 }
 
 function formatNumberedList(items: string[]): string {
   return items.map((item, index) => `${index + 1}. ${item.trim()}`).join("\n");
 }
 
-function sourceReference(result: SearchResult): string {
-  const parts = [result.office, result.sectionTitle ?? result.processName, result.documentTitle].filter(Boolean);
-  return parts.length ? parts.join(" - ") : result.documentTitle;
+function uniqueCompact(items: string[]): string[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const normalized = normalizeInline(item);
+    const key = normalized.toLowerCase();
+    if (!normalized || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function terminalPunctuation(value: string): string {
+  return /[.!?)]$/.test(value) ? value : `${value}.`;
+}
+
+function cleanStepTitle(value: string): string {
+  return compact(
+    normalizeInline(value)
+      .replace(/^step\s+\d+\s*[:.)-]\s*/i, "")
+      .replace(/[.:]\s*$/u, ""),
+    90
+  );
+}
+
+function sourceStep(title: string, detail: string): FormattedSourceStep {
+  const cleanTitle = cleanStepTitle(title);
+  const cleanDetail = firstSentences(detail, 1, STEP_DETAIL_MAX_LENGTH);
+  return cleanDetail ? { title: cleanTitle, detail: cleanDetail } : { title: cleanTitle };
+}
+
+function splitSourceStep(value: string): FormattedSourceStep | null {
+  const normalized = normalizeInline(value).replace(/^step\s+\d+\s*[:.)-]\s*/i, "");
+  if (!normalized) return null;
+
+  const colonIndex = normalized.indexOf(":");
+  if (colonIndex > 0 && colonIndex <= 100) {
+    return sourceStep(normalized.slice(0, colonIndex), normalized.slice(colonIndex + 1));
+  }
+
+  const [titleSentence, ...detailSentences] = splitSentences(normalized);
+  if (titleSentence && detailSentences.length > 0 && titleSentence.length <= 110) {
+    return sourceStep(titleSentence, detailSentences.join(" "));
+  }
+
+  return { title: cleanStepTitle(firstSentences(normalized, 1, STEP_DETAIL_MAX_LENGTH)) };
+}
+
+function parseContentSteps(content: string): FormattedSourceStep[] {
+  const normalized = normalizeInline(content);
+  const markers = Array.from(normalized.matchAll(/\bstep\s+\d+\s*:\s*/gi));
+  if (markers.length === 0) return [];
+
+  return markers
+    .map((marker, index) => {
+      const nextMarker = markers[index + 1];
+      const start = (marker.index ?? 0) + marker[0].length;
+      const end = nextMarker?.index ?? normalized.length;
+      return splitSourceStep(normalized.slice(start, end));
+    })
+    .filter((step): step is FormattedSourceStep => Boolean(step?.title));
+}
+
+function parseAnswerStepTitles(answer: string): FormattedSourceStep[] {
+  const match = normalizeInline(answer).match(/follow(?: these)? steps?:\s*(.+)$/i);
+  const listText = match?.[1]?.replace(/[.]\s*$/u, "");
+  if (!listText) return [];
+
+  return listText
+    .split(/\s*,\s*/)
+    .map((title) => cleanStepTitle(title))
+    .filter(Boolean)
+    .map((title) => ({ title }));
+}
+
+function sourceSteps(result: SearchResult): FormattedSourceStep[] {
+  const explicitSteps = result.steps?.map(splitSourceStep).filter((step): step is FormattedSourceStep => Boolean(step?.title)) ?? [];
+  if (explicitSteps.length > 0) return explicitSteps;
+
+  const contentSteps = parseContentSteps(result.content);
+  if (contentSteps.length > 0) return contentSteps;
+
+  const answerSteps = parseAnswerStepTitles(getDirectAnswer(result));
+  if (answerSteps.length > 0) return answerSteps;
+
+  const fallback = firstSentences(getDirectAnswer(result), 1, SUMMARY_POINT_MAX_LENGTH);
+  return fallback ? [{ title: fallback }] : [];
+}
+
+function formatSourceStep(step: FormattedSourceStep): string {
+  return step.detail ? `${step.title}: ${terminalPunctuation(step.detail)}` : terminalPunctuation(step.title);
+}
+
+function textHasFeeSignal(value: string): boolean {
+  return /(?:\u20b1|PHP|P)\s?\d/i.test(value) || /\b(fees?|payment|cashier|amount)\b/i.test(value);
+}
+
+function textHasRequirementSignal(value: string): boolean {
+  return (
+    /\b(requirements?|prerequisites?|documents?)\b/i.test(value) ||
+    (/\b(must present|presents?|submits?|following documents|required|prepare)\b/i.test(value) &&
+      /\b(document|form|certificate|receipt|affidavit|id|identification)\b/i.test(value))
+  );
+}
+
+function extractMatchingSourceDetails(result: SearchResult, matcher: (value: string) => boolean): string[] {
+  const stepDetails = sourceSteps(result)
+    .filter((step) => matcher(`${step.title} ${step.detail ?? ""}`))
+    .map(formatSourceStep);
+
+  const sentenceDetails = splitSentences(getDirectAnswer(result))
+    .filter(matcher)
+    .map((sentence) => firstSentences(sentence, 1, EXTRA_DETAIL_MAX_LENGTH));
+
+  return uniqueCompact([...stepDetails, ...sentenceDetails]).slice(0, 2);
+}
+
+function requirementDetails(result: SearchResult): string[] {
+  const prerequisites = result.prerequisites
+    ?.map((item) => firstSentences(item, 1, EXTRA_DETAIL_MAX_LENGTH))
+    .filter(Boolean) ?? [];
+
+  if (prerequisites.length > 0) {
+    return uniqueCompact(prerequisites).slice(0, 2);
+  }
+
+  return uniqueCompact(
+    sourceSteps(result)
+      .filter((step) => textHasRequirementSignal(`${step.title} ${step.detail ?? ""}`))
+      .map((step) => step.title)
+  ).slice(0, 2);
+}
+
+function feeDetails(result: SearchResult): string[] {
+  const stepFees = sourceSteps(result)
+    .filter((step) => textHasFeeSignal(`${step.title} ${step.detail ?? ""}`))
+    .map(formatSourceStep);
+
+  return stepFees.length > 0
+    ? uniqueCompact(stepFees).slice(0, 2)
+    : extractMatchingSourceDetails(result, textHasFeeSignal);
+}
+
+function joinDetails(details: string[]): string {
+  return details.map(terminalPunctuation).join(" ");
+}
+
+function verificationTarget(result: SearchResult): string | null {
+  const office = normalizeInline(result.office);
+  const officeLocation = normalizeInline(result.officeLocation);
+
+  if (office && officeLocation && office.toLowerCase() !== officeLocation.toLowerCase()) {
+    return `${office} (${compact(officeLocation, 90)})`;
+  }
+
+  return office || officeLocation || null;
+}
+
+function removeDetailsAlreadyShown(details: string[], includedText: string): string[] {
+  const included = normalizeInline(includedText).toLowerCase();
+  if (!included) return details;
+
+  return details.filter((detail) => {
+    const normalizedDetail = normalizeInline(detail).toLowerCase();
+    const detailTitle = normalizedDetail.split(":")[0]?.trim() ?? "";
+    return !included.includes(normalizedDetail) && (!detailTitle || !included.includes(detailTitle));
+  });
+}
+
+function sourceExtraLines(result: SearchResult, includedText = ""): string[] {
+  const requirements = removeDetailsAlreadyShown(requirementDetails(result), includedText);
+  const fees = removeDetailsAlreadyShown(feeDetails(result), includedText);
+  const contactInfo = normalizeInline(result.contactInfo);
+  const verification = verificationTarget(result);
+
+  return [
+    requirements.length > 0 ? `Requirements: ${joinDetails(requirements)}` : null,
+    fees.length > 0 ? `Fees: ${joinDetails(fees)}` : null,
+    contactInfo ? `Contact: ${terminalPunctuation(contactInfo)}` : null,
+    verification ? `Verify with: ${terminalPunctuation(verification)}` : null
+  ].filter((line): line is string => Boolean(line));
+}
+
+function summaryPoint(result: SearchResult): string {
+  const steps = sourceSteps(result);
+  if (steps.length > 1) {
+    const stepTitles = steps.slice(0, 4).map((step) => step.title);
+    const remainingCount = steps.length - stepTitles.length;
+    const suffix = remainingCount > 0 ? `, plus ${remainingCount} more` : "";
+    return compact(`Main steps: ${stepTitles.join("; ")}${suffix}.`, SUMMARY_POINT_MAX_LENGTH);
+  }
+
+  return firstSentences(getDirectAnswer(result), 1, SUMMARY_POINT_MAX_LENGTH);
+}
+
+function dentalCareClarificationText(question: string): string | null {
+  const normalized = normalizeQuery(question);
+  const mentionsDentalCare = /\bdental\b.*\bcare\b|\bcare\b.*\bdental\b/.test(normalized);
+  const hasSpecificDentalTarget = /\b(consultation|consult|treatment|emergency|urgent|toothache|pain)\b/.test(normalized);
+  if (!mentionsDentalCare || hasSpecificDentalTarget) {
+    return null;
+  }
+
+  return "I have 1 quick question: do you mean dental care consultation, dental treatment, or dental emergency treatment?";
+}
+
+function sourceClarificationText(question: string, draft: SourceAnswerDraft): string | null {
+  return draft.ambiguity?.clarificationQuestion ?? draft.mismatch?.clarificationQuestion ?? dentalCareClarificationText(question);
 }
 
 function formatGB(value: number | null | undefined): string {
@@ -119,16 +341,17 @@ function buildSummaryText(draft: SourceAnswerDraft): string {
 
   const points = draft.results
     .slice(0, 3)
-    .map((result) => firstSentences(getDirectAnswer(result), 2))
+    .map(summaryPoint)
     .filter(Boolean);
-  const uniquePoints = Array.from(new Set(points));
+  const uniquePoints = uniqueCompact(points);
+  const extraLines = sourceExtraLines(topResult);
 
   return [
-    "Here is the short version:",
+    "Short version:",
     "",
     uniquePoints.length > 1 ? formatNumberedList(uniquePoints) : uniquePoints[0],
     "",
-    `Source basis: ${sourceReference(topResult)}.`
+    ...extraLines
   ]
     .filter(Boolean)
     .join("\n");
@@ -138,19 +361,15 @@ function buildInstructionText(draft: SourceAnswerDraft): string {
   const topResult = draft.topResult;
   if (!draft.reliable || !topResult) return SAFE_FALLBACK_MESSAGE;
 
-  const steps = topResult.steps?.filter(Boolean) ?? [];
-  const prerequisites = topResult.prerequisites?.filter(Boolean) ?? [];
-  const lines = ["Here is what you can do:"];
+  const steps = sourceSteps(topResult);
+  const visibleSteps = steps.slice(0, MAX_VISIBLE_INSTRUCTION_STEPS).map(formatSourceStep);
+  const extraLines = sourceExtraLines(topResult, visibleSteps.join("\n"));
+  const hiddenStepCount = Math.max(0, steps.length - visibleSteps.length);
+  const lines = ["Quick answer:"];
 
-  lines.push("", steps.length > 0 ? formatNumberedList(steps) : firstSentences(getDirectAnswer(topResult), 4));
-
-  if (prerequisites.length > 0) {
-    lines.push("", "Prepare these first:", formatNumberedList(prerequisites));
-  }
-
-  if (topResult.office) {
-    lines.push("", `Best office to verify: ${topResult.office}.`);
-  }
+  lines.push("", visibleSteps.length > 0 ? formatNumberedList(visibleSteps) : `1. ${firstSentences(getDirectAnswer(topResult), 1, SUMMARY_POINT_MAX_LENGTH)}`);
+  if (hiddenStepCount > 0) lines.push("", `The source card has ${hiddenStepCount} more item${hiddenStepCount === 1 ? "" : "s"}.`);
+  if (extraLines.length > 0) lines.push("", ...extraLines);
 
   return lines.join("\n");
 }
@@ -353,6 +572,22 @@ export function buildDeterministicCapabilityResponse(
   draft: SourceAnswerDraft
 ): SearchResponse {
   const topResult = draft.topResult;
+  const clarificationText = sourceClarificationText(question, draft);
+  if (clarificationText) {
+    return {
+      question,
+      normalizedQuestion: draft.normalizedQuestion,
+      responseType: "source",
+      results: [],
+      confidence: "low",
+      reliable: false,
+      answerText: clarificationText,
+      citationsUsed: [],
+      provenance: "No reliable saved source found",
+      activeMode: draft.selectedMode.mode
+    };
+  }
+
   const answerText = capability === "instruction" ? buildInstructionText(draft) : buildSummaryText(draft);
 
   return {

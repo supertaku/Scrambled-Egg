@@ -103,6 +103,7 @@ export interface SearchResponse {
   citationsUsed: string[];
   provenance: AnswerProvenance;
   activeMode: DeviceAIMode;
+  factCheckNotice?: string;
   verificationNote?: string;
   isIncomplete?: boolean;
 }

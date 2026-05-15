@@ -1,3 +1,14 @@
+/**
+ * @file organizationOfficers.ts
+ * @description List of student organization officers for various campus groups.
+ *
+ * HOW TO REPLACE WITH REAL DATA
+ * ─────────────────────────────
+ * 1. Keep the `OrganizationOfficer` interface.
+ * 2. Replace the `mockOrganizationOfficers` array with official data.
+ * 3. These officers are often searchable in the Chat or shown in detail pages.
+ */
+
 export interface OrganizationOfficer {
   id: string;
   organization: string;

@@ -21,6 +21,10 @@ export async function getRecentQuestions(): Promise<string[]> {
   }
 }
 
+export async function clearRecentQuestions(): Promise<void> {
+  await AsyncStorage.removeItem(STORAGE_KEYS.RECENT_QUESTIONS);
+}
+
 /**
  * Prepends a new question to the history, deduplicates (case-insensitive),
  * and trims the list to MAX_RECENT_QUESTIONS.
@@ -220,4 +224,15 @@ export async function saveConversationMemory(input: {
       [MAX_MEMORY_ROWS]
     );
   });
+}
+
+export async function clearConversationMemory(): Promise<void> {
+  const db = await getDatabase();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync("DELETE FROM conversation_memory");
+  });
+}
+
+export async function clearChatMemory(): Promise<void> {
+  await Promise.all([clearRecentQuestions(), clearConversationMemory()]);
 }

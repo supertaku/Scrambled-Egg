@@ -1,5 +1,6 @@
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { Database } from "lucide-react-native";
+import { useRouter } from "expo-router";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Database, FilePlus, LibraryBig } from "lucide-react-native";
 
 import type { DatabaseStats } from "@/db/documentRepository";
 import type { DocumentSummary } from "@/types/document";
@@ -22,10 +23,32 @@ export function SettingsDbSection({
   seedVersion: string | null;
   stats: DatabaseStats | null;
 }) {
+  const router = useRouter();
+
   return (
     <View style={styles.card}>
       <Database color={colors.maroon} size={24} />
       <Text style={styles.cardTitle}>Saved documents</Text>
+      <View style={styles.actionRow}>
+        <Pressable
+          accessibilityLabel="Open document library"
+          accessibilityRole="button"
+          onPress={() => router.push("/documents")}
+          style={styles.actionButton}
+        >
+          <LibraryBig color={colors.maroon} size={16} />
+          <Text style={styles.actionButtonText}>Library</Text>
+        </Pressable>
+        <Pressable
+          accessibilityLabel="Import source document JSON"
+          accessibilityRole="button"
+          onPress={() => router.push("/add-document")}
+          style={styles.actionButton}
+        >
+          <FilePlus color={colors.maroon} size={16} />
+          <Text style={styles.actionButtonText}>Import</Text>
+        </Pressable>
+      </View>
       {loading ? (
         <ActivityIndicator color={colors.maroon} />
       ) : error ? (
@@ -74,6 +97,26 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 14,
     lineHeight: 21
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: 8
+  },
+  actionButton: {
+    alignItems: "center",
+    backgroundColor: colors.maroonSoft,
+    borderColor: "#E8C7D0",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 42,
+    paddingHorizontal: 12
+  },
+  actionButtonText: {
+    color: colors.maroon,
+    fontSize: 13,
+    fontWeight: "900"
   },
   documentTable: {
     borderColor: colors.border,

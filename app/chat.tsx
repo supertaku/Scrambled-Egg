@@ -31,6 +31,7 @@ import {
   prewarmLocalAIForChat,
   refreshDeviceCapabilities
 } from "@/services/modeSelectionService";
+import { classifyStudentQuestionIntent } from "@/services/questionIntentService";
 import { getStudentProfile, studentProfileToChatContext } from "@/services/studentProfileService";
 import { colors } from "@/theme/colors";
 import { metrics } from "@/theme/metrics";
@@ -79,6 +80,26 @@ const HAKI_LOADING_LINES = [
   "'Wag ka nang malungkot",
   "Oh praise the Lord"
 ];
+
+const HELP_LISTENING_SCENARIOS = new Set([
+  "clarification",
+  "creative_brainstorm",
+  "relationship_advice",
+  "study_advice",
+  "unknown_general"
+]);
+
+const HELP_LISTENING_PATTERN =
+  /\b(help|advice|advise|opinion|suggest|recommend|decide|what should i do|how do i handle|better grades|study plan|confess|awkward)\b/i;
+
+function shouldShowHelpListeningHaki(question: string | null): boolean {
+  if (!question || !HELP_LISTENING_PATTERN.test(question)) return false;
+
+  const intent = classifyStudentQuestionIntent(question);
+  if (intent.type !== "safe_question") return false;
+
+  return intent.route === "obvious_general" && HELP_LISTENING_SCENARIOS.has(intent.scenario);
+}
 
 export default function ChatScreen() {
   const [draft, setDraft] = useState("");
@@ -205,6 +226,7 @@ export default function ChatScreen() {
     [messages, streamingMessage]
   );
   const loadingLine = HAKI_LOADING_LINES[loadingLineIndex % HAKI_LOADING_LINES.length] ?? HAKI_LOADING_LINES[0];
+  const showHelpListeningHaki = loading && shouldShowHelpListeningHaki(pendingQuestion);
 
   useEffect(() => {
     if (!loading || streaming || !pendingQuestion) {
@@ -214,7 +236,7 @@ export default function ChatScreen() {
 
     const intervalId = setInterval(() => {
       setLoadingLineIndex((current) => (current + 1) % HAKI_LOADING_LINES.length);
-    }, 1000);
+    }, 2000);
 
     return () => clearInterval(intervalId);
   }, [loading, pendingQuestion, streaming]);
@@ -347,6 +369,26 @@ export default function ChatScreen() {
             </View>
 
             <View style={styles.listAndStreamColumn}>
+              {showHelpListeningHaki ? (
+                <View style={styles.listeningPanel} pointerEvents="none">
+                  <View style={styles.branchScene}>
+                    <View style={styles.branchLine} />
+                    <View style={styles.branchOffshoot} />
+                    <View style={styles.branchLeaf} />
+                    <Image
+                      source={require("../assets/images/mascot/grayhawk-idle.png")}
+                      style={styles.listeningMascot}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <View style={styles.listeningBubble}>
+                    <View style={styles.listeningBubbleTailBorder} />
+                    <View style={styles.listeningBubbleTail} />
+                    <Text style={styles.listeningName}>Haki</Text>
+                    <Text style={styles.listeningText}>I'm listening.</Text>
+                  </View>
+                </View>
+              ) : null}
               <FlatList
                 ref={flatListRef}
                 data={displayedMessages}
@@ -377,7 +419,16 @@ export default function ChatScreen() {
                     ) : null}
                     {loading && !streaming ? (
                       <View style={styles.hakiRow}>
+                        <View style={styles.hakiAvatarContainer}>
+                          <Image
+                            source={require("../assets/images/mascot/haki-chat-head.png")}
+                            style={styles.hakiAvatar}
+                            resizeMode="contain"
+                          />
+                        </View>
                         <View style={[styles.bubble, styles.hakiBubble, styles.typingBubble]}>
+                          <View pointerEvents="none" style={styles.hakiBubbleTailBorder} />
+                          <View pointerEvents="none" style={styles.hakiBubbleTail} />
                           <LottieView
                             autoPlay
                             loop
@@ -455,6 +506,117 @@ const styles = StyleSheet.create({
   },
   screen: { backgroundColor: "transparent", flex: 1 },
   listAndStreamColumn: { flex: 1 },
+  listeningPanel: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderBottomColor: "rgba(122,0,25,0.08)",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 82,
+    paddingBottom: 6,
+    paddingHorizontal: 18,
+    paddingTop: 8
+  },
+  branchScene: {
+    height: 66,
+    justifyContent: "flex-end",
+    position: "relative",
+    width: 104
+  },
+  branchLine: {
+    backgroundColor: "#7B4E2D",
+    borderRadius: 999,
+    bottom: 12,
+    height: 8,
+    left: 4,
+    position: "absolute",
+    right: 2,
+    transform: [{ rotate: "-5deg" }]
+  },
+  branchOffshoot: {
+    backgroundColor: "#7B4E2D",
+    borderRadius: 999,
+    bottom: 22,
+    height: 6,
+    left: 65,
+    position: "absolute",
+    transform: [{ rotate: "-28deg" }],
+    width: 30
+  },
+  branchLeaf: {
+    backgroundColor: "#3E8A4B",
+    borderBottomLeftRadius: 12,
+    borderTopRightRadius: 12,
+    bottom: 36,
+    height: 14,
+    left: 88,
+    position: "absolute",
+    transform: [{ rotate: "18deg" }],
+    width: 20
+  },
+  listeningMascot: {
+    bottom: 9,
+    height: 58,
+    left: 22,
+    position: "absolute",
+    width: 58
+  },
+  listeningBubble: {
+    backgroundColor: colors.white,
+    borderColor: colors.ink,
+    borderRadius: 18,
+    borderTopLeftRadius: 8,
+    borderWidth: 1.5,
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    position: "relative",
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 0
+  },
+  listeningBubbleTailBorder: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 10,
+    borderRightColor: colors.ink,
+    borderRightWidth: 15,
+    borderTopColor: "transparent",
+    borderTopWidth: 10,
+    height: 0,
+    left: -15,
+    position: "absolute",
+    top: 25,
+    width: 0,
+    zIndex: 1
+  },
+  listeningBubbleTail: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 8,
+    borderRightColor: colors.white,
+    borderRightWidth: 13,
+    borderTopColor: "transparent",
+    borderTopWidth: 8,
+    height: 0,
+    left: -11,
+    position: "absolute",
+    top: 27,
+    width: 0,
+    zIndex: 2
+  },
+  listeningName: {
+    color: colors.maroon,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  listeningText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 2
+  },
   messageList: { flex: 1 },
   chatBackgroundWrapper: {
     ...StyleSheet.absoluteFillObject,
@@ -473,8 +635,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,
+    elevation: 2,
     marginLeft: 44,
-    padding: 14
+    padding: 14,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 0
   },
   sessionNotice: {
     alignSelf: "center",
@@ -493,8 +660,61 @@ const styles = StyleSheet.create({
     textAlign: "center"
   },
   hakiRow: { justifyContent: "flex-start", flexDirection: "row", alignItems: "flex-end", marginBottom: 16, gap: 8 },
-  bubble: { borderRadius: 20, maxWidth: "82%", paddingHorizontal: 14, paddingVertical: 10 },
-  hakiBubble: { backgroundColor: colors.white, borderBottomLeftRadius: 6, borderColor: colors.border, borderWidth: 1 },
+  hakiAvatarContainer: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: colors.gold,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    height: 36,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 36
+  },
+  hakiAvatar: {
+    height: 34,
+    width: 34
+  },
+  bubble: { borderRadius: 20, maxWidth: "82%", paddingHorizontal: 14, paddingVertical: 10, position: "relative" },
+  hakiBubble: {
+    backgroundColor: colors.white,
+    borderBottomLeftRadius: 9,
+    borderColor: colors.ink,
+    borderWidth: 1,
+    elevation: 1,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 0
+  },
+  hakiBubbleTailBorder: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 8,
+    borderRightColor: colors.ink,
+    borderRightWidth: 12,
+    borderTopColor: "transparent",
+    borderTopWidth: 8,
+    bottom: 9,
+    height: 0,
+    left: -12,
+    position: "absolute",
+    width: 0,
+    zIndex: 1
+  },
+  hakiBubbleTail: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 7,
+    borderRightColor: colors.white,
+    borderRightWidth: 10,
+    borderTopColor: "transparent",
+    borderTopWidth: 7,
+    bottom: 10,
+    height: 0,
+    left: -9,
+    position: "absolute",
+    width: 0,
+    zIndex: 2
+  },
   typingBubble: { alignItems: "center", flexDirection: "row", gap: 8 },
   loadingAnimation: { height: 32, width: 32 },
   typingText: { color: colors.muted, fontSize: 13, fontWeight: "700" }

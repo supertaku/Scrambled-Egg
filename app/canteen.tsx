@@ -26,19 +26,19 @@ export default function CanteenScreen() {
   }, [debouncedQuery]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(24)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 400,
+        duration: 340,
         useNativeDriver: true
       }),
       Animated.spring(slideAnim, {
         toValue: 0,
-        friction: 8,
-        tension: 30,
+        friction: 9,
+        tension: 50,
         useNativeDriver: true
       })
     ]).start();
@@ -50,57 +50,49 @@ export default function CanteenScreen() {
         <Text style={styles.headerTitle}>Food</Text>
       </View>
       <View style={styles.sheetContainer}>
-        <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateX: slideAnim }] }}>
-          <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <View style={styles.sectionHeader}>
               <View style={styles.headerTitleRow}>
-                <Store color={colors.maroon} size={22} />
-                <Text style={styles.sectionTitle}>Canteen Stores</Text>
+                <View style={styles.sectionIconBg}>
+                  <Store color={colors.maroon} size={20} />
+                </View>
+                <View>
+                  <Text style={styles.sectionLabel}>Campus Canteen</Text>
+                  <Text style={styles.sectionTitle}>Canteen Stores</Text>
+                </View>
               </View>
               <Text style={styles.sectionDesc}>Choose a store first, then view its full food list.</Text>
               <View style={styles.searchBox}>
-                <Search color={colors.muted} size={18} />
+                <Search color={colors.mutedLight} size={17} />
                 <TextInput
                   value={query}
                   onChangeText={setQuery}
                   placeholder="Search stores or foods"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={colors.mutedLight}
                   style={styles.searchInput}
                 />
                 {query ? (
                   <Pressable accessibilityLabel="Clear search" onPress={clearQuery} style={styles.clearButton}>
-                    <X color={colors.muted} size={18} />
+                    <X color={colors.muted} size={16} />
                   </Pressable>
                 ) : null}
               </View>
             </View>
 
             <View style={styles.storeList}>
-              {filteredStores.map((store) => (
-                <Pressable
+              {filteredStores.map((store, index) => (
+                <StoreCard
                   key={store.id}
+                  store={store}
+                  index={index}
                   onPress={() =>
                     router.push({
                       pathname: "/canteen-store/[storeId]",
                       params: { storeId: store.id }
                     })
                   }
-                  style={styles.storeCard}
-                >
-                  <View style={styles.storeIcon}>
-                    <Store color={colors.maroon} size={22} />
-                  </View>
-                  <View style={styles.storeCopy}>
-                    <Text style={styles.storeName}>{store.name}</Text>
-                    <Text style={styles.storeDescription}>{store.description}</Text>
-                    <View style={styles.metaRow}>
-                      <MapPin color={colors.muted} size={14} />
-                      <Text style={styles.locationText}>{store.location}</Text>
-                      <Text style={styles.foodCount}>{store.foods.length} foods</Text>
-                    </View>
-                  </View>
-                  <ChevronRight color={colors.maroon} size={20} />
-                </Pressable>
+                />
               ))}
               {filteredStores.length === 0 ? (
                 <View style={styles.emptyState}>
@@ -113,6 +105,64 @@ export default function CanteenScreen() {
         </Animated.View>
       </View>
     </SafeAreaView>
+  );
+}
+
+function StoreCard({
+  store,
+  index,
+  onPress
+}: {
+  store: { id: string; name: string; description: string; location: string; foods: { name: string; description: string }[] };
+  index: number;
+  onPress: () => void;
+}) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(16)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: 0, friction: 9, tension: 70, useNativeDriver: true })
+      ]).start();
+    }, index * 55);
+    return () => clearTimeout(timer);
+  }, [index, fadeAnim, slideAnim]);
+
+  const handlePressIn = () =>
+    Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, friction: 6, tension: 200 }).start();
+  const handlePressOut = () =>
+    Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, friction: 5, tension: 160 }).start();
+
+  return (
+    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      <Animated.View
+        style={[
+          styles.storeCard,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }, { scale: pressScale }]
+          }
+        ]}
+      >
+        <View style={styles.storeIcon}>
+          <Store color={colors.maroon} size={22} />
+        </View>
+        <View style={styles.storeCopy}>
+          <Text style={styles.storeName}>{store.name}</Text>
+          <Text style={styles.storeDescription} numberOfLines={2}>{store.description}</Text>
+          <View style={styles.metaRow}>
+            <MapPin color={colors.mutedLight} size={12} />
+            <Text style={styles.locationText}>{store.location}</Text>
+            <View style={styles.metaDivider} />
+            <Text style={styles.foodCount}>{store.foods.length} items</Text>
+          </View>
+        </View>
+        <ChevronRight color={colors.maroon} size={18} />
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -133,12 +183,13 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: colors.white,
     fontSize: 20,
-    fontWeight: "900"
+    fontWeight: "900",
+    letterSpacing: -0.3
   },
   sheetContainer: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
     flex: 1,
     overflow: "hidden"
   },
@@ -147,29 +198,44 @@ const styles = StyleSheet.create({
   },
   content: {
     backgroundColor: colors.surface,
-    gap: 18,
+    gap: 16,
     paddingHorizontal: 18,
     paddingTop: 24,
-    paddingBottom: 110
+    paddingBottom: 114
   },
   sectionHeader: {
-    gap: 8
+    gap: 10
   },
   headerTitleRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 8
+    gap: 12
+  },
+  sectionIconBg: {
+    backgroundColor: colors.maroonSoft,
+    borderRadius: 14,
+    padding: 10,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  sectionLabel: {
+    color: colors.maroon,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.8
   },
   sectionTitle: {
     color: colors.ink,
     fontSize: 20,
-    fontWeight: "900"
+    fontWeight: "900",
+    letterSpacing: -0.3
   },
   sectionDesc: {
     color: colors.muted,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    lineHeight: 20
+    lineHeight: 19
   },
   searchBox: {
     alignItems: "center",
@@ -180,20 +246,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     minHeight: 46,
-    paddingHorizontal: 12
+    paddingHorizontal: 13,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1
   },
   searchInput: {
     color: colors.ink,
     flex: 1,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "600",
     paddingVertical: 10
   },
   clearButton: {
     alignItems: "center",
-    height: 32,
+    height: 30,
     justifyContent: "center",
-    width: 32
+    width: 30
   },
   storeList: {
     gap: 12
@@ -202,60 +273,70 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.white,
     borderColor: colors.border,
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 12,
-    padding: 16
+    gap: 14,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2
   },
   storeIcon: {
     alignItems: "center",
     backgroundColor: colors.maroonSoft,
     borderRadius: 14,
-    height: 46,
+    height: 48,
     justifyContent: "center",
-    width: 46
+    width: 48
   },
   storeCopy: {
     flex: 1,
-    gap: 6
+    gap: 5
   },
   storeName: {
     color: colors.ink,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "900",
-    lineHeight: 22
+    lineHeight: 21,
+    letterSpacing: -0.2
   },
   storeDescription: {
     color: colors.muted,
     fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 19
+    fontWeight: "500",
+    lineHeight: 18
   },
   metaRow: {
     alignItems: "center",
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 5
   },
   locationText: {
     color: colors.muted,
     fontSize: 12,
-    fontWeight: "700"
+    fontWeight: "600"
+  },
+  metaDivider: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.border
   },
   foodCount: {
     color: colors.maroon,
     fontSize: 12,
-    fontWeight: "900",
-    marginLeft: 6
+    fontWeight: "800"
   },
   emptyState: {
     backgroundColor: colors.white,
     borderColor: colors.border,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    gap: 5,
-    padding: 16
+    gap: 6,
+    padding: 20
   },
   emptyTitle: {
     color: colors.ink,

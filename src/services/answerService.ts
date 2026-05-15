@@ -4,6 +4,12 @@ import { normalizeQuery } from "@/retrieval/queryNormalizer";
 
 import { answerSafeLocalChatWithContext, responseForUnsafeRequest } from "./safeLocalChatService";
 import { classifyStudentQuestionIntent } from "./questionIntentService";
+import {
+  buildAnswerContract,
+  buildContractClarificationResponse,
+  withAnswerContractNotice,
+  type AnswerContract
+} from "./answerContractService";
 import { isTagalogLike } from "./replyLanguageService";
 import {
   buildCapabilityTaskContext,
@@ -18,23 +24,12 @@ import {
   buildWellbeingSupportResponse
 } from "./chatCapabilityService";
 import {
-  buildSourceResponseFromDraft,
+  buildDeterministicSourceResponseFromDraft,
   retrieveSourceAnswerDraft,
   type SourceAnswerDraft
 } from "./sourceAnswerService";
 import { getDeviceCapabilityReport, getSelectedAIMode, type SelectedAIMode } from "./modeSelectionService";
-
-function shouldUseDeterministicSourceAnswer(
-  selectedMode: SelectedAIMode,
-  intent: ReturnType<typeof classifyStudentQuestionIntent>
-): boolean {
-  if (intent.type !== "safe_question" || intent.route !== "source_context") {
-    return false;
-  }
-
-  const tier = selectedMode.mode.capabilities.modelTier;
-  return tier === "tiny" || tier === "minimum";
-}
+import { buildCanteenFoodResponse } from "./canteenAnswerService";
 
 function stringValue(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
@@ -138,6 +133,59 @@ function buildAmbiguousSourceClarificationResponse(
   };
 }
 
+function buildSourceDraftClarificationResponse(question: string, sourceDraft: SourceAnswerDraft): SearchResponse | null {
+  const answerText = sourceDraft.ambiguity?.clarificationQuestion ?? sourceDraft.mismatch?.clarificationQuestion;
+  if (!answerText) {
+    return null;
+  }
+
+  return {
+    question,
+    normalizedQuestion: sourceDraft.normalizedQuestion,
+    responseType: "source",
+    results: [],
+    confidence: "low",
+    reliable: false,
+    answerText,
+    citationsUsed: [],
+    provenance: "No reliable saved source found",
+    activeMode: sourceDraft.selectedMode.mode
+  };
+}
+
+function buildOfficialSourceAnswer(
+  question: string,
+  intent: ReturnType<typeof classifyStudentQuestionIntent>,
+  sourceDraft: SourceAnswerDraft
+): SearchResponse {
+  if (intent.type === "safe_question" && (intent.capability === "summary" || intent.capability === "instruction")) {
+    return buildDeterministicCapabilityResponse(question, intent.capability, sourceDraft);
+  }
+
+  return buildDeterministicSourceResponseFromDraft(question, sourceDraft);
+}
+
+function taskContextForContract(
+  intent: ReturnType<typeof classifyStudentQuestionIntent>,
+  contract: AnswerContract
+): string {
+  if (intent.type !== "safe_question") {
+    return "";
+  }
+
+  const baseContext = buildCapabilityTaskContext(intent.capability, intent.scenario, intent.language);
+  if (!contract.needsFactNotice) {
+    return baseContext;
+  }
+
+  return [
+    baseContext,
+    "For general facts outside saved TUPT sources, answer briefly and include a short reminder to double-check with a reliable source."
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export async function maybeBuildLocalAnswerQualityFallback(
   question: string,
   intent: ReturnType<typeof classifyStudentQuestionIntent>,
@@ -160,11 +208,7 @@ export async function maybeBuildLocalAnswerQualityFallback(
   }
 
   if (sourceDraft?.reliable) {
-    if (intent.capability === "summary" || intent.capability === "instruction") {
-      return buildDeterministicCapabilityResponse(question, intent.capability, sourceDraft);
-    }
-
-    return buildSourceResponseFromDraft(question, sourceDraft);
+    return buildOfficialSourceAnswer(question, intent, sourceDraft);
   }
 
   if (intent.route === "source_context" && shouldClarifyWeakSourceQuery(question, intent)) {
@@ -232,6 +276,7 @@ export async function answerStudentQuestion(
   // regex classification and so the router stays aligned with the hook's
   // conversation state / follow-up detection.
   const intent = options.intent ?? classifyStudentQuestionIntent(question);
+  const contract = buildAnswerContract(question, intent);
 
   if (intent.type === "unsafe_request") {
     return responseForUnsafeRequest(question);
@@ -240,6 +285,10 @@ export async function answerStudentQuestion(
   const selectedMode = await getSelectedAIMode();
   const hasSafeLocalChat = canUseSafeLocalChat(selectedMode);
   const scopedOptions = optionsWithIntentScope(options, intent);
+  const contractClarification = buildContractClarificationResponse(question, contract, selectedMode);
+  if (!options.continuation && contractClarification) {
+    return contractClarification;
+  }
 
   // Continuation prompts are not real questions: they ask the model to finish
   // its previous answer. Skip retrieval and scenario shortcuts entirely and
@@ -255,10 +304,10 @@ export async function answerStudentQuestion(
       onToken: options.onToken,
       originalQuestion: question,
       profileContext: options.profileContext,
-      taskContext: buildCapabilityTaskContext(intent.capability, intent.scenario, intent.language),
+      taskContext: taskContextForContract(intent, contract),
       ...(options.abortSignal ? { abortSignal: options.abortSignal } : {})
     });
-    return { ...response, question };
+    return withAnswerContractNotice({ ...response, question }, contract);
   }
 
   if (intent.scenario === "device_specification") {
@@ -288,6 +337,11 @@ export async function answerStudentQuestion(
     return profileResponse;
   }
 
+  const canteenFoodResponse = buildCanteenFoodResponse(question, intent, selectedMode.mode);
+  if (canteenFoodResponse) {
+    return canteenFoodResponse;
+  }
+
   const quickResponse = buildQuickScenarioResponse(question, intent, selectedMode.mode);
   if (quickResponse) {
     return quickResponse;
@@ -295,19 +349,23 @@ export async function answerStudentQuestion(
 
   if (!hasSafeLocalChat) {
     if (intent.route === "obvious_general") {
-      return buildSafeQuestionFallbackResponse(question, intent.capability, selectedMode.mode, intent.scenario);
+      return withAnswerContractNotice(
+        buildSafeQuestionFallbackResponse(question, intent.capability, selectedMode.mode, intent.scenario),
+        contract
+      );
     }
 
     const sourceDraft = await retrieveSourceAnswerDraft(question, scopedOptions, selectedMode);
+    const sourceClarification = buildSourceDraftClarificationResponse(question, sourceDraft);
+    if (sourceClarification) {
+      return sourceClarification;
+    }
+
     if (!sourceDraft.reliable) {
       return buildSourceMissFallbackResponse(question, intent, selectedMode.mode);
     }
 
-    if (intent.capability === "summary" || intent.capability === "instruction") {
-      return buildDeterministicCapabilityResponse(question, intent.capability, sourceDraft);
-    }
-
-    return buildSourceResponseFromDraft(question, sourceDraft);
+    return buildOfficialSourceAnswer(question, intent, sourceDraft);
   }
 
   if (intent.route === "obvious_general") {
@@ -317,22 +375,26 @@ export async function answerStudentQuestion(
       onToken: options.onToken,
       originalQuestion: question,
       profileContext: options.profileContext,
-      taskContext: buildCapabilityTaskContext(intent.capability, intent.scenario, intent.language),
+      taskContext: taskContextForContract(intent, contract),
       ...(options.abortSignal ? { abortSignal: options.abortSignal } : {})
     });
     const qualityFallback = await maybeBuildLocalAnswerQualityFallback(question, intent, response);
     if (qualityFallback) {
-      return qualityFallback;
+      return withAnswerContractNotice(qualityFallback, contract);
     }
 
-    return {
+    return withAnswerContractNotice({
       ...response,
       question,
       responseType: intent.capability === "university_answer" ? response.responseType ?? "safe_local_chat" : intent.capability
-    };
+    }, contract);
   }
 
   const sourceDraft = await retrieveSourceAnswerDraft(question, scopedOptions, selectedMode);
+  const sourceClarification = buildSourceDraftClarificationResponse(question, sourceDraft);
+  if (sourceClarification) {
+    return sourceClarification;
+  }
 
   // Weak retrieval is not an unsafe request; steer students toward clarification or official verification.
   if (!sourceDraft.reliable) {
@@ -343,45 +405,5 @@ export async function answerStudentQuestion(
     return buildSourceMissFallbackResponse(question, intent, selectedMode.mode);
   }
 
-  if (
-    shouldUseDeterministicSourceAnswer(selectedMode, intent) &&
-    (intent.capability === "summary" || intent.capability === "instruction")
-  ) {
-    return buildDeterministicCapabilityResponse(question, intent.capability, sourceDraft);
-  }
-
-  const localAnswer = await answerSafeLocalChatWithContext(question, {
-    conversationContext: options.conversationContext,
-    intent,
-    onToken: options.onToken,
-    originalQuestion: question,
-    profileContext: options.profileContext,
-    sourceDraft,
-    taskContext: buildCapabilityTaskContext(intent.capability, intent.scenario, intent.language),
-    ...(options.abortSignal ? { abortSignal: options.abortSignal } : {})
-  });
-  const responseType =
-    intent.capability === "summary" || intent.capability === "instruction"
-      ? intent.capability
-      : localAnswer.responseType ?? "safe_local_chat";
-
-  if (localAnswer.reliable) {
-    const qualityFallback = await maybeBuildLocalAnswerQualityFallback(question, intent, localAnswer, sourceDraft);
-    if (qualityFallback) {
-      return qualityFallback;
-    }
-
-    return {
-      ...localAnswer,
-      question,
-      normalizedQuestion: sourceDraft.normalizedQuestion,
-      responseType
-    };
-  }
-
-  if (intent.capability === "summary" || intent.capability === "instruction") {
-    return buildDeterministicCapabilityResponse(question, intent.capability, sourceDraft);
-  }
-
-  return buildSourceResponseFromDraft(question, sourceDraft);
+  return buildOfficialSourceAnswer(question, intent, sourceDraft);
 }

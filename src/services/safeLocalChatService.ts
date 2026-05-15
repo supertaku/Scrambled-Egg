@@ -126,6 +126,14 @@ function retryOptionsWithoutStreaming(options: SafeLocalChatOptions): SafeLocalC
   return retryOptions;
 }
 
+function isAbortLikeError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return /abort|cancel|stop/i.test(`${error.name} ${error.message}`);
+  }
+
+  return typeof error === "string" && /abort|cancel|stop/i.test(error);
+}
+
 async function runLocalSafeChat(
   question: string,
   selectedMode: SelectedAIMode,
@@ -161,6 +169,18 @@ async function runLocalSafeChat(
 
     return { result, mode };
   } catch (error) {
+    if (options.abortSignal?.aborted || isAbortLikeError(error)) {
+      return {
+        result: {
+          status: "incomplete",
+          text: "",
+          providerId: summaryProvider.id,
+          providerName: summaryProvider.name
+        },
+        mode
+      };
+    }
+
     disableAIProviderForSession(summaryProvider.id, error);
     if (attempt < MAX_PROVIDER_RETRIES) {
       const fallbackSelection = await getSelectedAIMode();

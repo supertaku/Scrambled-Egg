@@ -33,6 +33,8 @@ export const synonymMap: Record<string, string[]> = {
   osa: ["student affairs", "office of student affairs"],
   osas: ["student affairs and services", "office of student affairs"],
   rgso: ["registrar", "registrar's office", "records office"],
+  gmc: ["good moral", "good moral character", "good moral certificate", "certificate of good moral", "certificate of good moral character", "moral character"],
+  moral: ["good moral", "good moral character", "good moral certificate", "gmc", "certificate of good moral", "certificate of good moral character"],
   ird: ["instructional resources", "instruction research"],
   its: ["information technology services", "it services"],
   // ── Campuses ──────────────────────────────────────────────────────────

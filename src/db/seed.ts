@@ -6,6 +6,7 @@ import type { StructuredDocument } from "@/types/document";
 import { getDocumentCount, insertDocuments, getAppMetaValue } from "./documentRepository";
 
 const SEED_VERSION = "tup-taguig-2026-05-10";
+const seedDocumentIds = (seedDocuments as StructuredDocument[]).map((document) => document.document_id);
 
 export async function seedDatabase(db: SQLiteDatabase): Promise<void> {
   const currentVersion = await getAppMetaValue(db, "seed_version");
@@ -17,7 +18,9 @@ export async function seedDatabase(db: SQLiteDatabase): Promise<void> {
 
   if (count > 0 && currentVersion !== SEED_VERSION) {
     console.log(`Re-seeding database from version ${currentVersion} to ${SEED_VERSION}`);
-    await db.runAsync("DELETE FROM documents");
+    for (const documentId of seedDocumentIds) {
+      await db.runAsync("DELETE FROM documents WHERE document_id = ?", [documentId]);
+    }
   }
 
   await insertDocuments(db, seedDocuments as StructuredDocument[]);

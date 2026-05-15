@@ -220,6 +220,8 @@ export function HakiTabPopup({ message, onDismiss, visibleKey }: HakiTabPopupPro
           ]}
         >
           <Pressable accessibilityRole="button" onPress={dismissImmediately} style={styles.speechBubble}>
+            <View pointerEvents="none" style={styles.speechBubbleTailBorder} />
+            <View pointerEvents="none" style={styles.speechBubbleTail} />
             <Text style={styles.hakiName}>Haki</Text>
             <Text style={styles.message}>{renderedMessage}</Text>
           </Pressable>
@@ -256,32 +258,62 @@ const styles = StyleSheet.create({
   },
   speechBubble: {
     backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    elevation: 8,
+    borderColor: "#D0D5DD",
+    borderRadius: 20,
+    borderTopLeftRadius: 8,
+    borderWidth: 1.5,
+    elevation: 10,
     flexShrink: 1,
     maxWidth: 274,
     minHeight: 76,
     paddingHorizontal: 18,
-    paddingVertical: 13,
-    shadowColor: colors.ink,
+    paddingVertical: 14,
+    position: "relative",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16
+    shadowOpacity: 0.14,
+    shadowRadius: 14
+  },
+  speechBubbleTailBorder: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 12,
+    borderRightColor: "#D0D5DD",
+    borderRightWidth: 17,
+    borderTopColor: "transparent",
+    borderTopWidth: 12,
+    height: 0,
+    left: -17,
+    position: "absolute",
+    top: 24,
+    width: 0,
+    zIndex: 1
+  },
+  speechBubbleTail: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 10,
+    borderRightColor: colors.white,
+    borderRightWidth: 15,
+    borderTopColor: "transparent",
+    borderTopWidth: 10,
+    height: 0,
+    left: -13,
+    position: "absolute",
+    top: 26,
+    width: 0,
+    zIndex: 2
   },
   hakiName: {
     color: colors.maroon,
     fontSize: 11,
     fontWeight: "900",
-    letterSpacing: 0.4,
-    marginBottom: 3,
+    letterSpacing: 0.8,
+    marginBottom: 4,
     textTransform: "uppercase"
   },
   message: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "800",
-    lineHeight: 20
+    fontWeight: "700",
+    lineHeight: 21
   }
 });

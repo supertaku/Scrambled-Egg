@@ -180,6 +180,15 @@ export async function saveStudentProfile(profile: StudentProfile): Promise<void>
   await AsyncStorage.setItem(STORAGE_KEYS.STUDENT_PROFILE, JSON.stringify(normalized));
 }
 
+export async function clearStudentProfile(): Promise<void> {
+  const current = await getStudentProfile();
+  safeDeleteAvatar(current.avatarUri);
+  await AsyncStorage.multiRemove([STORAGE_KEYS.STUDENT_PROFILE, STORAGE_KEYS.STUDENT_PROFILE_AVATAR_URI]);
+  if (await isSecureStoreUsable()) {
+    await SecureStore.deleteItemAsync(SECURE_PROFILE_CORE_KEY).catch(() => undefined);
+  }
+}
+
 export async function importStudentAvatar(sourceUri: string, previousAvatarUri?: string): Promise<string> {
   ensureProfileDirectory();
   const source = new File(sourceUri);

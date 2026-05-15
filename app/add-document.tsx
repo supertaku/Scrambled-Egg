@@ -92,7 +92,7 @@ export default function AddDocumentScreen() {
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <MascotHeader
-          message="Paste or pick a file lang. I-check ko muna bago idagdag, para clean."
+          message="Paste or pick a JSON file. Haki will validate it before adding it to the local guide."
           subtitle="Import campus documents"
         />
 

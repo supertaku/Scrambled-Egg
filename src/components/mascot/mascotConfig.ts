@@ -16,15 +16,11 @@ export type InteractiveMascotState = "awake" | "sleeping" | "groggy";
 
 export const DOUBLE_TAP_DELAY_MS = 260;
 export const GROGGY_RECOVERY_MS = 10_000;
-export const IDLE_TURN_INTERVAL_MS = 14_000;
-export const TURNAROUND_VISIBLE_MS = 1700;
 export const WAKE_DIALOGUE_VISIBLE_MS = 3500;
 
-export const SLEEPING_DIALOGUE = "Zzz... Haki is resting. Double-tap me when you need me.";
-export const WAKE_DIALOGUE = "Okay, gising na ako. Ano'ng concern natin?";
+export const SLEEPING_DIALOGUE = "Zzz... Haki is resting for a bit.";
+export const WAKE_DIALOGUE = "Okay, I'm awake. What can I help with?";
 export const GROGGY_DIALOGUE = "Hey! Don't shake your phone I feel dizzy!";
-
-export const mascotTurnaroundImage: ImageSourcePropType = require("../../../assets/animations/haki-turnaround.gif");
 
 export const mascotImages: Record<MascotStatus, ImageSourcePropType> = {
   idle: require("../../../assets/images/mascot/grayhawk-idle.png"),
