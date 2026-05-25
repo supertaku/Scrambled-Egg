@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import * as Crypto from "expo-crypto";
+import { AppState } from "react-native";
 
 import { getRelatedConversationContext, saveConversationMemory, saveRecentQuestion } from "@/services/historyService";
 import { answerStudentQuestion } from "@/services/answerService";
 import { getSelectedAIMode } from "@/services/modeSelectionService";
 import { normalizeQuery } from "@/retrieval/queryNormalizer";
-import type { ChatContextTurn, SearchResponse } from "@/types/search";
+import type { ChatContextTurn, ChatRole, SearchResponse } from "@/types/search";
 import type { ChatMessage } from "@/types/chat";
 import { sanitizeAssistantDisplayText } from "@/ai/sanitizeAssistantText";
 import { classifyStudentQuestionIntent } from "@/services/questionIntentService";
@@ -16,6 +17,11 @@ import { needsContinuation, stitchContinuation } from "@/services/chatContinuati
 import { isFollowUpQuestion } from "@/services/chatFollowUpDetection";
 import { buildAnswerMessage } from "@/services/searchResultText";
 import { saveChatFeedback } from "@/services/chatFeedbackService";
+import {
+  clearPendingChatRequest,
+  loadPendingChatRequest,
+  savePendingChatRequest
+} from "@/services/pendingChatRequestService";
 import type { ChatFeedbackRating } from "@/types/chat";
 
 /** Generates a collision-resistant unique ID for chat messages. */
@@ -23,11 +29,18 @@ function createId(): string {
   return Crypto.randomUUID();
 }
 
-function createOpeningMessage(): ChatMessage {
+const OPENING_MESSAGE_BY_ROLE: Record<ChatRole, string> = {
+  haki: "What would you like help with today?",
+  information_officer: "Ask about a campus office, requirement, or process.",
+  friendly_buddy: "Tell me what is on your mind.",
+  researcher: "Ask about facts outside campus."
+};
+
+function createOpeningMessage(chatRole: ChatRole): ChatMessage {
   return {
     id: "opening",
     sender: "haki",
-    text: "Ask me about campus offices, enrollment, rules, student life, study help, or safe general questions."
+    text: OPENING_MESSAGE_BY_ROLE[chatRole]
   };
 }
 
@@ -86,18 +99,30 @@ export interface UseChatMessagesResult {
   pendingQuestion: string | null;
   inFlightRef: MutableRefObject<boolean>;
   mountedRef: MutableRefObject<boolean>;
-  sendMessage: (overrideQuestion?: string) => Promise<void>;
+  sendMessage: (overrideQuestion?: string, requestOptions?: ChatSendOptions) => Promise<void>;
   stopResponse: () => void;
   submitFeedback: (messageId: string, rating: ChatFeedbackRating) => Promise<void>;
   setInitializing: Dispatch<SetStateAction<boolean>>;
   setError: Dispatch<SetStateAction<string | null>>;
 }
 
-export function useChatMessages(profileContext?: string | null): UseChatMessagesResult {
-  const [messages, setMessagesState] = useState<ChatMessage[]>(() => [createOpeningMessage()]);
+export interface ChatSendOptions {
+  chatRole?: ChatRole;
+  continuation?: boolean;
+  intentQuestion?: string;
+}
+
+export function useChatMessages(
+  profileContext?: string | null,
+  chatRole: ChatRole = "haki",
+  useRelatedHistory = false
+): UseChatMessagesResult {
+  const [messages, setMessagesState] = useState<ChatMessage[]>(() => [createOpeningMessage(chatRole)]);
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
   const messagesRef = useRef<ChatMessage[]>(messages);
   const profileContextRef = useRef<string | null>(profileContext ?? null);
+  const useRelatedHistoryRef = useRef(useRelatedHistory);
+  const chatRoleRef = useRef<ChatRole>(chatRole);
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [initializing, setInitializing] = useState(true);
@@ -109,10 +134,13 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
   const mountedRef = useRef(true);
   const requestRef = useRef(0);
   const answerAbortRef = useRef<AbortController | null>(null);
+  const interruptedByBackgroundRef = useRef(false);
   const streamedTextRef = useRef("");
   const streamFlushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   messagesRef.current = messages;
   profileContextRef.current = profileContext ?? null;
+  useRelatedHistoryRef.current = useRelatedHistory;
+  chatRoleRef.current = chatRole;
 
   const setMessages = useCallback((action: SetStateAction<ChatMessage[]>) => {
     setMessagesState((current) => {
@@ -120,6 +148,35 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
       messagesRef.current = next;
       return next;
     });
+  }, []);
+
+  useEffect(() => {
+    setMessages((current) => (
+      current.length === 1 && current[0]?.id === "opening"
+        ? [createOpeningMessage(chatRole)]
+        : current
+    ));
+  }, [chatRole, setMessages]);
+
+  useEffect(() => {
+    let mounted = true;
+    void loadPendingChatRequest().then((pending) => {
+      if (!mounted || !pending || inFlightRef.current) return;
+      setLastFailedQuestion(pending.question);
+      setError("A previous answer paused when the app left the foreground. Tap Retry to continue.");
+    });
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if ((nextState === "inactive" || nextState === "background") && inFlightRef.current) {
+        interruptedByBackgroundRef.current = true;
+        answerAbortRef.current?.abort();
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
   }, []);
 
   const clearPendingStreamFlush = useCallback(() => {
@@ -140,11 +197,11 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
     answerAbortRef.current?.abort();
   }, [clearPendingStreamFlush]);
 
-  const sendMessage = useCallback(async (overrideQuestion?: string) => {
+  const sendMessage = useCallback(async (overrideQuestion?: string, requestOptions: ChatSendOptions = {}) => {
     const question = (overrideQuestion ?? "").trim();
 
     if (initializing) {
-      setError("Haki is still opening the saved campus guide. Try again in a moment.");
+      setError("Haki is still getting ready. Try again in a moment.");
       return;
     }
 
@@ -155,12 +212,15 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
       return;
     }
 
+    const requestedChatRole = requestOptions.chatRole ?? chatRoleRef.current;
+    const intentQuestion = requestOptions.intentQuestion?.trim() || question;
     const requestId = requestRef.current + 1;
     const userMessageId = createId();
     requestRef.current = requestId;
     inFlightRef.current = true;
     answerAbortRef.current?.abort();
     answerAbortRef.current = new AbortController();
+    interruptedByBackgroundRef.current = false;
     const abortSignal = answerAbortRef.current.signal;
     setError(null);
     setLastFailedQuestion(null);
@@ -170,11 +230,16 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
     streamedTextRef.current = "";
     clearPendingStreamFlush();
     setPendingQuestion(question);
+    void savePendingChatRequest({
+      chatRole: requestedChatRole,
+      question,
+      startedAt: new Date().toISOString()
+    }).catch(() => undefined);
 
-    const intent = classifyStudentQuestionIntent(question);
+    const intent = classifyStudentQuestionIntent(intentQuestion);
     const messageSnapshot = messagesRef.current;
     const hasPriorTurns = messageSnapshot.some((m) => m.id !== "opening" && m.text.trim().length > 0);
-    const isFollowUp = isFollowUpQuestion(question, hasPriorTurns);
+    const isFollowUp = Boolean(requestOptions.continuation) || isFollowUpQuestion(question, hasPriorTurns);
     const localConversationContext = isFollowUp ? buildConversationContext(messageSnapshot) : [];
     const conversationState = buildConversationState({ intent, messages: messageSnapshot, question });
     let streamedMessageId: string | null = null;
@@ -202,7 +267,9 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
     void saveRecentQuestion(question).catch(() => undefined);
 
     try {
-      const relatedConversationContext = await getRelatedConversationContext(question, intent).catch(() => []);
+      const relatedConversationContext = useRelatedHistoryRef.current
+        ? await getRelatedConversationContext(intentQuestion, intent).catch(() => [])
+        : [];
       const conversationContext = mergeChatContext(relatedConversationContext, localConversationContext);
       const arithmeticAnswer = buildArithmeticFollowUpAnswer(question, messageSnapshot);
       let response: SearchResponse;
@@ -211,6 +278,8 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
         const mode = (await getSelectedAIMode()).mode;
         response = {
           question,
+          requestedChatRole,
+          answerBasis: "safety_or_app_guidance",
           normalizedQuestion: normalizeQuery(question),
           responseType: "general_advice",
           results: [],
@@ -223,9 +292,11 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
         };
       } else {
         response = await answerStudentQuestion(question, {
+          chatRole: requestedChatRole,
           conversationContext,
           conversationState,
           intent,
+          ...(requestOptions.continuation ? { continuation: true } : {}),
           profileContext: profileContextRef.current ?? undefined,
           abortSignal,
           onToken
@@ -236,13 +307,22 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
       clearPendingStreamFlush();
 
       if (abortSignal.aborted) {
-        const stoppedText = sanitizeAssistantDisplayText(streamedTextRef.current).trim() || "Response stopped.";
+        const backgroundInterrupted = interruptedByBackgroundRef.current;
+        const stoppedText = backgroundInterrupted
+          ? "I paused this answer while the app was in the background. Tap Retry when you return."
+          : sanitizeAssistantDisplayText(streamedTextRef.current).trim() || "Response stopped.";
         setMessages((current) => {
           const withSentUser = current.map((m) => (m.id === userMessageId ? { ...m, status: "sent" as const } : m));
           return [...withSentUser, { id: streamedMessageId ?? createId(), question, sender: "haki", text: stoppedText }];
         });
         setStreamingMessage(null);
         streamedTextRef.current = "";
+        if (backgroundInterrupted) {
+          setLastFailedQuestion(question);
+          setError("Answer paused while the app was in the background. Tap Retry to continue.");
+        } else {
+          void clearPendingChatRequest().catch(() => undefined);
+        }
         return;
       }
 
@@ -264,6 +344,7 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
         const continuation = await answerStudentQuestion(
           "Continue the previous answer from where it stopped. Do not restart, and finish the sentence.",
           {
+            chatRole: requestedChatRole,
             conversationContext: continuationContext,
             conversationState,
             intent,
@@ -300,23 +381,41 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
         return [...withSentUser, hakiMessage];
       });
       void saveConversationMemory({ question, answer: answerText, intent }).catch(() => undefined);
+      void clearPendingChatRequest().catch(() => undefined);
       setStreamingMessage(null);
       streamedTextRef.current = "";
-    } catch (err) {
+    } catch {
       if (mountedRef.current && requestRef.current === requestId) {
         clearPendingStreamFlush();
-        const message = err instanceof Error ? err.message : "Haki had trouble answering.";
-        setError(message);
-        setLastFailedQuestion(question);
-        setMessages((current) => [
-          ...current.map((m) => (m.id === userMessageId ? { ...m, status: "failed" as const } : m)),
-          {
-            id: createId(),
-            question,
-            sender: "haki",
-            text: "I had trouble checking that just now. Try again in a bit, or add one more detail so I can answer better."
+        if (abortSignal.aborted) {
+          const backgroundInterrupted = interruptedByBackgroundRef.current;
+          const stoppedText = backgroundInterrupted
+            ? "I paused this answer while the app was in the background. Tap Retry when you return."
+            : sanitizeAssistantDisplayText(streamedTextRef.current).trim() || "Response stopped.";
+          setMessages((current) => [
+            ...current.map((m) => (m.id === userMessageId ? { ...m, status: "sent" as const } : m)),
+            { id: streamedMessageId ?? createId(), question, sender: "haki", text: stoppedText }
+          ]);
+          if (backgroundInterrupted) {
+            setLastFailedQuestion(question);
+            setError("Answer paused while the app was in the background. Tap Retry to continue.");
+          } else {
+            void clearPendingChatRequest().catch(() => undefined);
           }
-        ]);
+        } else {
+          setError("Haki had trouble answering. Please try again.");
+          setLastFailedQuestion(question);
+          setMessages((current) => [
+            ...current.map((m) => (m.id === userMessageId ? { ...m, status: "failed" as const } : m)),
+            {
+              id: createId(),
+              question,
+              sender: "haki",
+              text: "I had trouble checking that just now. Try again in a bit, or add one more detail so I can answer better."
+            }
+          ]);
+          void clearPendingChatRequest().catch(() => undefined);
+        }
       }
     } finally {
       if (mountedRef.current && requestRef.current === requestId) {
@@ -353,7 +452,7 @@ export function useChatMessages(profileContext?: string | null): UseChatMessages
     try {
       await saveChatFeedback({ ...message, feedbackRating: rating }, question, rating);
     } catch {
-      setError("Haki couldn't save that feedback locally.");
+      setError("Haki couldn't save that feedback on your phone.");
     }
   }, [setMessages]);
 

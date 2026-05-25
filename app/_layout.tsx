@@ -1,7 +1,10 @@
+import "react-native-gesture-handler";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import { Home, BookOpen, Lightbulb, Map, MessageCircle, type LucideIcon } from "lucide-react-native";
 import {
+  ActivityIndicator,
   Animated,
   AppState,
   Pressable,
@@ -11,19 +14,24 @@ import {
   View
 } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-controller";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { cleanupPartialGgufDownloads } from "@/ai/localModelManager";
+import { ModelOperationBadge } from "@/components/models/ModelOperationBadge";
+import { cleanupPartialGgufDownloads, recoverInterruptedModelOperation } from "@/ai/localModelManager";
 import { disableAdminMode, subscribeAdminMode } from "@/services/adminService";
 import { getCurrentAIMode, releaseLocalAIForMemoryPressure } from "@/services/modeSelectionService";
+import { shouldPresentFirstRunOnboarding, subscribeOnboardingCompleted } from "@/services/onboardingService";
 import { colors } from "@/theme/colors";
+import { metrics } from "@/theme/metrics";
 import { logger } from "@/utils/logger";
 
 const TAB_BAR_PADDING = 8;
 const TAB_BAR_SIDE_MARGIN = 18;
 
 const USER_ROUTE_NAMES = ["index", "map", "chat", "library", "tips"] as const;
-const ADMIN_ONLY_ROUTE_NAMES = ["settings", "documents", "add-document"];
+const ADMIN_ONLY_ROUTE_NAMES = ["documents", "add-document"];
 const REMOVED_ADMIN_ROUTE_NAMES: string[] = [];
 
 type UserRouteName = (typeof USER_ROUTE_NAMES)[number];
@@ -109,6 +117,55 @@ function TabItem({ accessibilityLabel, focused, Icon, onPress }: TabItemProps) {
 
 interface CustomTabBarProps extends BottomTabBarProps {
   adminMode: boolean;
+}
+
+function TabsFrame({
+  immersiveRouteVisible,
+  renderTabBar
+}: {
+  immersiveRouteVisible: boolean;
+  renderTabBar: (props: BottomTabBarProps) => React.ReactNode;
+}) {
+  const keyboardVisible = useKeyboardState((state) => state.isVisible);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    logger.ui.log("Floating tab keyboard visibility state.", {
+      hidden: immersiveRouteVisible || keyboardVisible,
+      immersiveRouteVisible,
+      keyboardVisible
+    });
+  }, [immersiveRouteVisible, keyboardVisible]);
+
+  return (
+    <View style={styles.root}>
+      <Tabs
+        tabBar={immersiveRouteVisible || keyboardVisible ? () => null : renderTabBar}
+        screenOptions={{
+          headerShown: false
+        }}
+      >
+        <Tabs.Screen name="index" options={{ title: "Home" }} />
+        <Tabs.Screen name="map" options={{ title: "Map" }} />
+        <Tabs.Screen name="campus-map" options={{ href: null, title: "Campus Map" }} />
+        <Tabs.Screen name="chat" options={{ title: "Chat" }} />
+        <Tabs.Screen name="library" options={{ title: "Library" }} />
+        <Tabs.Screen name="library-topic/[chunkId]" options={{ href: null }} />
+        <Tabs.Screen name="canteen" options={{ href: null, title: "Food" }} />
+        <Tabs.Screen name="canteen-store/[storeId]" options={{ href: null }} />
+        <Tabs.Screen name="tips" options={{ title: "Tips" }} />
+        <Tabs.Screen name="profile" options={{ href: null }} />
+        <Tabs.Screen name="onboarding" options={{ href: null }} />
+        <Tabs.Screen name="models" options={{ href: null, title: "Chat Options" }} />
+        <Tabs.Screen name="organization" options={{ href: null, title: "Org" }} />
+        <Tabs.Screen name="org-chart" options={{ href: null, title: "Org Chart" }} />
+        <Tabs.Screen name="documents" options={{ href: null, title: "Docs" }} />
+        <Tabs.Screen name="add-document" options={{ href: null, title: "Add" }} />
+        <Tabs.Screen name="settings" options={{ href: null, title: "Settings" }} />
+      </Tabs>
+      {!immersiveRouteVisible ? <ModelOperationBadge /> : null}
+    </View>
+  );
 }
 
 function CustomTabBar({ state, navigation, adminMode }: CustomTabBarProps) {
@@ -207,12 +264,46 @@ function CustomTabBar({ state, navigation, adminMode }: CustomTabBarProps) {
 
 export default function RootLayout() {
   const [adminMode, setAdminMode] = useState(false);
+  const [onboardingReady, setOnboardingReady] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const router = useRouter();
   const segments = useSegments();
+  const currentRoute = segments[segments.length - 1] as string | undefined;
+  const onboardingVisible = currentRoute === "onboarding";
+  const immersiveRouteVisible = onboardingVisible || currentRoute === "campus-map";
+
+  useEffect(() => {
+    let mounted = true;
+    void shouldPresentFirstRunOnboarding()
+      .then((shouldPresent) => {
+        if (mounted) {
+          setNeedsOnboarding(shouldPresent);
+          setOnboardingReady(true);
+        }
+      })
+      .catch((error) => {
+        logger.ui.warn("Could not resolve onboarding state.", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+        if (mounted) {
+          setOnboardingReady(true);
+        }
+      });
+
+    const unsubscribe = subscribeOnboardingCompleted(() => {
+      setNeedsOnboarding(false);
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
     cleanupPartialGgufDownloads();
+    void recoverInterruptedModelOperation();
     void getCurrentAIMode().catch((error) => {
       logger.ai.warn("Startup capability detection failed", { error: error instanceof Error ? error.message : String(error) });
     });
@@ -264,47 +355,42 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    const currentRoute = segments[segments.length - 1];
+    if (!onboardingReady) {
+      return;
+    }
 
-    if (!adminMode && currentRoute !== undefined && ADMIN_ONLY_ROUTE_NAMES.includes(currentRoute)) {
+    if (needsOnboarding && currentRoute !== "onboarding") {
+      router.replace("/onboarding" as never);
+    } else if (!adminMode && currentRoute !== undefined && ADMIN_ONLY_ROUTE_NAMES.includes(currentRoute)) {
       router.replace("/");
     } else if (currentRoute !== undefined && REMOVED_ADMIN_ROUTE_NAMES.includes(currentRoute)) {
       router.replace(adminMode ? "/settings" : "/");
     }
-  }, [adminMode, segments, router]);
+  }, [adminMode, currentRoute, needsOnboarding, onboardingReady, router]);
 
   const renderTabBar = useCallback(
     (props: BottomTabBarProps) => <CustomTabBar {...props} adminMode={adminMode} />,
     [adminMode]
   );
 
-  return (
-    <ErrorBoundary>
-      <StatusBar barStyle="light-content" />
-      <View style={styles.root}>
-        <Tabs
-          tabBar={renderTabBar}
-          screenOptions={{
-            headerShown: false
-          }}
-        >
-          <Tabs.Screen name="index" options={{ title: "Home" }} />
-          <Tabs.Screen name="map" options={{ title: "Map" }} />
-          <Tabs.Screen name="chat" options={{ title: "Chat" }} />
-          <Tabs.Screen name="library" options={{ title: "Library" }} />
-          <Tabs.Screen name="library-topic/[chunkId]" options={{ href: null }} />
-          <Tabs.Screen name="canteen" options={{ href: null, title: "Food" }} />
-          <Tabs.Screen name="canteen-store/[storeId]" options={{ href: null }} />
-          <Tabs.Screen name="tips" options={{ title: "Tips" }} />
-          <Tabs.Screen name="profile" options={{ href: null }} />
-          <Tabs.Screen name="organization" options={{ href: null, title: "Org" }} />
-          <Tabs.Screen name="org-chart" options={{ href: null, title: "Org Chart" }} />
-          <Tabs.Screen name="documents" options={{ href: null, title: "Docs" }} />
-          <Tabs.Screen name="add-document" options={{ href: null, title: "Add" }} />
-          <Tabs.Screen name="settings" options={{ href: null, title: "Admin" }} />
-        </Tabs>
+  if (!onboardingReady || (needsOnboarding && !onboardingVisible)) {
+    return (
+      <View style={styles.loading}>
+        <StatusBar barStyle="light-content" />
+        <ActivityIndicator color={colors.white} size="large" />
       </View>
-    </ErrorBoundary>
+    );
+  }
+
+  return (
+    <GestureHandlerRootView style={styles.root}>
+      <ErrorBoundary>
+        <StatusBar barStyle="light-content" />
+        <KeyboardProvider navigationBarTranslucent preserveEdgeToEdge statusBarTranslucent>
+          <TabsFrame immersiveRouteVisible={immersiveRouteVisible} renderTabBar={renderTabBar} />
+        </KeyboardProvider>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
 
@@ -312,9 +398,15 @@ const styles = StyleSheet.create({
   root: {
     flex: 1
   },
+  loading: {
+    alignItems: "center",
+    backgroundColor: colors.maroon,
+    flex: 1,
+    justifyContent: "center"
+  },
   tabBarContainer: {
     position: "absolute",
-    bottom: 28,
+    bottom: metrics.navigation.floatingTabBarBottom,
     left: TAB_BAR_SIDE_MARGIN,
     right: TAB_BAR_SIDE_MARGIN,
     alignItems: "center"
@@ -323,7 +415,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: colors.tabBar,
     borderRadius: 36,
-    height: 62,
+    height: metrics.navigation.floatingTabBarHeight,
     paddingHorizontal: TAB_BAR_PADDING,
     alignItems: "center",
     justifyContent: "space-around",

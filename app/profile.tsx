@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, BookOpen, Calendar, GraduationCap, ImagePlus, Save, Trash2, User as UserIcon } from "lucide-react-native";
+import { ArrowLeft, BookOpen, Calendar, ChevronRight, Cpu, GraduationCap, Hash, ImagePlus, Save, Sparkles, Trash2, User as UserIcon } from "lucide-react-native";
 
 import { clearStudentProfile, getStudentProfile, importStudentAvatar, saveStudentProfile } from "@/services/studentProfileService";
 import { colors } from "@/theme/colors";
@@ -28,6 +28,7 @@ export default function ProfileScreen() {
   const [studentId, setStudentId] = useState("");
   const [course, setCourse] = useState("");
   const [year, setYear] = useState("");
+  const [section, setSection] = useState("");
   const [avatarUri, setAvatarUri] = useState("");
   const [profileLoading, setProfileLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -68,6 +69,7 @@ export default function ProfileScreen() {
         setStudentId(profile.studentId);
         setCourse(profile.course);
         setYear(profile.year);
+        setSection(profile.section);
         setAvatarUri(profile.avatarUri ?? "");
       })
       .catch(() => {
@@ -98,7 +100,7 @@ export default function ProfileScreen() {
     ]).start();
 
     try {
-      await saveStudentProfile({ avatarUri, name, studentId, course, year });
+      await saveStudentProfile({ avatarUri, name, studentId, course, year, section });
       setSaveSuccess(true);
       setTimeout(() => {
         router.back();
@@ -108,7 +110,7 @@ export default function ProfileScreen() {
     } finally {
       setSavingProfile(false);
     }
-  }, [avatarUri, course, name, router, studentId, year, saveButtonScale]);
+  }, [avatarUri, course, name, router, section, studentId, year, saveButtonScale]);
 
   const handlePickAvatar = useCallback(async () => {
     setProfileError(null);
@@ -144,11 +146,11 @@ export default function ProfileScreen() {
     try {
       const nextAvatarUri = await importStudentAvatar(asset.uri, avatarUri);
       setAvatarUri(nextAvatarUri);
-      await saveStudentProfile({ avatarUri: nextAvatarUri, name, studentId, course, year });
+      await saveStudentProfile({ avatarUri: nextAvatarUri, name, studentId, course, year, section });
     } catch {
       setProfileError("Could not save the selected avatar.");
     }
-  }, [avatarUri, avatarScale, course, name, studentId, year]);
+  }, [avatarUri, avatarScale, course, name, section, studentId, year]);
 
   const handleClearProfile = useCallback(() => {
     Alert.alert(
@@ -168,6 +170,7 @@ export default function ProfileScreen() {
                 setStudentId("");
                 setCourse("");
                 setYear("");
+                setSection("");
                 setAvatarUri("");
               })
               .catch(() => setProfileError("Could not delete your profile. Please try again."))
@@ -222,6 +225,38 @@ export default function ProfileScreen() {
                 </Text>
               </View>
 
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Complete or edit profile with Haki"
+                onPress={() => router.push({ pathname: "/onboarding" as never, params: { mode: "edit", returnTo: "profile" } } as never)}
+                style={styles.hakiSetupButton}
+              >
+                <View style={styles.hakiSetupIcon}>
+                  <Sparkles color={colors.maroon} size={20} />
+                </View>
+                <View style={styles.modelSettingsText}>
+                  <Text style={styles.modelSettingsTitle}>Complete profile with Haki</Text>
+                  <Text style={styles.modelSettingsBody}>Edit your information one step at a time.</Text>
+                </View>
+                <ChevronRight color={colors.muted} size={18} />
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Manage chat options"
+                onPress={() => router.push("/models" as never)}
+                style={styles.modelSettingsButton}
+              >
+                <View style={styles.modelSettingsIcon}>
+                  <Cpu color={colors.maroon} size={20} />
+                </View>
+                <View style={styles.modelSettingsText}>
+                  <Text style={styles.modelSettingsTitle}>Chat options</Text>
+                  <Text style={styles.modelSettingsBody}>Download a model to unlock Friendly Haki modes.</Text>
+                </View>
+                <ChevronRight color={colors.muted} size={18} />
+              </Pressable>
+
               {/* Form */}
               <View style={styles.form}>
                 <FormField
@@ -256,9 +291,17 @@ export default function ProfileScreen() {
                   editable={!profileLoading && !savingProfile}
                   onChangeText={setYear}
                 />
+                <FormField
+                  label="Section"
+                  icon={<Hash color={colors.gold} size={17} />}
+                  value={section}
+                  placeholder="e.g. BSIT 3A"
+                  editable={!profileLoading && !savingProfile}
+                  onChangeText={setSection}
+                />
               </View>
 
-              {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
+              {profileError ? <Text selectable style={styles.errorText}>{profileError}</Text> : null}
 
               {/* Save button */}
               <Pressable
@@ -300,7 +343,7 @@ export default function ProfileScreen() {
 
               <View style={styles.footerInfo}>
                 <Text style={styles.footerText}>
-                  Your profile details are stored locally on this device.
+                  Your profile details are saved only on this phone.
                 </Text>
               </View>
             </ScrollView>
@@ -439,6 +482,47 @@ const styles = StyleSheet.create({
     gap: 18,
     marginBottom: 28
   },
+  modelSettingsButton: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 24,
+    padding: 14
+  },
+  hakiSetupButton: {
+    alignItems: "center",
+    backgroundColor: colors.goldSoft,
+    borderColor: "#E8D98B",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+    padding: 14
+  },
+  hakiSetupIcon: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderRadius: 11,
+    height: 40,
+    justifyContent: "center",
+    width: 40
+  },
+  modelSettingsIcon: {
+    alignItems: "center",
+    backgroundColor: colors.maroonSoft,
+    borderRadius: 11,
+    height: 40,
+    justifyContent: "center",
+    width: 40
+  },
+  modelSettingsText: { flex: 1, gap: 2 },
+  modelSettingsTitle: { color: colors.ink, fontSize: 14, fontWeight: "900" },
+  modelSettingsBody: { color: colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 17 },
   inputGroup: {
     gap: 7
   },

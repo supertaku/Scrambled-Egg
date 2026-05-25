@@ -1,4 +1,4 @@
-import type { SearchResponse, SearchResult } from "./search";
+import type { AnswerBasis, ChatRole, SearchResponse, SearchResult } from "./search";
 
 export type ChatSender = "user" | "haki";
 export type ChatMessageStatus = "failed" | "sending" | "sent";
@@ -18,6 +18,7 @@ export interface ChatFeedbackSourceSnapshot {
 
 export interface ChatFeedbackEntry {
   answer: string;
+  answerBasis?: AnswerBasis;
   citationsUsed: string[];
   confidence?: SearchResponse["confidence"];
   createdAt: string;
@@ -27,6 +28,7 @@ export interface ChatFeedbackEntry {
   modelTier?: string | null;
   provenance?: SearchResponse["provenance"];
   question: string;
+  requestedChatRole?: ChatRole;
   rating: ChatFeedbackRating;
   reliable?: boolean;
   responseType?: SearchResponse["responseType"];

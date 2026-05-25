@@ -30,8 +30,10 @@ function responseSources(response: SearchResponse | undefined, result: SearchRes
   const seen = new Set<string>();
   const sources: ChatFeedbackSourceSnapshot[] = [];
   const candidates = [result, response?.topResult, ...(response?.results ?? [])].filter(Boolean) as SearchResult[];
+  const citedIds = response ? new Set(response.citationsUsed) : null;
 
   for (const candidate of candidates) {
+    if (citedIds && !citedIds.has(candidate.chunkId)) continue;
     if (seen.has(candidate.chunkId)) continue;
     seen.add(candidate.chunkId);
     sources.push(sourceSnapshot(candidate));
@@ -45,6 +47,7 @@ function buildFeedbackEntry(message: ChatMessage, question: string, rating: Chat
   const response = message.response;
   return {
     answer: message.text,
+    ...(response?.answerBasis ? { answerBasis: response.answerBasis } : {}),
     citationsUsed: response?.citationsUsed ?? [],
     ...(response?.confidence ? { confidence: response.confidence } : {}),
     createdAt: new Date().toISOString(),
@@ -54,6 +57,7 @@ function buildFeedbackEntry(message: ChatMessage, question: string, rating: Chat
     modelTier: response?.activeMode?.capabilities?.modelTier ?? null,
     ...(response?.provenance ? { provenance: response.provenance } : {}),
     question,
+    ...(response?.requestedChatRole ? { requestedChatRole: response.requestedChatRole } : {}),
     rating,
     ...(typeof response?.reliable === "boolean" ? { reliable: response.reliable } : {}),
     ...(response?.responseType ? { responseType: response.responseType } : {}),

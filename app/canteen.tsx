@@ -62,7 +62,7 @@ export default function CanteenScreen() {
                   <Text style={styles.sectionTitle}>Canteen Stores</Text>
                 </View>
               </View>
-              <Text style={styles.sectionDesc}>Choose a store first, then view its full food list.</Text>
+              <Text selectable style={styles.sectionDesc}>Choose a store first, then view its full food list.</Text>
               <View style={styles.searchBox}>
                 <Search color={colors.mutedLight} size={17} />
                 <TextInput
@@ -151,11 +151,11 @@ function StoreCard({
           <Store color={colors.maroon} size={22} />
         </View>
         <View style={styles.storeCopy}>
-          <Text style={styles.storeName}>{store.name}</Text>
-          <Text style={styles.storeDescription} numberOfLines={2}>{store.description}</Text>
+          <Text selectable style={styles.storeName}>{store.name}</Text>
+          <Text selectable style={styles.storeDescription} numberOfLines={2}>{store.description}</Text>
           <View style={styles.metaRow}>
             <MapPin color={colors.mutedLight} size={12} />
-            <Text style={styles.locationText}>{store.location}</Text>
+            <Text selectable style={styles.locationText}>{store.location}</Text>
             <View style={styles.metaDivider} />
             <Text style={styles.foodCount}>{store.foods.length} items</Text>
           </View>

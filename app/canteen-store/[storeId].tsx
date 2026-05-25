@@ -56,7 +56,7 @@ export default function CanteenStoreScreen() {
         <View style={styles.sheetContainer}>
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>Store not found</Text>
-            <Text style={styles.emptyText}>This canteen store is not available in the local list yet.</Text>
+            <Text style={styles.emptyText}>This canteen store is not listed yet.</Text>
           </View>
         </View>
       </SafeAreaView>
@@ -80,11 +80,11 @@ export default function CanteenStoreScreen() {
                 <Store color={colors.maroon} size={28} />
               </View>
               <View style={styles.storeCopy}>
-                <Text style={styles.storeName}>{store.name}</Text>
-                <Text style={styles.storeDescription}>{store.description}</Text>
+                <Text selectable style={styles.storeName}>{store.name}</Text>
+                <Text selectable style={styles.storeDescription}>{store.description}</Text>
                 <View style={styles.locationRow}>
                   <MapPin color={colors.mutedLight} size={13} />
-                  <Text style={styles.locationText}>{store.location}</Text>
+                  <Text selectable style={styles.locationText}>{store.location}</Text>
                 </View>
               </View>
             </View>
@@ -174,12 +174,12 @@ function FoodCard({
       </View>
       <View style={styles.foodCopy}>
         <View style={styles.foodTitleRow}>
-          <Text style={styles.foodName}>{food.name}</Text>
+          <Text selectable style={styles.foodName}>{food.name}</Text>
           <View style={styles.priceTag}>
-            <Text style={styles.foodPrice}>₱{food.price}</Text>
+            <Text selectable style={styles.foodPrice}>₱{food.price}</Text>
           </View>
         </View>
-        <Text style={styles.foodDescription}>{food.description}</Text>
+        <Text selectable style={styles.foodDescription}>{food.description}</Text>
       </View>
     </Animated.View>
   );

@@ -10,7 +10,7 @@ interface AdminGateProps {
   label?: string;
 }
 
-export function AdminGate({ children, label = "This section is available in admin mode only." }: AdminGateProps) {
+export function AdminGate({ children, label = "Only an administrator can open this section." }: AdminGateProps) {
   const [adminMode, setAdminMode] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -43,7 +43,7 @@ export function AdminGate({ children, label = "This section is available in admi
     return (
       <View style={styles.card}>
         <ActivityIndicator color={colors.maroon} />
-        <Text style={styles.text}>Checking admin mode...</Text>
+        <Text style={styles.text}>Checking access...</Text>
       </View>
     );
   }
@@ -52,8 +52,8 @@ export function AdminGate({ children, label = "This section is available in admi
     return (
       <View style={styles.card}>
         <LockKeyhole color={colors.maroon} size={24} />
-        <Text style={styles.title}>Admin mode required</Text>
-        <Text style={styles.text}>{label} Open the Haki mascot admin prompt to unlock document tools.</Text>
+        <Text style={styles.title}>Administrator access needed</Text>
+        <Text selectable style={styles.text}>{label} Tap Haki on the home screen and enter the administrator code.</Text>
       </View>
     );
   }

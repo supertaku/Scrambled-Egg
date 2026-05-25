@@ -6,12 +6,20 @@ export function SettingsPreferencesSection({
   autoSendVoice,
   clearingMemory,
   onClearChatMemory,
-  onToggleAutoSendVoice
+  onToggleAutoSendVoice,
+  onToggleUseProfileContext,
+  onToggleUseRelatedHistory,
+  useProfileContext,
+  useRelatedHistory
 }: {
   autoSendVoice: boolean;
   clearingMemory?: boolean;
   onClearChatMemory?: () => void;
   onToggleAutoSendVoice: (value: boolean) => void;
+  onToggleUseProfileContext: (value: boolean) => void;
+  onToggleUseRelatedHistory: (value: boolean) => void;
+  useProfileContext: boolean;
+  useRelatedHistory: boolean;
 }) {
   return (
     <View style={styles.card}>
@@ -19,7 +27,7 @@ export function SettingsPreferencesSection({
       <View style={styles.settingRow}>
         <View style={styles.settingInfo}>
           <Text style={styles.settingLabel}>Auto-send voice messages</Text>
-          <Text style={styles.settingDesc}>
+          <Text selectable style={styles.settingDesc}>
             When on, your voice message will automatically send after you finish speaking.
           </Text>
         </View>
@@ -30,16 +38,47 @@ export function SettingsPreferencesSection({
           value={autoSendVoice}
         />
       </View>
+      <View style={styles.settingRow}>
+        <View style={styles.settingInfo}>
+          <Text style={styles.settingLabel}>Use my profile in answers</Text>
+          <Text selectable style={styles.settingDesc}>
+            When on, Haki can locally use the profile details you saved on this phone.
+          </Text>
+        </View>
+        <Switch
+          onValueChange={onToggleUseProfileContext}
+          thumbColor={useProfileContext ? colors.maroon : colors.white}
+          trackColor={{ false: colors.border, true: colors.maroonSoft }}
+          value={useProfileContext}
+        />
+      </View>
+      <View style={styles.settingRow}>
+        <View style={styles.settingInfo}>
+          <Text style={styles.settingLabel}>Use related previous chats</Text>
+          <Text selectable style={styles.settingDesc}>
+            When on, Haki can locally reuse related remembered replies for continuity.
+          </Text>
+        </View>
+        <Switch
+          onValueChange={onToggleUseRelatedHistory}
+          thumbColor={useRelatedHistory ? colors.maroon : colors.white}
+          trackColor={{ false: colors.border, true: colors.maroonSoft }}
+          value={useRelatedHistory}
+        />
+      </View>
+      <Text selectable style={styles.privacyNote}>
+        Device compatibility checks stay on this phone. Shake-to-dizzy reads motion only while interactive Haki is visible and the app is active; motion readings are not saved or sent.
+      </Text>
       {onClearChatMemory ? (
         <View style={styles.settingRow}>
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Clear local chat memory</Text>
-            <Text style={styles.settingDesc}>
-              Removes saved recent questions and reusable answer memories from this device.
+            <Text style={styles.settingLabel}>Clear recent chat activity</Text>
+            <Text selectable style={styles.settingDesc}>
+              Removes recent questions and remembered replies from this phone.
             </Text>
           </View>
           <Pressable
-            accessibilityLabel="Clear local chat memory"
+            accessibilityLabel="Clear recent chat activity"
             accessibilityRole="button"
             disabled={clearingMemory}
             onPress={onClearChatMemory}
@@ -92,6 +131,15 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     lineHeight: 16
+  },
+  privacyNote: {
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 8,
+    padding: 10
   },
   clearButton: {
     alignItems: "center",

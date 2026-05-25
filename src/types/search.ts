@@ -2,6 +2,16 @@ import type { AnswerProvenance, DeviceAIMode } from "@/ai/DeviceAIMode";
 import type { StudentQuestionIntent } from "@/services/studentChatTypes";
 
 export type ConfidenceLevel = "high" | "medium" | "low";
+export type ChatRole = "haki" | "information_officer" | "friendly_buddy" | "researcher";
+export type AnswerBasis =
+  | "campus_sources"
+  | "campus_sources_unavailable"
+  | "friendly_guidance"
+  | "researcher_facts"
+  | "haki_guidance"
+  | "haki_guidance_with_campus_sources"
+  | "haki_composed"
+  | "safety_or_app_guidance";
 export type SearchResponseType =
   | "general_advice"
   | "image_generation"
@@ -17,9 +27,19 @@ export interface ChatContextTurn {
   text: string;
 }
 
+export interface SourceAnchor {
+  category?: string;
+  chunkId: string;
+  documentId: string;
+  label: string;
+  office?: string;
+}
+
 export interface ConversationState {
   activeEntity?: string;
   currentTopic?: string;
+  hasAmbiguousSourceAnchor?: boolean;
+  lastSourceAnchor?: SourceAnchor;
   lastSourceScope?: {
     office?: string;
     category?: string;
@@ -29,8 +49,15 @@ export interface ConversationState {
   userGoal?: string;
 }
 
+export interface SuggestedModeAction {
+  label: string;
+  mode: ChatRole;
+  rerunQuestion: true;
+}
+
 export interface SearchOptions {
   limit?: number;
+  chatRole?: ChatRole;
   conversationContext?: ChatContextTurn[];
   conversationState?: ConversationState;
   onToken?: (token: string) => void;
@@ -93,6 +120,8 @@ export interface SearchResult {
 
 export interface SearchResponse {
   question: string;
+  requestedChatRole: ChatRole;
+  answerBasis: AnswerBasis;
   normalizedQuestion?: string;
   responseType?: SearchResponseType;
   results: SearchResult[];
@@ -106,4 +135,5 @@ export interface SearchResponse {
   factCheckNotice?: string;
   verificationNote?: string;
   isIncomplete?: boolean;
+  suggestedModeActions?: SuggestedModeAction[];
 }

@@ -10,7 +10,7 @@ import type {
   SummarizeFromSourcesInput
 } from "./LocalAIProvider";
 import { unavailableCapabilities } from "./LocalAIProvider";
-import { NO_RELIABLE_ANSWER, safeChatInstructionForTier } from "./prompts";
+import { DISABLE_MODEL_THINKING_INSTRUCTION, NO_RELIABLE_ANSWER, safeChatInstructionForTier } from "./prompts";
 import { extractCitationFooter, sanitizeAssistantText } from "./providerUtils";
 import { getDeviceHardwareProfile } from "./deviceHardwareProfile";
 import {
@@ -19,7 +19,7 @@ import {
   recommendedDeviceModelTier
 } from "./localModelMetadata";
 import type { ImportedModelStatus, LocalModelManifest, LocalModelRole } from "./localModelManager";
-import { ensureBundledDefaultChatModel, getImportedModelStatus, getLocalModelDirectoryUri } from "./localModelManager";
+import { getActiveChatModelStatus, getImportedModelStatus, getLocalModelDirectoryUri, withLocalModelInferenceLease } from "./localModelManager";
 import { loadLlamaRn } from "./llamaRnRuntime";
 import { isDegenerateAssistantText } from "./outputQuality";
 import {
@@ -30,6 +30,7 @@ import {
   safeOutputTokens
 } from "./tokenBudget";
 import { isCompletionStoppedDueToTokenLimit } from "./llamaStoppedLimit";
+import { executionOptionsForManifest } from "./localModelPerformance";
 import { logger } from "@/utils/logger";
 
 import type { CompletionParams, LlamaContext, TokenData } from "llama.rn";
@@ -73,6 +74,17 @@ function citationIdsFromText(text: string, sources: SourceChunkForSummary[] | un
 
 function isNoReliableAnswer(text: string): boolean {
   return text.trim().toUpperCase().includes(NO_RELIABLE_ANSWER);
+}
+
+function thinkingDisabledForManifest(manifest: LocalModelManifest): boolean {
+  return manifest.generationPolicy?.thinkingMode === "disabled" ||
+    /qwen\s*3|qwen3/i.test(`${manifest.modelName} ${manifest.originalName}`);
+}
+
+function instructionForManifest(instruction: string, manifest: LocalModelManifest): string {
+  return thinkingDisabledForManifest(manifest)
+    ? `${instruction}\n\n${DISABLE_MODEL_THINKING_INSTRUCTION}`
+    : instruction;
 }
 
 function safeChatOutputTokens(nCtx: number, tier: LocalModelManifest["modelTier"], retry = false): number {
@@ -217,7 +229,7 @@ export class LlamaRnProvider implements LocalAIProvider {
   async isAvailable(): Promise<boolean> {
     const [runtimeAvailable, chatStatus] = await Promise.all([
       this.runtimeAvailable(),
-      ensureBundledDefaultChatModel()
+      getActiveChatModelStatus()
     ]);
 
     return runtimeAvailable && chatStatus.state === "available";
@@ -232,7 +244,7 @@ export class LlamaRnProvider implements LocalAIProvider {
 
     const backendDevices = await this.getBackendDevices();
     const [chatStatus, embeddingStatus, hardware] = await Promise.all([
-      ensureBundledDefaultChatModel(),
+      getActiveChatModelStatus(),
       getImportedModelStatus("embedding"),
       getDeviceHardwareProfile(backendDevices ?? [])
     ]);
@@ -252,7 +264,7 @@ export class LlamaRnProvider implements LocalAIProvider {
         ? []
         : chatStatus.rejectionReasons.length > 0
           ? chatStatus.rejectionReasons
-          : [`No imported GGUF chat model found. Import one from Settings into ${modelDirectory ?? "the app document models directory"}.`])
+          : [`No active GGUF chat model is installed. Choose a compatible download in AI Models (${modelDirectory ?? "app-private model storage"}).`])
     ];
 
     return {
@@ -280,7 +292,13 @@ export class LlamaRnProvider implements LocalAIProvider {
       contextWindowTokens: contextSettings?.nCtx ?? null,
       safeInputBudgetTokens: contextSettings && maxOutputTokens ? safeInputBudgetTokens(contextSettings.nCtx, maxOutputTokens) : null,
       maxOutputTokens,
-      streamingSupported: runtimeAvailable && modelAssetsAvailable,
+      streamingSupported:
+        runtimeAvailable && modelAssetsAvailable && (!manifest || !thinkingDisabledForManifest(manifest)),
+      executionBackend: manifest?.executionProfile?.executionBackend ?? "cpu",
+      availableBackends: backendDevices ?? [],
+      accelerationStatus: manifest?.executionProfile?.accelerationStatus ?? "not_checked",
+      performanceProfile: manifest?.executionProfile ?? null,
+      thermalState: hardware.thermalState ?? "unknown",
       approximateDeviceCapability: modelAssetsAvailable ? deviceCapabilityClassForTier(manifest?.modelTier ?? "unknown") : "unknown",
       architecture: hardware.architecture,
       freeStorageGB: hardware.freeStorageGB,
@@ -289,14 +307,15 @@ export class LlamaRnProvider implements LocalAIProvider {
       unavailableReasons,
       notes: [
         "llama.rn uses local GGUF models and is the Off Grid-style provider path.",
-        "Import a chat GGUF from Settings; Haki copies it into app-private storage and validates it before activation.",
-        "Haki refuses to activate oversized GGUF models when Android RAM, ABI, or free storage do not match the detected model tier.",
-        "Embedding GGUF files are supported by the manifest path but chat GGUF is the primary Android local AI path."
+        "Students choose compatible chat downloads from AI Models; admin imports use the same app-private managed library.",
+        "Haki refuses to activate oversized GGUF models when device RAM, architecture, or free storage do not match the detected model tier.",
+        "Embedding GGUF files are supported by the manifest path but chat GGUF is the primary downloaded local AI path."
       ]
     };
   }
 
   async summarizeFromSources(input: SummarizeFromSourcesInput): Promise<LocalSummaryResult> {
+    return withLocalModelInferenceLease(async () => {
     const manifest = await this.getAvailableManifest("chat");
     const settings = getLlamaContextSettingsForTier(manifest.modelTier, false);
     const outputTokens = safeOutputTokens(settings.nCtx, "summary");
@@ -319,7 +338,7 @@ export class LlamaRnProvider implements LocalAIProvider {
       messages: [
         {
           role: "system",
-          content: input.instruction
+          content: instructionForManifest(input.instruction, manifest)
         },
         {
           role: "user",
@@ -355,6 +374,7 @@ export class LlamaRnProvider implements LocalAIProvider {
       providerId: this.id,
       providerName: this.name
     };
+    });
   }
 
   async answerSafeChat(input: SafeChatInput): Promise<SafeChatResult> {
@@ -367,7 +387,7 @@ export class LlamaRnProvider implements LocalAIProvider {
    */
   async prewarm(): Promise<void> {
     try {
-      await this.ensureChatContext();
+      await withLocalModelInferenceLease(() => this.ensureChatContext());
     } catch (error) {
       logger.ai.warn("llama.rn prewarm failed; first send will retry.", {
         error: error instanceof Error ? error.message : String(error)
@@ -380,9 +400,11 @@ export class LlamaRnProvider implements LocalAIProvider {
   }
 
   async embedText(text: string): Promise<number[]> {
-    const context = await this.ensureEmbeddingContext();
-    const result = await context.embedding(text, { embd_normalize: 1 });
-    return result.embedding;
+    return withLocalModelInferenceLease(async () => {
+      const context = await this.ensureEmbeddingContext();
+      const result = await context.embedding(text, { embd_normalize: 1 });
+      return result.embedding;
+    });
   }
 
   async dispose(): Promise<void> {
@@ -404,16 +426,17 @@ export class LlamaRnProvider implements LocalAIProvider {
   }
 
   private async runSafeChat(input: SafeChatInput, onToken?: (token: string) => void): Promise<SafeChatResult> {
+    return withLocalModelInferenceLease(async () => {
     const manifest = await this.getAvailableManifest("chat");
     const settings = getLlamaContextSettingsForTier(manifest.modelTier, false);
     const outputTokens = safeChatOutputTokens(settings.nCtx, manifest.modelTier);
     const inputBudget = safeInputBudgetTokens(settings.nCtx, outputTokens);
-    const tierInstruction = safeChatInstructionForTier(manifest.modelTier);
+    const tierInstruction = safeChatInstructionForTier(manifest.modelTier, input.chatRole);
     const instruction = manifest.modelTier === "tiny" || manifest.modelTier === "minimum"
       ? tierInstruction
       : input.instruction;
     const systemContent = [
-      instruction,
+      instructionForManifest(instruction, manifest),
       input.appContext,
       input.taskContext,
       input.profileContext
@@ -495,6 +518,7 @@ export class LlamaRnProvider implements LocalAIProvider {
           content: userContent
         }
       ];
+      const streamAllowed = Boolean(onToken) && !thinkingDisabledForManifest(manifest);
       const complete = async (retry = false) =>
         context.completion(
           {
@@ -503,7 +527,7 @@ export class LlamaRnProvider implements LocalAIProvider {
             stop: STOP_WORDS,
             ...safeChatSamplingForScenario(input.scenario, retry)
           },
-          onToken && !retry
+          streamAllowed && onToken && !retry
             ? (data: TokenData) => {
                 if (signal?.aborted) return;
                 if (data.token) onToken(data.token);
@@ -563,22 +587,23 @@ export class LlamaRnProvider implements LocalAIProvider {
         signal.removeEventListener("abort", onAbort);
       }
     }
+    });
   }
 
   private async getAvailableManifest(role: LocalModelRole): Promise<LocalModelManifest> {
-    const status = role === "chat" ? await ensureBundledDefaultChatModel() : await getImportedModelStatus(role);
+    const status = role === "chat" ? await getActiveChatModelStatus() : await getImportedModelStatus(role);
     if (!status.manifest || status.state !== "available") {
-      throw new Error(status.rejectionReasons[0] ?? `No imported llama.rn GGUF ${role} model is available.`);
+      throw new Error(status.rejectionReasons[0] ?? `No active llama.rn GGUF ${role} model is available.`);
     }
 
     return status.manifest;
   }
 
   private async ensureChatContext(): Promise<LlamaContext> {
-    const status = await ensureBundledDefaultChatModel();
+    const status = await getActiveChatModelStatus();
     const modelKey = this.modelKey(status);
     if (!status.manifest || status.state !== "available" || !modelKey) {
-      throw new Error(status.rejectionReasons[0] ?? "No imported llama.rn GGUF chat model is available.");
+      throw new Error(status.rejectionReasons[0] ?? "No active llama.rn GGUF chat model is available.");
     }
 
     if (this.chatContextPromise && this.chatModelKey !== modelKey) {
@@ -652,7 +677,8 @@ export class LlamaRnProvider implements LocalAIProvider {
       use_mmap: true,
       cache_type_k: "q8_0",
       cache_type_v: "q8_0",
-      flash_attn_type: "auto"
+      flash_attn_type: "auto",
+      ...executionOptionsForManifest(manifest)
     });
     this.modelLoadTimeMs = Date.now() - startedAt;
     return context;

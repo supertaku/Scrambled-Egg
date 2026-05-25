@@ -64,10 +64,10 @@ export const ANDROID_MODEL_TIER_RANK: Record<AndroidLocalModelTier, number> = {
 
 export const APPLE_INTELLIGENCE_REQUIREMENTS = {
   label: "Apple Intelligence local model",
-  minimumOS: "iOS/iPadOS 18.1+",
+  minimumOS: "iOS/iPadOS 26.0+",
   supportedDevices:
     "iPhone 15 Pro models, iPhone 16 or later, iPad mini with A17 Pro, iPad models with M1 or later",
-  minimumFreeStorageGB: 7
+  minimumFreeStorageGB: 0
 } as const;
 
 const QUANTIZATION_KEYWORDS = ["int4", "q4", "4-bit", "4bit", "int8", "q8", "8-bit", "8bit", "quantized"];
@@ -259,7 +259,7 @@ export function getLocalModelRequirementSummary(): string[] {
   return [
     `Android tiny AI: Android ${ANDROID_LOCAL_MODEL_REQUIREMENTS.minimumAndroidApi}+ / Android 13+, ${ANDROID_LOCAL_MODEL_REQUIREMENTS.requiredAbi}, ${ANDROID_LOCAL_MODEL_TIERS.tiny.minimumRamGB}GB RAM, ${ANDROID_LOCAL_MODEL_TIERS.tiny.minimumFreeStorageGB}GB free storage, ${ANDROID_LOCAL_MODEL_TIERS.tiny.summary}.`,
     `Android adaptive AI: ${ANDROID_LOCAL_MODEL_TIERS.minimum.minimumRamGB}GB+ uses ${ANDROID_LOCAL_MODEL_TIERS.minimum.summary}; ${ANDROID_LOCAL_MODEL_TIERS.good.minimumRamGB}GB+ uses ${ANDROID_LOCAL_MODEL_TIERS.good.summary}; ${ANDROID_LOCAL_MODEL_TIERS.enhanced.minimumRamGB}GB+ uses ${ANDROID_LOCAL_MODEL_TIERS.enhanced.summary}; ${ANDROID_LOCAL_MODEL_TIERS.flagship.minimumRamGB}GB+ can use ${ANDROID_LOCAL_MODEL_TIERS.flagship.summary}.`,
-    `Apple local model path: ${APPLE_INTELLIGENCE_REQUIREMENTS.supportedDevices}; ${APPLE_INTELLIGENCE_REQUIREMENTS.minimumOS}; ${APPLE_INTELLIGENCE_REQUIREMENTS.minimumFreeStorageGB}GB free storage for Apple Intelligence assets.`
+    `Apple local model path: ${APPLE_INTELLIGENCE_REQUIREMENTS.supportedDevices}; ${APPLE_INTELLIGENCE_REQUIREMENTS.minimumOS}; Apple manages downloaded model readiness through Foundation Models availability.`
   ];
 }
 
@@ -299,13 +299,13 @@ export function validateAndroidLocalModelRuntime(input: {
 
     if (freeStorageGB === null || freeStorageGB < ANDROID_LOCAL_MODEL_TIERS.tiny.minimumFreeStorageGB) {
       unavailableReasons.push(
-        `Android local AI requires at least ${ANDROID_LOCAL_MODEL_TIERS.tiny.minimumFreeStorageGB}GB free storage for bundled model assets.`
+        `Android local AI requires at least ${ANDROID_LOCAL_MODEL_TIERS.tiny.minimumFreeStorageGB}GB free storage for an installed model.`
       );
     }
   }
 
   if (!input.modelAssetsAvailable) {
-    unavailableReasons.push("Android local model assets are not available on this device.");
+    unavailableReasons.push("No active Android local model is installed on this device.");
   }
 
   if (!selectedTierRequirements) {
@@ -366,16 +366,6 @@ export function validateAppleIntelligenceRuntime(input: {
 
   if (!input.modelAssetsAvailable) {
     unavailableReasons.push("Apple Intelligence assets/session are unavailable on this device.");
-  }
-
-  if (freeStorageGB === null) {
-    unavailableReasons.push(
-      `Apple Intelligence path must report at least ${APPLE_INTELLIGENCE_REQUIREMENTS.minimumFreeStorageGB}GB free storage.`
-    );
-  } else if (freeStorageGB < APPLE_INTELLIGENCE_REQUIREMENTS.minimumFreeStorageGB) {
-    unavailableReasons.push(
-      `Apple Intelligence requires at least ${APPLE_INTELLIGENCE_REQUIREMENTS.minimumFreeStorageGB}GB free storage for on-device models.`
-    );
   }
 
   return {

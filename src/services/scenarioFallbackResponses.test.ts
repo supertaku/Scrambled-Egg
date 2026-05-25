@@ -53,4 +53,19 @@ describe("buildSourceMissFallbackResponse", () => {
     expect(response.answerText).toContain("For now,");
     expect(response.responseType).toBe("source");
   });
+
+  it("varies missing-campus-data wording while preserving the admin reporting path", () => {
+    const intent = {
+      type: "safe_question" as const,
+      capability: "university_answer" as const,
+      language: "english" as const,
+      route: "source_context" as const,
+      scenario: "student_admin" as const
+    };
+    const texts = Array.from({ length: 4 }, () =>
+      buildSourceMissFallbackResponse("2027 graduation fee amount", intent, stubMode()).answerText ?? ""
+    );
+    expect(new Set(texts).size).toBeGreaterThan(1);
+    expect(texts.every((text) => /hakiadmin@gmail\.com/i.test(text))).toBe(true);
+  });
 });

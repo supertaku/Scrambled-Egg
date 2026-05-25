@@ -38,7 +38,8 @@ const CATEGORY_CONFIG: Record<string, CatConfig> = {
   "Student Services":  { bg: "#E8F5E9", border: "#A5D6A7", text: "#2E7D32", icon: Shield },
   "Campus Safety":     { bg: "#FFF3E0", border: "#FFCC80", text: "#E65100", icon: Zap },
   "Student Welfare":   { bg: "#E3F2FD", border: "#90CAF9", text: "#1565C0", icon: Info },
-  "Campus Guidelines": { bg: colors.maroonSoft, border: "#E8C7D0", text: colors.maroon, icon: BookOpen }
+  "Campus Guidelines": { bg: colors.maroonSoft, border: "#E8C7D0", text: colors.maroon, icon: BookOpen },
+  Offices:             { bg: "#EFEAFB", border: "#CEBDF3", text: "#6B5FB5", icon: Building }
 };
 const DEFAULT_CAT: CatConfig = { bg: colors.surface, border: colors.border, text: colors.muted, icon: BookOpen };
 
@@ -98,9 +99,9 @@ function StepCard({ step, index }: { step: string; index: number }) {
 
       <View style={styles.stepContent}>
         {stepLabel ? (
-          <Text style={styles.stepLabel}>{stepLabel}</Text>
+          <Text selectable style={styles.stepLabel}>{stepLabel}</Text>
         ) : null}
-        <Text style={styles.stepBody}>{stepBody}</Text>
+        <Text selectable style={styles.stepBody}>{stepBody}</Text>
       </View>
     </Animated.View>
   );
@@ -160,7 +161,7 @@ export default function LibraryTopicScreen() {
       <Animated.View style={[styles.headerArea, { opacity: headerFade }]}>
         <BackButton onPress={() => router.back()} />
         <View style={styles.headerCenter}>
-          <Text style={styles.headerBreadcrumb} numberOfLines={1}>{topic.documentTitle}</Text>
+          <Text style={styles.headerBreadcrumb} numberOfLines={1}>Service Desk / {topic.documentTitle}</Text>
         </View>
         <View style={styles.headerSpacer} />
       </Animated.View>
@@ -174,6 +175,7 @@ export default function LibraryTopicScreen() {
         >
           {/* Hero card */}
           <View style={styles.heroCard}>
+            <Text style={styles.ticketLabel}>Service ticket</Text>
             {/* Category badge */}
             <View style={[styles.catBadge, { backgroundColor: cat.bg, borderColor: cat.border }]}>
               <CatIcon color={cat.text} size={12} />
@@ -181,19 +183,19 @@ export default function LibraryTopicScreen() {
             </View>
 
             {/* Title */}
-            <Text style={styles.topicTitle}>{topic.sectionTitle}</Text>
+            <Text selectable style={styles.topicTitle}>{topic.sectionTitle}</Text>
 
             {/* Meta row */}
             <View style={styles.metaGrid}>
               {topic.officeLocation ? (
                 <View style={styles.metaItem}>
                   <MapPin color={colors.maroon} size={14} />
-                  <Text style={styles.metaText}>{topic.officeLocation}</Text>
+                  <Text selectable style={styles.metaText}>{topic.officeLocation}</Text>
                 </View>
               ) : topic.office ? (
                 <View style={styles.metaItem}>
                   <Building color={colors.maroon} size={14} />
-                  <Text style={styles.metaText}>{topic.office}</Text>
+                  <Text selectable style={styles.metaText}>{topic.office}</Text>
                 </View>
               ) : null}
 
@@ -215,11 +217,20 @@ export default function LibraryTopicScreen() {
             </View>
           </View>
 
+          {topic.verificationStatus === "pending" ? (
+            <View style={styles.pendingCard}>
+              <Text style={styles.pendingLabel}>Pending confirmation</Text>
+              <Text selectable style={styles.pendingText}>
+                This placeholder is displayed for service-desk scenario planning only. Haki does not use it as a factual answer source.
+              </Text>
+            </View>
+          ) : null}
+
           {/* Summary / answer */}
           {topic.answer ? (
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Summary</Text>
-              <Text style={styles.summaryText}>{topic.answer}</Text>
+              <Text style={styles.summaryLabel}>Guidance summary</Text>
+              <Text selectable style={styles.summaryText}>{topic.answer}</Text>
             </View>
           ) : null}
 
@@ -228,7 +239,7 @@ export default function LibraryTopicScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionHeaderDot} />
-                <Text style={styles.sectionTitle}>Step-by-Step Procedure</Text>
+                <Text style={styles.sectionTitle}>Steps to complete</Text>
               </View>
               <View style={styles.stepsList}>
                 {topic.steps.map((step, i) => (
@@ -244,7 +255,7 @@ export default function LibraryTopicScreen() {
                 <Text style={styles.sectionTitle}>Details</Text>
               </View>
               <View style={styles.contentCard}>
-                <Text style={styles.contentText}>{topic.content}</Text>
+                <Text selectable style={styles.contentText}>{topic.content}</Text>
               </View>
             </View>
           )}
@@ -262,7 +273,7 @@ export default function LibraryTopicScreen() {
                     <Phone color={colors.maroon} size={14} />
                     <View style={styles.contactRowText}>
                       <Text style={styles.contactLabel}>{entry.label}</Text>
-                      <Text style={styles.contactValue}>{entry.value}</Text>
+                      <Text selectable style={styles.contactValue}>{entry.value}</Text>
                     </View>
                   </View>
                 ))}
@@ -273,8 +284,8 @@ export default function LibraryTopicScreen() {
           {/* Source footer */}
           <View style={styles.sourceFooter}>
             <BookOpen color={colors.mutedLight} size={13} />
-            <Text style={styles.sourceText}>
-              Source: {topic.documentTitle}
+            <Text selectable style={styles.sourceText}>
+              From: {topic.documentTitle}
             </Text>
           </View>
         </Animated.ScrollView>
@@ -366,6 +377,13 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3
   },
+  ticketLabel: {
+    color: colors.mutedLight,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase"
+  },
   catBadge: {
     alignSelf: "flex-start",
     alignItems: "center",
@@ -405,6 +423,22 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   summaryText: { color: colors.ink, fontSize: 14, fontWeight: "500", lineHeight: 21 },
+  pendingCard: {
+    backgroundColor: "#FFF3E0",
+    borderColor: "#FFCC80",
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 6,
+    padding: 16
+  },
+  pendingLabel: {
+    color: "#E65100",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  pendingText: { color: colors.ink, fontSize: 13, fontWeight: "600", lineHeight: 20 },
 
   // Sections
   section: { gap: 10 },

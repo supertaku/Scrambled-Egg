@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   buildLocalModelManifest,
+  catalogDownloadFitsHardware,
   deriveModelMetadata,
   getLlamaContextSettingsForTier,
   inferChatTemplateFamilyFromText,
@@ -13,6 +14,12 @@ import {
   type DeviceHardwareProfile
 } from "../src/ai/localModelMetadata";
 import { GGUF_MODELS } from "../src/ai/modelDownloadConfig";
+import {
+  chooseExecutionProfile,
+  executionCandidatesForHardware,
+  modelPerformanceKey
+} from "../src/ai/localModelPerformance";
+import type { LocalModelPerformanceProfile } from "../src/ai/LocalAIProvider";
 import {
   estimateTokens,
   pruneChatContext,
@@ -175,6 +182,81 @@ assert.match(
   /template mismatch/
 );
 assert.ok(GGUF_MODELS.every((model) => model.chatTemplateFamily === "llama" || model.chatTemplateFamily === "qwen"));
+assert.ok(GGUF_MODELS.every((model) => model.lifecycleChannel === "supported" || model.lifecycleChannel === "evaluation"));
+assert.ok(GGUF_MODELS.every((model) => model.supportedPlatforms.includes("android") && model.supportedPlatforms.includes("ios")));
+assert.equal(GGUF_MODELS.find((model) => model.id === "qwen3-4b")?.generationPolicy?.thinkingMode, "disabled");
+
+function compatibleCatalogIds(hardware: DeviceHardwareProfile): string[] {
+  return GGUF_MODELS.filter((model) => catalogDownloadFitsHardware(model, hardware)).map((model) => model.id);
+}
+
+assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 4 }), ["qwen-2.5-0.5b"]);
+assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 8 }), [
+  "qwen-2.5-0.5b",
+  "llama-3.2-1b",
+  "qwen-2.5-3b"
+]);
+assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 12 }), [
+  "qwen-2.5-0.5b",
+  "llama-3.2-1b",
+  "qwen-2.5-3b",
+  "qwen3-4b"
+]);
+assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 8, freeStorageGB: 8 }), [
+  "qwen-2.5-0.5b",
+  "llama-3.2-1b"
+]);
+assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, lowMemory: true }), []);
+assert.deepEqual(
+  compatibleCatalogIds({ ...capableAndroid, platform: "ios", supportedAbis: ["arm64"], architecture: "arm64", lowMemory: false }),
+  ["qwen-2.5-0.5b", "llama-3.2-1b", "qwen-2.5-3b"]
+);
+
+const openClCandidates = executionCandidatesForHardware({
+  ...capableAndroid,
+  backendDevices: ["cpu:Android CPU", "opencl:Adreno GPU"]
+});
+assert.equal(openClCandidates[0]?.backend, "cpu");
+assert.equal(openClCandidates[1]?.backend, "opencl");
+assert.deepEqual(openClCandidates[1]?.initOptions.devices, ["Adreno GPU"]);
+assert.equal(executionCandidatesForHardware({
+  ...capableAndroid,
+  platform: "ios",
+  supportedAbis: ["arm64"],
+  architecture: "arm64"
+})[1]?.backend, "metal");
+
+const baselineProfile: LocalModelPerformanceProfile = {
+  version: 1,
+  modelKey: "sample",
+  executionBackend: "cpu",
+  accelerationStatus: "unavailable",
+  availableBackends: ["cpu:Android CPU"],
+  loadTimeMs: 100,
+  firstTokenTimeMs: 90,
+  decodeTokensPerSecond: 10,
+  thermalStateBefore: "nominal",
+  thermalStateAfter: "nominal",
+  benchmarkedAt: "2026-05-24T00:00:00.000Z",
+  failureReason: null
+};
+assert.equal(
+  chooseExecutionProfile(baselineProfile, {
+    ...baselineProfile,
+    executionBackend: "opencl",
+    decodeTokensPerSecond: 12
+  }).executionBackend,
+  "opencl"
+);
+assert.equal(
+  chooseExecutionProfile(baselineProfile, {
+    ...baselineProfile,
+    executionBackend: "opencl",
+    decodeTokensPerSecond: 12,
+    thermalStateAfter: "serious"
+  }).executionBackend,
+  "cpu"
+);
 
 assert.match(
   validateImportedModel({
@@ -206,7 +288,7 @@ assert.match(
     sizeBytes: 512 * 1024 * 1024,
     hardware: { ...capableAndroid, supportedAbis: ["armeabi-v7a"], architecture: "armeabi-v7a" }
   }).join("\n"),
-  /arm64-v8a/
+  /arm64/
 );
 
 const manifestInput: BuildManifestInput = {
@@ -231,6 +313,8 @@ assert.equal(manifest.downloadId, "qwen3-0.6b");
 assert.equal(manifest.chatTemplate?.status, "unknown");
 assert.equal(manifest.rejectionReasons.length, 0);
 assert.equal(manifest.recommendedModelTier, "good");
+assert.equal(modelPerformanceKey(manifest), "abc123");
+assert.equal(modelPerformanceKey({ ...manifest, fileHash: null }), `${manifest.uri}:${manifest.sizeBytes}`);
 
 assert.deepEqual(getLlamaContextSettingsForTier("tiny", false), {
   nCtx: 1280,
@@ -287,11 +371,41 @@ const localModelManagerSource = readFileSync(new URL("../src/ai/localModelManage
 assert.equal(/FileSystem\.makeDirectoryAsync|FileSystem\.copyAsync|FileSystem\.deleteAsync|FileSystem\.getInfoAsync/.test(localModelManagerSource), false);
 assert.match(localModelManagerSource, /expo-file-system\/legacy/);
 assert.match(localModelManagerSource, /cleanupPartialGgufDownloads/);
+assert.match(localModelManagerSource, /library\.json/);
+assert.match(localModelManagerSource, /migrateLegacyChatModel/);
+assert.match(localModelManagerSource, /activateChatModel/);
+assert.match(localModelManagerSource, /recoverInterruptedModelOperation/);
+assert.match(localModelManagerSource, /phase: "verifying"/);
+assert.match(localModelManagerSource, /phase: "waiting_for_chat"/);
+assert.doesNotMatch(localModelManagerSource, /ensureBundledDefaultChatModel/);
 
 const settingsSource = readFileSync(new URL("../src/components/settings/SettingsScreen.tsx", import.meta.url), "utf8");
-assert.match(settingsSource, /downloadGgufModel/);
-assert.match(settingsSource, /removeImportedModel/);
-assert.match(settingsSource, /await loadSettings\(true\)/);
+assert.doesNotMatch(settingsSource, /downloadGgufModel/);
+assert.doesNotMatch(settingsSource, /removeImportedModel/);
+assert.doesNotMatch(settingsSource, /SettingsModelsSection/);
+assert.match(settingsSource, /loadSettings\(true\)/);
 assert.doesNotMatch(settingsSource, /ModelDownloader/);
+
+const modelsScreenSource = readFileSync(new URL("../app/models.tsx", import.meta.url), "utf8");
+assert.match(modelsScreenSource, /Models available for this phone/);
+assert.match(modelsScreenSource, /Campus Haki/);
+assert.match(modelsScreenSource, /Friendly Haki/);
+assert.match(modelsScreenSource, /activateChatModel/);
+assert.match(modelsScreenSource, /removeChatModel/);
+assert.match(modelsScreenSource, /resumePausedModelDownload/);
+assert.match(modelsScreenSource, /catalogOperationLabel/);
+assert.match(modelsScreenSource, /Downloading\.\.\./);
+assert.match(modelsScreenSource, /inProgressButton/);
+
+const hakiStatusSource = readFileSync(new URL("../src/components/models/ModelOperationHaki.tsx", import.meta.url), "utf8");
+assert.match(hakiStatusSource, /The download is complete\. I'm checking the file before using it\./);
+assert.match(hakiStatusSource, /Campus Haki is still available\./);
+assert.match(hakiStatusSource, /interrupted download cannot be resumed/);
+assert.match(hakiStatusSource, /PixelHaki/);
+
+const apkInspectionSource = readFileSync(new URL("../scripts/inspect-apk-assets.ps1", import.meta.url), "utf8");
+assert.match(apkInspectionSource, /Production builds must let users download compatible models into app-private storage/);
+assert.match(apkInspectionSource, /librnllama/);
+assert.doesNotMatch(apkInspectionSource, /missing the bundled default GGUF/);
 
 console.log("Local model manager tests passed.");

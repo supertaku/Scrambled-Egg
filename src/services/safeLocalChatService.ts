@@ -1,13 +1,15 @@
 import type { AnswerProvenance, DeviceAIMode } from "@/ai/DeviceAIMode";
 import type { SafeChatResult } from "@/ai/LocalAIProvider";
 import {
+  FRIENDLY_BUDDY_LOCAL_CHAT_INSTRUCTION,
+  HAKI_LOCAL_CHAT_INSTRUCTION,
+  RESEARCHER_LOCAL_CHAT_INSTRUCTION,
   SAFE_FALLBACK_MESSAGE,
-  SAFE_LOCAL_CHAT_INSTRUCTION,
   SAFE_LOCAL_CHAT_REFUSAL_MESSAGE,
   SAFE_LOCAL_CHAT_UNAVAILABLE_MESSAGE
 } from "@/ai/prompts";
 import { normalizeQuery } from "@/retrieval/queryNormalizer";
-import type { SearchOptions, SearchResponse, SearchResult } from "@/types/search";
+import type { AnswerBasis, ChatRole, SearchOptions, SearchResponse, SearchResult } from "@/types/search";
 import { getPreferredModelTier } from "@/utils/aiUtils";
 import { MAX_PROVIDER_RETRIES } from "@/utils/constants";
 import { logger } from "@/utils/logger";
@@ -56,7 +58,15 @@ function appContextForQuestion(question: string, options: SafeLocalChatOptions):
   const groundingInstruction = hasSourceContext
     ? "When university source context is provided, base your TUPT-related answer on it. Do not contradict the sources. If sources are marked 'weak or uncertain', acknowledge that and suggest verifying with the relevant office."
     : "";
-  return [APP_CONTEXT, groundingInstruction, conversationState, replyLanguageInstruction(language)].filter(Boolean).join("\n");
+  const roleContext =
+    options.chatRole === "friendly_buddy"
+      ? "Friendly Buddy provides emotional and personal support only. Do not state, summarize, or repeat official campus facts; direct campus-information questions to Information Officer."
+      : options.chatRole === "researcher"
+        ? "Researcher answers facts outside campus only. Do not answer TUPT facts, procedures, or personal-support portions."
+        : "Default Haki uses generated text only for non-campus guidance or facts. Official campus facts are composed separately from saved sources.";
+  return [APP_CONTEXT, roleContext, groundingInstruction, conversationState, replyLanguageInstruction(language)]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function toSafeChatResponse(input: {
@@ -71,9 +81,13 @@ function toSafeChatResponse(input: {
   results?: SearchResult[] | undefined;
   topResult?: SearchResult | undefined;
   isIncomplete?: boolean;
+  requestedChatRole?: ChatRole | undefined;
+  answerBasis?: AnswerBasis | undefined;
 }): SearchResponse {
   return {
     question: input.question,
+    requestedChatRole: input.requestedChatRole ?? "haki",
+    answerBasis: input.answerBasis ?? "haki_guidance",
     normalizedQuestion: input.normalizedQuestion,
     responseType: input.reliable === false ? "refusal" : "safe_local_chat",
     results: input.results ?? [],
@@ -89,6 +103,7 @@ function toSafeChatResponse(input: {
 }
 
 export interface SafeLocalChatOptions {
+  chatRole?: ChatRole;
   conversationContext?: SearchOptions["conversationContext"];
   conversationState?: SearchOptions["conversationState"];
   intent?: StudentQuestionIntent;
@@ -148,9 +163,16 @@ async function runLocalSafeChat(
 
   try {
     const preferredModelTier = getPreferredModelTier(mode);
+    const instruction =
+      options.chatRole === "friendly_buddy"
+        ? FRIENDLY_BUDDY_LOCAL_CHAT_INSTRUCTION
+        : options.chatRole === "researcher"
+          ? RESEARCHER_LOCAL_CHAT_INSTRUCTION
+          : HAKI_LOCAL_CHAT_INSTRUCTION;
     const input = {
       question,
-      instruction: SAFE_LOCAL_CHAT_INSTRUCTION,
+      ...(options.chatRole ? { chatRole: options.chatRole } : {}),
+      instruction,
       ...(preferredModelTier ? { preferredModelTier } : {}),
       appContext: appContextForQuestion(question, options),
       ...(options.conversationContext?.length ? { conversationContext: options.conversationContext } : {}),
@@ -260,7 +282,9 @@ export async function answerSafeLocalChatWithContext(
       provenance: "Answered with local safe chat",
       reliable: false,
       results: sourceResults,
-      topResult: sourceDraft?.topResult
+        topResult: sourceDraft?.topResult,
+        requestedChatRole: options.chatRole,
+        answerBasis: options.chatRole === "friendly_buddy" ? "friendly_guidance" : options.chatRole === "researcher" ? "researcher_facts" : "haki_guidance"
     });
   }
 
@@ -275,12 +299,10 @@ export async function answerSafeLocalChatWithContext(
       provenance: "Answered with local safe chat",
       results: sourceResults,
       topResult: sourceDraft?.topResult,
-      isIncomplete: localAnswer.result.status === "incomplete"
+      isIncomplete: localAnswer.result.status === "incomplete",
+      requestedChatRole: options.chatRole,
+      answerBasis: options.chatRole === "friendly_buddy" ? "friendly_guidance" : options.chatRole === "researcher" ? "researcher_facts" : "haki_guidance"
     });
-  }
-
-  if (canUseSafeFallback(intent)) {
-    return buildSafeQuestionFallbackResponse(fallbackQuestion, intent.capability, selectedMode.mode, intent.scenario);
   }
 
   return toSafeChatResponse({
@@ -292,7 +314,9 @@ export async function answerSafeLocalChatWithContext(
     provenance: "General chat unavailable without local AI",
     reliable: false,
     results: sourceResults,
-    topResult: sourceDraft?.topResult
+    topResult: sourceDraft?.topResult,
+    requestedChatRole: options.chatRole,
+    answerBasis: options.chatRole === "friendly_buddy" ? "friendly_guidance" : options.chatRole === "researcher" ? "researcher_facts" : "haki_guidance"
   });
 }
 
@@ -302,6 +326,8 @@ export async function responseForUnsafeRequest(question: string): Promise<Search
     question,
     normalizedQuestion: normalizeQuery(question),
     answerText: buildUnsafeRequestMessage(question),
+    requestedChatRole: "haki",
+    answerBasis: "safety_or_app_guidance",
     mode: selectedMode.mode,
     provenance: selectedMode.mode.capabilities.safeChat
       ? "Answered with local safe chat"

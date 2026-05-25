@@ -11,6 +11,7 @@ export interface StudentProfile {
   studentId: string;
   course: string;
   year: string;
+  section: string;
 }
 
 export const emptyStudentProfile: StudentProfile = {
@@ -18,7 +19,8 @@ export const emptyStudentProfile: StudentProfile = {
   name: "",
   studentId: "",
   course: "",
-  year: ""
+  year: "",
+  section: ""
 };
 
 const PROFILE_DIR = new Directory(Paths.document, "profile");
@@ -31,6 +33,7 @@ interface ProfileCorePayload {
   studentId: string;
   course: string;
   year: string;
+  section: string;
 }
 
 function stringValue(value: unknown): string {
@@ -48,7 +51,8 @@ function normalizeProfile(value: unknown): StudentProfile {
     name: stringValue(profile.name),
     studentId: stringValue(profile.studentId),
     course: stringValue(profile.course),
-    year: stringValue(profile.year)
+    year: stringValue(profile.year),
+    section: stringValue(profile.section)
   };
 }
 
@@ -57,7 +61,8 @@ function normalizeCore(profile: StudentProfile): ProfileCorePayload {
     name: profile.name.trim(),
     studentId: profile.studentId.trim(),
     course: profile.course.trim(),
-    year: profile.year.trim()
+    year: profile.year.trim(),
+    section: profile.section.trim()
   };
 }
 
@@ -136,6 +141,7 @@ export async function getStudentProfile(): Promise<StudentProfile> {
         studentId: core.studentId,
         course: core.course,
         year: core.year,
+        section: core.section,
         avatarUri
       });
     } catch {
@@ -155,13 +161,39 @@ export async function getStudentProfile(): Promise<StudentProfile> {
   }
 }
 
+export async function getStudentAvatarUri(): Promise<string> {
+  await migrateLegacyPlaintextProfile();
+  const storedAvatarUri = await AsyncStorage.getItem(STORAGE_KEYS.STUDENT_PROFILE_AVATAR_URI);
+  if (storedAvatarUri !== null) {
+    return storedAvatarUri.trim();
+  }
+
+  // Older fallback installs stored the avatar inside the profile JSON.
+  // Read and split it once so chat no longer needs core profile values for its avatar.
+  const legacyRaw = await AsyncStorage.getItem(STORAGE_KEYS.STUDENT_PROFILE);
+  if (!legacyRaw) {
+    return "";
+  }
+
+  try {
+    const avatarUri = normalizeProfile(JSON.parse(legacyRaw) as unknown).avatarUri?.trim() ?? "";
+    if (avatarUri) {
+      await AsyncStorage.setItem(STORAGE_KEYS.STUDENT_PROFILE_AVATAR_URI, avatarUri);
+    }
+    return avatarUri;
+  } catch {
+    return "";
+  }
+}
+
 export async function saveStudentProfile(profile: StudentProfile): Promise<void> {
   const normalized: StudentProfile = {
     avatarUri: profile.avatarUri?.trim() ?? "",
     name: profile.name.trim(),
     studentId: profile.studentId.trim(),
     course: profile.course.trim(),
-    year: profile.year.trim()
+    year: profile.year.trim(),
+    section: profile.section.trim()
   };
 
   const useSecure = await isSecureStoreUsable();
@@ -178,6 +210,11 @@ export async function saveStudentProfile(profile: StudentProfile): Promise<void>
   }
 
   await AsyncStorage.setItem(STORAGE_KEYS.STUDENT_PROFILE, JSON.stringify(normalized));
+  if (normalized.avatarUri) {
+    await AsyncStorage.setItem(STORAGE_KEYS.STUDENT_PROFILE_AVATAR_URI, normalized.avatarUri);
+  } else {
+    await AsyncStorage.removeItem(STORAGE_KEYS.STUDENT_PROFILE_AVATAR_URI);
+  }
 }
 
 export async function clearStudentProfile(): Promise<void> {
@@ -203,7 +240,8 @@ export function studentProfileToChatContext(profile: StudentProfile): string | n
     profile.name ? `Name: ${profile.name}` : null,
     profile.studentId ? `Student ID: ${profile.studentId}` : null,
     profile.course ? `Course/program: ${profile.course}` : null,
-    profile.year ? `Year level: ${profile.year}` : null
+    profile.year ? `Year level: ${profile.year}` : null,
+    profile.section ? `Section: ${profile.section}` : null
   ].filter(Boolean);
 
   if (details.length === 0) {
@@ -211,7 +249,12 @@ export function studentProfileToChatContext(profile: StudentProfile): string | n
   }
 
   return [
-    "Student profile context. You may address the student by name when it feels natural. Never repeat the student's ID, course, or year level in your reply unless the student explicitly asks for it. Do not volunteer these details unprompted.",
+    "Student profile context. You may address the student by name when it feels natural. Never repeat the student's ID, course, year level, or section in your reply unless the student explicitly asks for it. Do not volunteer these details unprompted.",
     ...details
   ].join("\n");
+}
+
+export function hasStudentProfileDetails(profile: StudentProfile): boolean {
+  return [profile.avatarUri, profile.name, profile.studentId, profile.course, profile.year, profile.section]
+    .some((value) => Boolean(value?.trim()));
 }

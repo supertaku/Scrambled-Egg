@@ -587,8 +587,8 @@ async function runScenarioEval() {
     const displayText = buildAnswerMessage(response, factCheckTopResult);
     failed += assertCase(
       response.verificationNote === "Please verify with the relevant office." &&
-        /Please verify with the relevant office\./i.test(displayText),
-      "medium-confidence general fact answer carries a fact-check notice",
+        !/Please verify with the relevant office\./i.test(displayText),
+      "medium-confidence answer retains verification metadata without repeating a notice in the response",
       { verificationNote: response.verificationNote, displayText }
     );
   } else {
@@ -599,7 +599,11 @@ async function runScenarioEval() {
   if (parkingIntent.type === "safe_question") {
     const miss = buildSourceMissFallbackResponse("Where can I get a parking sticker?", parkingIntent, testMode);
     failed += assertCase(miss.results.length === 0 && miss.citationsUsed.length === 0, "source miss hides weak source cards", miss);
-    failed += assertCase(/database|saved campus guide/i.test(miss.answerText ?? ""), "source miss is honest and specific", miss.answerText);
+    failed += assertCase(
+      /hakiadmin@gmail\.com/i.test(miss.answerText ?? ""),
+      "source miss is honest and gives the admin reporting path",
+      miss.answerText
+    );
     failed += assertNoForeignUniversityLeak(miss.answerText, "parking source miss");
   } else {
     failed += assertCase(false, "parking prompt is safe", parkingIntent);
@@ -611,7 +615,7 @@ async function runScenarioEval() {
     failed += assertCase(
       miss.results.length === 0 &&
         miss.citationsUsed.length === 0 &&
-        /database|saved campus guide/i.test(miss.answerText ?? ""),
+        /hakiadmin@gmail\.com/i.test(miss.answerText ?? ""),
       "unsupported future official fee gets no-answer fallback",
       miss
     );
@@ -642,7 +646,7 @@ async function runScenarioEval() {
   const addUnitsIntent = classifyStudentQuestionIntent("I want to add units");
   if (addUnitsIntent.type === "safe_question") {
     const miss = buildSourceMissFallbackResponse("I want to add units", addUnitsIntent, testMode);
-    failed += assertCase(/course adviser|department|add-load|load revision/i.test(miss.answerText ?? ""), "add units source miss gives adviser guidance", miss.answerText);
+    failed += assertCase(/relevant office|verify current/i.test(miss.answerText ?? ""), "add units source miss does not invent process guidance", miss.answerText);
     failed += assertNoForeignUniversityLeak(miss.answerText, "add units source miss");
   } else {
     failed += assertCase(false, "add units prompt is safe", addUnitsIntent);
@@ -651,7 +655,7 @@ async function runScenarioEval() {
   const dropoutIntent = classifyStudentQuestionIntent("gusto ko mag dropout");
   if (dropoutIntent.type === "safe_question") {
     const miss = buildSourceMissFallbackResponse("gusto ko mag dropout", dropoutIntent, testMode);
-    failed += assertCase(/adviser|Guidance|Registrar|drop/i.test(miss.answerText ?? ""), "dropout source miss gives supportive routing", miss.answerText);
+    failed += assertCase(/relevant office|verify current/i.test(miss.answerText ?? ""), "dropout source miss does not invent process guidance", miss.answerText);
     failed += assertNoForeignUniversityLeak(miss.answerText, "dropout source miss");
   } else {
     failed += assertCase(false, "dropout prompt is safe", dropoutIntent);

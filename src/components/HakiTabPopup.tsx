@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors } from "@/theme/colors";
+import { PixelHaki } from "./mascot/PixelHaki";
 
 interface HakiTabPopupProps {
   message: string | null;
@@ -204,12 +205,7 @@ export function HakiTabPopup({ message, onDismiss, visibleKey }: HakiTabPopupPro
           }
         ]}
       >
-        <Image
-          accessibilityIgnoresInvertColors
-          source={require("../../assets/images/mascot/grayhawk-detective.png")}
-          style={styles.hakiImage}
-          resizeMode="contain"
-        />
+        <PixelHaki animated={false} height={218} state="detective" style={styles.hakiImage} width={142} />
         <Animated.View
           style={[
             styles.bubbleWrap,
@@ -223,7 +219,7 @@ export function HakiTabPopup({ message, onDismiss, visibleKey }: HakiTabPopupPro
             <View pointerEvents="none" style={styles.speechBubbleTailBorder} />
             <View pointerEvents="none" style={styles.speechBubbleTail} />
             <Text style={styles.hakiName}>Haki</Text>
-            <Text style={styles.message}>{renderedMessage}</Text>
+            <Text selectable style={styles.message}>{renderedMessage}</Text>
           </Pressable>
         </Animated.View>
       </Animated.View>
@@ -247,9 +243,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8
   },
   hakiImage: {
-    height: 226,
-    marginRight: -42,
-    width: 208,
+    marginRight: -18,
     zIndex: 2
   },
   bubbleWrap: {

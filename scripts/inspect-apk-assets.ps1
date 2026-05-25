@@ -49,13 +49,10 @@ if (!$llamaNativeEntries) {
   throw "APK is missing llama.rn native libraries. Rebuild the custom native app with the llama.rn plugin enabled."
 }
 
-if ($modelEntries -contains "assets/models/model.pte") {
-  throw "APK packages assets/models/model.pte (legacy ExecuTorch). Remove .pte assets from release builds."
-}
-
-if (!($modelEntries -contains "assets/models/haki-default.gguf")) {
-  throw "Stable APK is missing the bundled default GGUF model at assets/models/haki-default.gguf."
+$packagedModelFiles = $modelEntries | Where-Object { $_ -match "\.(gguf|pte)$" }
+if ($packagedModelFiles) {
+  throw "APK packages local model files under assets/models. Production builds must let users download compatible models into app-private storage."
 }
 
 Write-Host ""
-Write-Host "Stable APK check passed: bundled default GGUF present, llama.rn native libraries present, no ExecuTorch packaging."
+Write-Host "Stable APK check passed: no packaged GGUF/PTE model files, llama.rn native libraries present, no ExecuTorch packaging."

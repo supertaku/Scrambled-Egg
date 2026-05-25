@@ -1,5 +1,9 @@
 export function sanitizeAssistantText(value: string): string {
   let text = value.trim();
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  if (/<think\b/i.test(text) || /<\/think>/i.test(text)) {
+    return "";
+  }
   const promptEchoScanLimit = 200;
   const promptEchoHead = text.slice(0, promptEchoScanLimit);
   const promptEchoPattern =

@@ -32,7 +32,7 @@ const GENERAL_FACT_SCENARIOS = new Set<QuestionScenario>([
 const DENTAL_CARE_OPTIONS = ["dental care consultation", "dental treatment", "dental emergency treatment"];
 
 export const GENERAL_FACT_CHECK_NOTICE =
-  "Note: Haki may be wrong on general facts outside saved TUPT sources, so double-check with a reliable source.";
+  "Note: For general facts outside the TUPT guide, please double-check with a trusted reference.";
 
 function isProfileQuestion(question: string): boolean {
   return /\b(who am i|what do you know about me|my profile|what is my name|what course am i|what program am i|what year am i|how old (am )?i|my age)\b/i.test(question);
@@ -116,6 +116,8 @@ export function buildContractClarificationResponse(
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "campus_sources_unavailable",
     normalizedQuestion: contract.normalizedQuestion,
     responseType: "source",
     results: [],
@@ -128,22 +130,17 @@ export function buildContractClarificationResponse(
   };
 }
 
-export function withAnswerContractNotice(response: SearchResponse, contract: AnswerContract): SearchResponse {
+export function withAnswerContractMetadata(response: SearchResponse, contract: AnswerContract): SearchResponse {
   if (!contract.factCheckNotice) {
     return response;
   }
 
   const answerText = response.answerText?.trim();
-  if (!answerText || answerText.includes(contract.factCheckNotice)) {
-    return {
-      ...response,
-      factCheckNotice: contract.factCheckNotice
-    };
-  }
-
   return {
     ...response,
-    answerText: `${answerText}\n\n${contract.factCheckNotice}`,
+    ...(answerText
+      ? { answerText: answerText.replace(contract.factCheckNotice, "").trim() }
+      : {}),
     factCheckNotice: contract.factCheckNotice
   };
 }

@@ -43,12 +43,12 @@ export class ErrorBoundary extends Component<Props, State> {
           <View style={styles.card}>
             <AlertCircle color={colors.danger} size={48} />
             <Text style={styles.title}>Something went wrong</Text>
-            <Text style={styles.message}>
+            <Text selectable style={styles.message}>
               An unexpected error occurred in the application. You can try to reload the current screen.
             </Text>
             {this.state.error && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{this.state.error.message}</Text>
+                <Text selectable style={styles.errorText}>{this.state.error.message}</Text>
               </View>
             )}
             <Pressable onPress={this.handleReset} style={styles.button}>

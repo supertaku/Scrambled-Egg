@@ -123,6 +123,8 @@ describe("assistant text sanitizing", () => {
   it("strips prompt echoes and display-only citation footers", () => {
     expect(sanitizeAssistantText("System: hidden\nAssistant: Here you go.")).toBe("Here you go.");
     expect(sanitizeAssistantDisplayText("Here you go.\n\nCITATIONS: chunk_1, chunk_2")).toBe("Here you go.");
+    expect(sanitizeAssistantText("<think>private reasoning</think>\nFinal answer.")).toBe("Final answer.");
+    expect(sanitizeAssistantText("<think>unfinished reasoning")).toBe("");
   });
 });
 
@@ -159,8 +161,9 @@ describe("home trivia", () => {
     expect(triviaItems.length).toBeGreaterThan(0);
     expect(triviaItems.some((item) => item.title.toLowerCase().includes("gray hawk"))).toBe(true);
     triviaItems.forEach((item) => {
-      const displayed = `Did you know? ${item.title}. ${item.body}`;
+      const displayed = item.body;
       expect(displayed.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(20);
+      expect(displayed).not.toMatch(/Did you know\?/i);
       expect(item.sourceUrl).toMatch(/^https:\/\//);
     });
   });

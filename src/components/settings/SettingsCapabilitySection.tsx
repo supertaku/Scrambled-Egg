@@ -1,8 +1,9 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { ChevronDown, ChevronRight, Cpu } from "lucide-react-native";
+import { ChevronDown, ChevronRight, Cpu, RefreshCw } from "lucide-react-native";
 
 import type { DeviceCapabilityReport, ProviderCapabilityReport } from "@/ai/CapabilityDetector";
 import type { DeviceAIMode } from "@/ai/DeviceAIMode";
+import type { LocalModelEvaluationReport } from "@/ai/localModelEvaluation";
 import { colors } from "@/theme/colors";
 
 function formatMs(value: number | null | undefined): string {
@@ -17,7 +18,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <View style={styles.stat}>
       <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
+      <Text selectable style={styles.statValue}>{value}</Text>
     </View>
   );
 }
@@ -26,7 +27,7 @@ function ProviderMeta({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.providerMeta}>
       <Text style={styles.providerMetaLabel}>{label}</Text>
-      <Text style={styles.providerMetaValue}>{value}</Text>
+      <Text selectable style={styles.providerMetaValue}>{value}</Text>
     </View>
   );
 }
@@ -39,32 +40,30 @@ function ActiveLocalStatus({
   capabilityReport: DeviceCapabilityReport | null;
 }) {
   if (!activeMode) {
-    return <Text style={styles.cardText}>No active local AI mode detected yet.</Text>;
+    return <Text selectable style={styles.cardText}>Haki has not finished checking chat options yet.</Text>;
   }
 
   const capabilities = activeMode.capabilities;
-  const readiness = capabilities.safeChat ? "Safe chat ready" : capabilities.summary ? "Summary ready" : "Fallback mode";
-  const modelName = capabilities.modelName ?? activeMode.summaryProviderName ?? activeMode.label;
+  const readiness = capabilities.safeChat ? "All Haki modes available" : "Campus Haki ready";
+  const statusTitle = capabilities.safeChat ? "Friendly Haki is available" : "Campus Haki is ready";
 
   return (
     <View style={styles.activeStatusStack}>
       <View style={styles.activeStatusHero}>
         <Text style={styles.activeStatusEyebrow}>{readiness}</Text>
-        <Text style={styles.activeStatusTitle}>{modelName}</Text>
-        <Text style={styles.activeStatusMeta}>
-          {activeMode.label} - tier {capabilities.modelTier ?? "unknown"} - recommended{" "}
-          {capabilityReport?.recommendedModelTier ?? capabilities.recommendedModelTier ?? "unknown"}
+        <Text style={styles.activeStatusTitle}>{statusTitle}</Text>
+        <Text selectable style={styles.activeStatusMeta}>
+          Haki automatically chooses what works best on this phone.
         </Text>
-        <Text style={styles.modeExplanation}>
+        <Text selectable style={styles.modeExplanation}>
           {capabilities.safeChat
-            ? "Campus facts are retrieved offline from the saved guide; answers can be synthesized on-device when safe chat shows as available above."
-            : "Without local safe chat, answers use offline FTS search over the saved campus guide only—summaries and conversational replies need an activated on-device model (see provider list below)."}
+            ? "Friendly Haki and Campus Haki + Friendly Haki are unlocked. Campus facts remain source-backed."
+            : "Campus Haki can answer using the saved campus guide. Download a chat model to unlock supportive modes."}
         </Text>
       </View>
       <View style={styles.statusPriorityGrid}>
-        <Stat label="Safe chat" value={capabilities.safeChat ? "Available" : "Unavailable"} />
-        <Stat label="Streaming" value={capabilities.streamingSupported ? "Supported" : "Unavailable"} />
-        <Stat label="Context window" value={capabilities.contextWindowTokens ?? "Not reported"} />
+        <Stat label="Conversation" value={capabilities.safeChat ? "Available" : "Guide only"} />
+        <Stat label="Live replies" value={capabilities.streamingSupported ? "Available" : "Unavailable"} />
       </View>
       <View style={styles.providerMetaGrid}>
         <ProviderMeta label="Platform" value={`${capabilityReport?.platform ?? activeMode.platform} ${capabilityReport?.osVersion ?? activeMode.platformVersion}`} />
@@ -79,6 +78,16 @@ function ActiveLocalStatus({
         <ProviderMeta label="Quantization" value={capabilities.modelQuantization ?? "Not active"} />
         <ProviderMeta label="Load time" value={formatMs(capabilities.modelLoadTimeMs)} />
         <ProviderMeta label="Last inference" value={formatMs(capabilities.lastInferenceTimeMs)} />
+        <ProviderMeta label="Backend" value={capabilities.executionBackend ?? "Unknown"} />
+        <ProviderMeta label="Acceleration" value={capabilities.accelerationStatus ?? "Not checked"} />
+        <ProviderMeta label="Thermal" value={capabilities.thermalState ?? "Unknown"} />
+        <ProviderMeta label="First token" value={formatMs(capabilities.performanceProfile?.firstTokenTimeMs)} />
+        <ProviderMeta
+          label="Decode rate"
+          value={capabilities.performanceProfile?.decodeTokensPerSecond == null
+            ? "Not reported"
+            : `${capabilities.performanceProfile.decodeTokensPerSecond.toFixed(1)} tok/s`}
+        />
         <ProviderMeta label="Asset path" value={capabilities.modelAssetPath ?? "Not reported"} />
         <ProviderMeta label="Checked" value={capabilityReport?.lastCheckedAt ?? activeMode.detectedAt} />
       </View>
@@ -123,6 +132,16 @@ function ProviderStatus({
             <ProviderMeta label="Hash" value={provider.modelFileHash ? provider.modelFileHash.slice(0, 12) : "None"} />
             <ProviderMeta label="Load time" value={formatMs(provider.modelLoadTimeMs)} />
             <ProviderMeta label="Last inference" value={formatMs(provider.lastInferenceTimeMs)} />
+            <ProviderMeta label="Backend" value={provider.executionBackend} />
+            <ProviderMeta label="Acceleration" value={provider.accelerationStatus} />
+            <ProviderMeta label="Thermal" value={provider.thermalState} />
+            <ProviderMeta label="First token" value={formatMs(provider.performanceProfile?.firstTokenTimeMs)} />
+            <ProviderMeta
+              label="Decode rate"
+              value={provider.performanceProfile?.decodeTokensPerSecond == null
+                ? "Not reported"
+                : `${provider.performanceProfile.decodeTokensPerSecond.toFixed(1)} tok/s`}
+            />
             <ProviderMeta label="Active tier" value={provider.modelTier} />
             <ProviderMeta label="Recommended tier" value={provider.recommendedModelTier} />
             <ProviderMeta label="Model size" value={provider.modelParameterCountB ? `${provider.modelParameterCountB}B` : "None"} />
@@ -134,12 +153,12 @@ function ProviderStatus({
             <ProviderMeta label="Memory" value={provider.memoryClass ?? "Not exposed"} />
           </View>
           {provider.unavailableReasons.slice(0, 3).map((reason) => (
-            <Text key={reason} style={styles.providerReason}>
+            <Text selectable key={reason} style={styles.providerReason}>
               {reason}
             </Text>
           ))}
           {provider.modelRejectionReasons.slice(0, 3).map((reason) => (
-            <Text key={`model-${reason}`} style={styles.providerReason}>
+            <Text selectable key={`model-${reason}`} style={styles.providerReason}>
               {reason}
             </Text>
           ))}
@@ -155,33 +174,56 @@ export function SettingsCapabilitySection({
   error,
   expandedProviders,
   loading,
-  onToggleProvider
+  onRefreshCapabilities,
+  onToggleProvider,
+  refreshingCapabilities,
+  evaluationReport,
+  evaluatingModel,
+  onEvaluateModel
 }: {
   activeMode: DeviceAIMode | null;
   capabilityReport: DeviceCapabilityReport | null;
   error: string | null;
   expandedProviders: Record<string, boolean>;
   loading: boolean;
+  onRefreshCapabilities: () => void;
   onToggleProvider: (providerId: string) => void;
+  refreshingCapabilities: boolean;
+  evaluationReport: LocalModelEvaluationReport | null;
+  evaluatingModel: boolean;
+  onEvaluateModel: () => void;
 }) {
   return (
     <>
       <View style={styles.card}>
         <Cpu color={colors.maroon} size={24} />
-        <Text style={styles.cardTitle}>Active local AI status</Text>
+        <Text style={styles.cardTitle}>Haki answer options</Text>
         {loading ? (
           <ActivityIndicator color={colors.maroon} />
         ) : error ? (
-          <Text style={styles.errorText}>{error}</Text>
+          <Text selectable style={styles.errorText}>{error}</Text>
         ) : (
           <ActiveLocalStatus activeMode={activeMode} capabilityReport={capabilityReport} />
         )}
+        <Pressable
+          accessibilityRole="button"
+          disabled={refreshingCapabilities}
+          onPress={onRefreshCapabilities}
+          style={[styles.refreshButton, refreshingCapabilities ? styles.disabledButton : undefined]}
+        >
+          {refreshingCapabilities ? (
+            <ActivityIndicator color={colors.white} size="small" />
+          ) : (
+            <RefreshCw color={colors.white} size={16} />
+          )}
+          <Text style={styles.refreshButtonText}>{refreshingCapabilities ? "Checking..." : "Check again"}</Text>
+        </Pressable>
       </View>
 
       {capabilityReport ? (
         <View style={styles.card}>
           <Cpu color={colors.maroon} size={24} />
-          <Text style={styles.cardTitle}>Detected local AI providers</Text>
+          <Text style={styles.cardTitle}>Technical details for administrators</Text>
           <View style={styles.providerList}>
             {capabilityReport.providers.map((provider) => (
               <ProviderStatus
@@ -192,6 +234,32 @@ export function SettingsCapabilitySection({
               />
             ))}
           </View>
+          <Text style={styles.cardTitle}>On-device model evaluation</Text>
+          <Text selectable style={styles.cardText}>
+            Runs short grounded, English-only, and ambiguity checks against the active generated-chat provider on this phone.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            disabled={evaluatingModel}
+            onPress={onEvaluateModel}
+            style={[styles.refreshButton, evaluatingModel ? styles.disabledButton : undefined]}
+          >
+            {evaluatingModel ? <ActivityIndicator color={colors.white} size="small" /> : <Cpu color={colors.white} size={16} />}
+            <Text style={styles.refreshButtonText}>{evaluatingModel ? "Evaluating..." : "Evaluate active model"}</Text>
+          </Pressable>
+          {evaluationReport ? (
+            <View style={styles.evaluationResults}>
+              <Text selectable style={styles.cardText}>
+                {evaluationReport.unavailableReason ??
+                  `${evaluationReport.passed}/${evaluationReport.total} checks passed - ${evaluationReport.modelName ?? evaluationReport.providerName ?? "active model"}`}
+              </Text>
+              {evaluationReport.metrics.map((metric) => (
+                <Text selectable key={metric.id} style={metric.passed ? styles.evaluationPass : styles.providerReason}>
+                  {metric.passed ? "PASS" : "FAIL"}: {metric.label}
+                </Text>
+              ))}
+            </View>
+          ) : null}
         </View>
       ) : null}
     </>
@@ -232,5 +300,20 @@ const styles = StyleSheet.create({
   providerMeta: { backgroundColor: colors.white, borderColor: colors.border, borderRadius: 8, borderWidth: 1, minWidth: "45%", padding: 8 },
   providerMetaLabel: { color: colors.muted, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
   providerMetaValue: { color: colors.ink, fontSize: 12, fontWeight: "800", marginTop: 2 },
-  providerReason: { color: colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 17 }
+  providerReason: { color: colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 17 },
+  refreshButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.maroon,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 9
+  },
+  refreshButtonText: { color: colors.white, fontSize: 13, fontWeight: "900" },
+  disabledButton: { backgroundColor: colors.grayhawk },
+  evaluationResults: { gap: 5, marginTop: 4 },
+  evaluationPass: { color: colors.success, fontSize: 12, fontWeight: "800", lineHeight: 17 }
 });

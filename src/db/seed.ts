@@ -5,7 +5,7 @@ import type { StructuredDocument } from "@/types/document";
 
 import { getDocumentCount, insertDocuments, getAppMetaValue } from "./documentRepository";
 
-const SEED_VERSION = "tup-taguig-2026-05-10";
+const SEED_VERSION = "tup-taguig-2026-05-24-it-building-rooms";
 const seedDocumentIds = (seedDocuments as StructuredDocument[]).map((document) => document.document_id);
 
 export async function seedDatabase(db: SQLiteDatabase): Promise<void> {

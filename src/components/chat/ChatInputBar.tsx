@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, RefreshCw, SendHorizontal, Square } from "lucide-react-native";
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from "react-native";
 
 import { colors } from "@/theme/colors";
 
@@ -25,6 +25,8 @@ interface ChatInputBarProps {
   speechSupport: { supported: boolean };
   onVoicePress: () => void;
   onCancelVoice: () => void;
+  bottomPadding: number;
+  onLayout?: (event: LayoutChangeEvent) => void;
 }
 
 export function ChatInputBar({
@@ -42,7 +44,9 @@ export function ChatInputBar({
   isListening,
   speechSupport,
   onVoicePress,
-  onCancelVoice
+  onCancelVoice,
+  bottomPadding,
+  onLayout
 }: ChatInputBarProps) {
   // Animated send button scale
   const sendScale = useRef(new Animated.Value(1)).current;
@@ -103,7 +107,13 @@ export function ChatInputBar({
   };
 
   return (
-    <View style={styles.inputBarWrapper}>
+    <View
+      onLayout={onLayout}
+      style={[
+        styles.inputBarWrapper,
+        { paddingBottom: bottomPadding }
+      ]}
+    >
       {initializing || error || voiceState.message ? (
         <View style={styles.statusStack}>
           {initializing ? (
@@ -120,7 +130,7 @@ export function ChatInputBar({
                 { transform: [{ translateY: errorSlide }], opacity: errorOpacity }
               ]}
             >
-              <Text style={styles.errorBannerText}>{error}</Text>
+              <Text selectable style={styles.errorBannerText}>{error}</Text>
               {lastFailedQuestion ? (
                 <Pressable
                   accessibilityRole="button"
@@ -244,7 +254,6 @@ export function ChatInputBar({
 const styles = StyleSheet.create({
   inputBarWrapper: {
     backgroundColor: colors.white,
-    paddingBottom: 88,
     borderTopColor: colors.border,
     borderTopWidth: 1,
     shadowColor: "#000",

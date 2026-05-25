@@ -28,10 +28,10 @@ export function SettingsDbSection({
   return (
     <View style={styles.card}>
       <Database color={colors.maroon} size={24} />
-      <Text style={styles.cardTitle}>Saved documents</Text>
+      <Text style={styles.cardTitle}>Saved campus files</Text>
       <View style={styles.actionRow}>
         <Pressable
-          accessibilityLabel="Open document library"
+          accessibilityLabel="Open campus files"
           accessibilityRole="button"
           onPress={() => router.push("/documents")}
           style={styles.actionButton}
@@ -40,21 +40,21 @@ export function SettingsDbSection({
           <Text style={styles.actionButtonText}>Library</Text>
         </Pressable>
         <Pressable
-          accessibilityLabel="Import source document JSON"
+          accessibilityLabel="Add a campus file"
           accessibilityRole="button"
           onPress={() => router.push("/add-document")}
           style={styles.actionButton}
         >
           <FilePlus color={colors.maroon} size={16} />
-          <Text style={styles.actionButtonText}>Import</Text>
+          <Text style={styles.actionButtonText}>Add</Text>
         </Pressable>
       </View>
       {loading ? (
         <ActivityIndicator color={colors.maroon} />
       ) : error ? (
-        <Text style={styles.errorText}>{error}</Text>
+        <Text selectable style={styles.errorText}>{error}</Text>
       ) : documents.length === 0 ? (
-        <Text style={styles.cardText}>No documents saved yet.</Text>
+        <Text selectable style={styles.cardText}>No campus files saved yet.</Text>
       ) : (
         <View style={styles.documentTable}>
           <View style={[styles.documentRow, styles.documentHeaderRow]}>
@@ -63,16 +63,16 @@ export function SettingsDbSection({
           </View>
           {documents.map((document) => (
             <View key={document.documentId} style={styles.documentRow}>
-              <Text numberOfLines={2} style={styles.documentTitleCell}>
+              <Text selectable numberOfLines={2} style={styles.documentTitleCell}>
                 {document.documentTitle}
               </Text>
-              <Text style={styles.documentDateCell}>{formatDate(document.lastUpdated)}</Text>
+              <Text selectable style={styles.documentDateCell}>{formatDate(document.lastUpdated)}</Text>
             </View>
           ))}
         </View>
       )}
-      <Text style={styles.documentFooter}>
-        {stats?.documentCount ?? 0} documents - {stats?.chunkCount ?? 0} chunks - seed {seedVersion ?? "not seeded"}
+      <Text selectable style={styles.documentFooter}>
+        {stats?.documentCount ?? 0} campus files - {stats?.chunkCount ?? 0} topics - guide version {seedVersion ?? "not ready"}
       </Text>
     </View>
   );

@@ -40,11 +40,22 @@ CREATE TABLE IF NOT EXISTS chunks (
 
 CREATE TABLE IF NOT EXISTS chunk_embeddings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  chunk_id TEXT UNIQUE NOT NULL,
+  chunk_id TEXT NOT NULL,
   model_name TEXT NOT NULL,
   embedding BLOB,
   dimension INTEGER,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(chunk_id, model_name),
+  FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS chunk_embedding_status (
+  chunk_id TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'not_generated',
+  last_error TEXT,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (chunk_id, model_name),
   FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE
 );
 
@@ -129,5 +140,6 @@ CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_office ON chunks(office);
 CREATE INDEX IF NOT EXISTS idx_chunks_category ON chunks(category);
 CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model_name ON chunk_embeddings(model_name);
+CREATE INDEX IF NOT EXISTS idx_chunk_embedding_status_model_name ON chunk_embedding_status(model_name);
 CREATE INDEX IF NOT EXISTS idx_conversation_memory_created_at ON conversation_memory(created_at);
 `;

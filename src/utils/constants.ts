@@ -17,7 +17,19 @@ export const STORAGE_KEYS = {
   /** Legacy: full profile JSON in plaintext. Migrated to SecureStore + avatar key on read. */
   STUDENT_PROFILE: "tupt_wiki_student_profile",
   /** Local avatar path/URI only (PII core fields use SecureStore when available). */
-  STUDENT_PROFILE_AVATAR_URI: "tupt_wiki_student_profile_avatar_uri"
+  STUDENT_PROFILE_AVATAR_URI: "tupt_wiki_student_profile_avatar_uri",
+  /** Opt-in: allows saved profile values to be included in Haki prompts. */
+  CHAT_USE_PROFILE_CONTEXT: "tupt_wiki_chat_use_profile_context",
+  /** Opt-in: allows related remembered replies to be used as Haki prompt context. */
+  CHAT_USE_RELATED_HISTORY: "tupt_wiki_chat_use_related_history",
+  /** Stores a prompt interrupted while a local answer was being generated. */
+  PENDING_CHAT_REQUEST: "tupt_wiki_pending_chat_request",
+  /** Marks the one-time Haki profile setup flow as finished on this device. */
+  ONBOARDING_COMPLETE: "tupt_wiki_onboarding_complete",
+  /** Distinguishes interrupted first-run setup from a legacy saved profile. */
+  ONBOARDING_STARTED: "tupt_wiki_onboarding_started",
+  /** Restores the active profile setup step after an interrupted first run. */
+  ONBOARDING_STEP: "tupt_wiki_onboarding_step"
 } as const;
 
 // ─── Database ─────────────────────────────────────────────────────────────────

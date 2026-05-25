@@ -1,6 +1,7 @@
 import { NativeModules, Platform } from "react-native";
 import { Paths } from "expo-file-system";
 
+import type { DeviceThermalState } from "./LocalAIProvider";
 import type { DeviceHardwareProfile } from "./localModelMetadata";
 import { parseMemoryGB } from "./localModelMetadata";
 import { getNormalizedPlatform, getPlatformVersionString } from "./providerUtils";
@@ -12,6 +13,7 @@ interface NativeHardwareProfile {
   memoryClassMb?: number | string | null;
   largeMemoryClassMb?: number | string | null;
   lowMemory?: boolean | null;
+  thermalState?: DeviceThermalState | null;
 }
 
 interface HakiDeviceInfoNativeModule {
@@ -19,7 +21,12 @@ interface HakiDeviceInfoNativeModule {
 }
 
 function getNativeDeviceInfoModule(): HakiDeviceInfoNativeModule | null {
-  return (NativeModules.HakiDeviceInfo as HakiDeviceInfoNativeModule | undefined) ?? null;
+  try {
+    const { requireNativeModule } = require("expo-modules-core");
+    return requireNativeModule("HakiDeviceInfo") as HakiDeviceInfoNativeModule;
+  } catch {
+    return (NativeModules.HakiDeviceInfo as HakiDeviceInfoNativeModule | undefined) ?? null;
+  }
 }
 
 function getFreeStorageGB(): number | null {
@@ -54,7 +61,8 @@ export async function getDeviceHardwareProfile(backendDevices: string[] = []): P
       memoryClass: null,
       lowMemory: null,
       freeStorageGB: getFreeStorageGB(),
-      backendDevices
+      backendDevices,
+      thermalState: "unknown"
     };
   }
 
@@ -76,7 +84,8 @@ export async function getDeviceHardwareProfile(backendDevices: string[] = []): P
       memoryClass: memoryClassGB !== null ? `${memoryClassGB.toFixed(1)}GB app heap class` : null,
       lowMemory: nativeProfile.lowMemory ?? null,
       freeStorageGB: getFreeStorageGB(),
-      backendDevices
+      backendDevices,
+      thermalState: nativeProfile.thermalState ?? "unknown"
     };
   } catch (error) {
     logger.ai.warn("Native hardware profile check failed", { error: error instanceof Error ? error.message : String(error) });
@@ -89,7 +98,8 @@ export async function getDeviceHardwareProfile(backendDevices: string[] = []): P
       memoryClass: null,
       lowMemory: null,
       freeStorageGB: getFreeStorageGB(),
-      backendDevices
+      backendDevices,
+      thermalState: "unknown"
     };
   }
 }

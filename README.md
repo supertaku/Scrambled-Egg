@@ -12,7 +12,7 @@ SQLite + FTS5 is the required baseline retrieval mode because it is deterministi
 
 If an AI provider is unavailable or fails, Haki falls back to SQLite + FTS5 source search for the current session.
 
-For native builds that report the tiny local-model requirements, Haki prefers local AI by default. Devices below the tiny model floor remain on FTS5, while higher-capability Android devices can report and use larger adaptive model tiers.
+For native builds that report the tiny local-model requirements, Haki prefers local AI by default. Devices below the tiny model floor remain on FTS5, while higher-capability Android or iOS devices can report and use larger adaptive model tiers.
 
 ## Supported Modes
 
@@ -50,30 +50,30 @@ Base FTS5 mode:
 - iOS 15+
 - Android 9+
 
-Native GGUF (llama.rn) summary mode uses the same Android hardware tiers as below (RAM, storage, ABI). Local models are loaded from app-private GGUF files; configure filenames in `localModelMetadata` / Settings import flows.
+Native GGUF (llama.rn) summary mode uses conservative mobile hardware tiers (RAM, storage, architecture). Users install compatible models from the public AI Models screen into app-private storage.
 
 llama.rn / GGUF AI mode:
 
 - Android or iOS custom native build with the `llama.rn` Expo config plugin.
-- Uses app-private GGUF files under the document `models/` directory.
-- Chat model filenames checked by default: `haki-chat.gguf`, `haki-chat-tiny.gguf`, `haki-chat-0.6b.gguf`, `haki-chat-1.5b.gguf`, `haki-chat-3b.gguf`, `haki-chat-4b.gguf`, `haki-chat-7b.gguf`.
+- Uses app-private GGUF files under the document `models/chat/installed/<model-id>/` directory.
+- New installations start with no chat GGUF; FTS5 source search remains available until a student activates a compatible download.
 - Embedding model filenames checked by default: `haki-embed.gguf`, `haki-embedding.gguf`, `haki-minilm-embed.gguf`.
 - Uses the same adaptive tier policy as Android local AI: tiny 0.5B-1.5B, minimum 1B-3B, good 3B-4B, enhanced 4B-7B, flagship 7B-8B.
-- Model import/download UI is not implemented yet, so the provider activates only after GGUF files already exist locally.
+- The AI Models screen supports curated compatible downloads, switching, removal, paused-download recovery, and Haki progress feedback. Manual import remains an admin diagnostic action.
 
 Apple Intelligence / Foundation Models mode:
 
 - Supported Apple Intelligence iOS/iPadOS devices only: iPhone 15 Pro models, iPhone 16 or later, iPad mini with A17 Pro, and iPad models with M1 or later.
-- iOS/iPadOS 18.1+.
-- 7GB free storage for Apple Intelligence on-device assets.
+- iOS/iPadOS 26.0+.
+- Apple manages model asset readiness; Haki checks `SystemLanguageModel.default` availability.
 - Requires a custom Expo development build with the `HakiAppleFoundationModels` native module.
-- The current app includes the TypeScript provider and native-module placeholder only, so unsupported builds still compile and run.
+- The native bridge performs real Foundation Models generation only on an eligible ready device; unsupported devices continue through GGUF fallback or FTS5.
 
 Expo Go is suitable for the FTS5 MVP path, but it cannot load custom native AI modules. Use a custom Expo development build before integrating llama.rn or an Apple Foundation Models Swift bridge.
 
 ## Automatic Capability Detection
 
-Haki checks device capability at app startup and caches the safest selected mode for the session. The detector considers platform, OS version, native provider availability, ABI/architecture, RAM, free storage, local model asset availability, model size, model quantization, embedding support, summarization support, native-reported device class, memory/RAM class when exposed, and providers disabled after runtime failures.
+Haki checks device capability at app startup and caches the safest selected mode for the session. The detector considers platform, OS version, native provider availability, ABI/architecture, RAM, free storage, thermal state, local model asset availability, model size, quantization, embedding support, summarization support, selected execution backend, benchmark profile, and providers disabled after runtime failures.
 
 Before probing optional AI providers, Haki opens the local database and verifies that the SQLite FTS5 index is available. If FTS5 cannot initialize, Haki reports a database initialization error and does not attempt Apple Intelligence or llama.rn.
 
@@ -85,7 +85,7 @@ The priority order is:
 4. Semantic Search Mode
 5. FTS5-only fallback
 
-If detection is uncertain, Haki chooses the safer FTS5 path. The Settings/About screen shows the active mode, platform, OS version, active model tier, recommended model tier, provider status, unavailable reasons, and a button to re-check device capability without restarting the app.
+If detection is uncertain, Haki chooses the safer FTS5 path. Administrator capability details show the active mode, platform, OS version, model tier, selected backend, benchmark metrics, provider status and unavailable reasons, and can run a short on-device behavior evaluation of the active generated-chat model.
 
 Hybrid mode uses one provider for both embeddings and summarization. Haki does not mix Apple and llama.rn summarization or embeddings across providers.
 
@@ -135,7 +135,7 @@ When implementing real native providers:
 1. Add `expo-dev-client` and the native module implementation.
 2. Add the native bridge expected by the TypeScript layer:
    - `NativeModules.HakiAppleFoundationModels` (optional, Apple-only)
-3. For llama.rn, keep the config plugin in `app.json` and place supported GGUF files under the app document `models/` directory or bundled `assets/models/`.
+3. For llama.rn, keep the config plugin in `app.json`; chat GGUF files are installed into app-private managed library storage by the model coordinator.
 4. Make `getCapabilities()` report the values Haki requires before enabling real local AI:
 
 ```ts
@@ -165,7 +165,7 @@ Haki passes `preferredModelTier` into native summary and safe-chat calls based o
 
 For Apple Foundation Models, the native bridge must refuse unsupported Apple Intelligence devices and unavailable sessions. It should report `modelAssetsAvailable: true` only when the Apple Foundation Models session is usable on that device.
 
-5. Use `assets/models/README.md` as the model asset bundle contract. Do not commit licensed model files until redistribution rights and package size strategy are confirmed.
+5. Do not package GGUF files in Android assets. Public downloads must remain curated and retain known hashes and license review.
 
 6. Rebuild the native app:
 
@@ -317,17 +317,16 @@ npm run typecheck
 
 ## Current Limitations
 
-- The JavaScript capability gate for real local models is implemented; larger GGUF flows rely on Settings import/download where available.
-- The Apple Foundation Models Swift bridge is optional and build-specific.
+- Android/iOS GGUF chat models are optional, verified user-managed downloads; source search remains the model-free baseline.
+- The Apple Foundation Models Swift bridge is optional, iOS 26+-gated, and requires physical-device release validation.
 - Vector search activates when `chunk_embeddings` rows exist for the active embedding model (automatic backfill runs when a provider exposes `embedText`).
 - The bundled seed data is demo content, not official policy.
 - Official school offices remain the final authority.
 
 ## Roadmap
 
-- llama.rn GGUF model import/download flow refinements
+- Representative-device validation for llama.rn acceleration and Apple Foundation Models behavior
 - Embedding-backed hybrid retrieval tuning
-- Apple Foundation Models Swift native bridge
 - Hybrid vector search
 - Better reranking
 - Document update packages

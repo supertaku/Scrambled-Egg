@@ -24,8 +24,8 @@ function uniqueSources(results: SearchResult[]): SearchResult[] {
 
 function formatSourcePreview(sources: SearchResult[]): string {
   const titles = sources.map((s) => s.documentTitle);
-  if (titles.length === 0) return "No saved source";
-  const firstTitle = titles[0] ?? "Saved source";
+  if (titles.length === 0) return "No guide entry";
+  const firstTitle = titles[0] ?? "Campus guide";
   const preview = firstTitle.length > 42 ? `${firstTitle.slice(0, 39).trim()}...` : firstTitle;
   return titles.length > 1 ? `${preview} +${titles.length - 1} more` : preview;
 }
@@ -42,8 +42,7 @@ function sourceDetail(source: SearchResult): string {
     source.processName || source.sectionTitle,
     source.office ? `Office: ${source.office}` : null,
     source.officeLocation ? `Location: ${source.officeLocation}` : null,
-    source.pageNumber ? `Page ${source.pageNumber}` : null,
-    source.confidence ? `Confidence: ${source.confidence}` : null
+    source.pageNumber ? `Page ${source.pageNumber}` : null
   ]
     .filter(Boolean)
     .join(" · ");
@@ -56,7 +55,12 @@ function sourceCitation(source: SearchResult): string | null {
 /** Collapsible source citation card shown below a Haki response. */
 export function ChatSourceCard({ response, result }: ChatSourceCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const sources = uniqueSources(response.results.length ? response.results : result ? [result] : []);
+  const citedIds = new Set(response.citationsUsed);
+  const sources = uniqueSources([
+    ...response.results,
+    ...(response.topResult ? [response.topResult] : []),
+    ...(result ? [result] : [])
+  ]).filter((source) => citedIds.has(source.chunkId));
   const lastUpdated = formatLastUpdated(sources);
 
   if (sources.length === 0) return null;
@@ -64,7 +68,7 @@ export function ChatSourceCard({ response, result }: ChatSourceCardProps) {
   return (
     <View style={styles.sourcesWrap}>
       <Pressable
-        accessibilityLabel={`${expanded ? "Hide" : "Show"} Haki answer sources`}
+        accessibilityLabel={`${expanded ? "Hide" : "Show"} reference information for Haki's answer`}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         onPress={() => setExpanded((c) => !c)}
@@ -73,7 +77,7 @@ export function ChatSourceCard({ response, result }: ChatSourceCardProps) {
         <View style={styles.sourcesToggleRow}>
           <View style={styles.sourceDot} />
           <Text style={styles.sourcesToggleText} numberOfLines={1}>
-            <Text style={styles.sourcesLabel}>Source: </Text>
+            <Text style={styles.sourcesLabel}>Based on: </Text>
             {formatSourcePreview(sources)}
           </Text>
           <Text style={styles.expandHint}>{expanded ? "▲" : "▼"}</Text>
@@ -87,16 +91,12 @@ export function ChatSourceCard({ response, result }: ChatSourceCardProps) {
             <View key={`${source.documentId}:${source.chunkId}`} style={styles.sourceTitleRow}>
               <View style={styles.sourceAccentBar} />
               <View style={styles.sourceContent}>
-                <Text style={styles.sourceTitleText}>{source.documentTitle}</Text>
-                {sourceDetail(source) ? <Text style={styles.sourceMetaText}>{sourceDetail(source)}</Text> : null}
-                {sourceCitation(source) ? <Text style={styles.sourceCitationText}>{sourceCitation(source)}</Text> : null}
+                <Text selectable style={styles.sourceTitleText}>{source.documentTitle}</Text>
+                {sourceDetail(source) ? <Text selectable style={styles.sourceMetaText}>{sourceDetail(source)}</Text> : null}
+                {sourceCitation(source) ? <Text selectable style={styles.sourceCitationText}>{sourceCitation(source)}</Text> : null}
               </View>
             </View>
           ))}
-          <View style={styles.provenanceRow}>
-            <Text style={styles.provenanceText}>{response.provenance}</Text>
-            {response.verificationNote ? <Text style={styles.provenanceText}>{response.verificationNote}</Text> : null}
-          </View>
         </View>
       ) : null}
     </View>
@@ -201,18 +201,4 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontStyle: "italic"
   },
-  provenanceRow: {
-    backgroundColor: colors.white,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    gap: 2,
-    paddingHorizontal: 10,
-    paddingVertical: 8
-  },
-  provenanceText: {
-    color: colors.mutedLight,
-    fontSize: 11,
-    fontWeight: "700",
-    lineHeight: 15
-  }
 });

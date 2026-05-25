@@ -1,14 +1,16 @@
-import { useEffect, useRef } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useIsFocused } from "@react-navigation/native";
 
 import { colors } from "@/theme/colors";
 import { AdminUnlockModal } from "./AdminUnlockModal";
-import { mascotImages, type MascotStatus } from "./mascot/mascotConfig";
+import { PixelHaki } from "./mascot/PixelHaki";
+import { pixelStateForMascotStatus, type MascotStatus } from "./mascot/mascotConfig";
 import { useMascotInteraction } from "./mascot/useMascotInteraction";
 
 export type { MascotStatus } from "./mascot/mascotConfig";
 
 interface MascotHeaderProps {
+  isTrivia?: boolean;
   message?: string;
   onMascotPress?: () => void;
   subtitle?: string;
@@ -16,11 +18,13 @@ interface MascotHeaderProps {
 }
 
 export function MascotHeader({
+  isTrivia = false,
   message,
   onMascotPress,
   subtitle,
   status = "idle"
 }: MascotHeaderProps) {
+  const interactionVisible = useIsFocused();
   const {
     bubbleScale,
     closeAdminModal,
@@ -31,31 +35,9 @@ export function MascotHeader({
     resolvedMessage,
     resolvedStatus,
     showAdminModal
-  } = useMascotInteraction({ message, onAdminRequest: onMascotPress, status });
-  const mascotSource = mascotImages[resolvedStatus] ?? mascotImages.idle;
-
-  // Gentle idle breathing animation
-  const breathAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const breathe = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breathAnim, {
-          toValue: 1.025,
-          duration: 2200,
-          useNativeDriver: true
-        }),
-        Animated.timing(breathAnim, {
-          toValue: 1,
-          duration: 2200,
-          useNativeDriver: true
-        })
-      ])
-    );
-    breathe.start();
-    return () => breathe.stop();
-  }, [breathAnim]);
-
+  } = useMascotInteraction({ interactionVisible, message, onAdminRequest: onMascotPress, status });
+  const showTriviaLabel = isTrivia && resolvedMessage === message;
+  const compactDialogue = resolvedStatus === "sleepy" && Boolean(resolvedMessage);
   return (
     <View style={styles.container}>
       <AdminUnlockModal onClose={closeAdminModal} visible={showAdminModal} />
@@ -68,18 +50,16 @@ export function MascotHeader({
         delayLongPress={450}
         style={styles.mascotWrap}
       >
-        <Animated.Image
-          source={mascotSource}
-          style={[styles.mascotImage, { transform: [...imageTransform, { scale: breathAnim }] }]}
-          resizeMode="contain"
-        />
+        <Animated.View style={[styles.mascotImage, { transform: imageTransform }]}>
+          <PixelHaki height={178} state={pixelStateForMascotStatus(resolvedStatus)} width={114} />
+        </Animated.View>
       </Pressable>
 
       {resolvedMessage ? (
-        <Animated.View style={[styles.speechBubbleWrap, { transform: [{ scale: bubbleScale }] }]}>
-          <View style={styles.speechBubble}>
-            <View pointerEvents="none" style={styles.speechBubbleTailBorder} />
-            <View pointerEvents="none" style={styles.speechBubbleTail} />
+        <Animated.View style={[styles.speechBubbleWrap, compactDialogue ? styles.compactBubbleWrap : undefined, { transform: [{ scale: bubbleScale }] }]}>
+          <View style={[styles.speechBubble, compactDialogue ? styles.compactBubble : undefined]}>
+            <View pointerEvents="none" style={[styles.speechBubbleTailBorder, compactDialogue ? styles.compactTailBorder : undefined]} />
+            <View pointerEvents="none" style={[styles.speechBubbleTail, compactDialogue ? styles.compactTail : undefined]} />
             <Text style={styles.hakiName}>Haki</Text>
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
             <ScrollView
@@ -88,16 +68,8 @@ export function MascotHeader({
               showsVerticalScrollIndicator={false}
               nestedScrollEnabled
             >
-              <Text style={styles.speechText}>
-                {resolvedMessage.startsWith("Did you know?") ? (
-                  <>
-                    <Text style={styles.messageStrong}>Did you know?</Text>
-                    {resolvedMessage.replace("Did you know?", "")}
-                  </>
-                ) : (
-                  resolvedMessage
-                )}
-              </Text>
+              {showTriviaLabel ? <Text style={styles.triviaLabel}>Did you know?</Text> : null}
+              <Text selectable style={styles.speechText}>{resolvedMessage}</Text>
             </ScrollView>
           </View>
         </Animated.View>
@@ -130,8 +102,10 @@ const styles = StyleSheet.create({
     elevation: 4
   },
   mascotImage: {
-    width: "100%",
-    height: "100%"
+    alignItems: "center",
+    height: "100%",
+    justifyContent: "center",
+    width: "100%"
   },
   speechBubbleWrap: {
     left: 136,
@@ -161,6 +135,12 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     zIndex: 2
   },
+  compactBubbleWrap: {
+    top: 45
+  },
+  compactBubble: {
+    paddingVertical: 10
+  },
   speechBubbleTailBorder: {
     borderBottomColor: "transparent",
     borderBottomWidth: 13,
@@ -188,6 +168,12 @@ const styles = StyleSheet.create({
     top: 46,
     width: 0,
     zIndex: 3
+  },
+  compactTailBorder: {
+    top: 24
+  },
+  compactTail: {
+    top: 26
   },
   hakiName: {
     color: colors.maroon,
@@ -220,8 +206,10 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     lineHeight: 18
   },
-  messageStrong: {
-    color: colors.maroon,
-    fontWeight: "800"
-  }
+  triviaLabel: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "900",
+    lineHeight: 18
+  },
 });

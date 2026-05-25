@@ -1,4 +1,4 @@
-import type { LocalModelTier } from "./LocalAIProvider";
+import type { DeviceThermalState, LocalModelPerformanceProfile, LocalModelTier } from "./LocalAIProvider";
 import type { NormalizedPlatform } from "./providerUtils";
 
 const ANDROID_MODEL_TIER_ORDER = ["tiny", "minimum", "good", "enhanced", "flagship"] as const;
@@ -143,6 +143,33 @@ export interface DeviceHardwareProfile {
   lowMemory: boolean | null;
   freeStorageGB: number | null;
   backendDevices: string[];
+  thermalState?: DeviceThermalState;
+}
+
+export interface LocalModelGenerationPolicy {
+  thinkingMode?: "disabled";
+}
+
+export function catalogDownloadFitsHardware(
+  model: { tier: LocalModelTier; sizeMB: number; supportedPlatforms?: Array<"android" | "ios"> },
+  hardware: DeviceHardwareProfile
+): boolean {
+  const requirements = ANDROID_MODEL_TIERS[model.tier as AndroidLocalModelTier];
+  const supportsPlatform = model.supportedPlatforms?.includes(hardware.platform as "android" | "ios") ??
+    (hardware.platform === "android");
+  if (
+    !requirements ||
+    !supportsPlatform ||
+    (hardware.platform !== "android" && hardware.platform !== "ios") ||
+    !hardware.supportedAbis.some((abi) => abi.toLowerCase().includes("arm64"))
+  ) {
+    return false;
+  }
+  if (hardware.memoryGB === null || hardware.freeStorageGB === null || hardware.lowMemory === true) {
+    return false;
+  }
+  const requiredBeforeDownload = requirements.minimumFreeStorageGB + model.sizeMB / 1024;
+  return hardware.memoryGB >= requirements.minimumRamGB && hardware.freeStorageGB >= requiredBeforeDownload;
 }
 
 export interface LocalModelMetadata {
@@ -157,7 +184,7 @@ export interface LocalModelMetadata {
 export interface LocalModelManifest {
   version: 1;
   role: LocalModelRole;
-  source?: "bundled" | "downloaded" | "imported" | undefined;
+  source?: "bundled" | "downloaded" | "imported" | "legacy-bundled" | "admin-imported" | undefined;
   sourceId?: string | undefined;
   downloadId?: string | undefined;
   originalName: string;
@@ -176,6 +203,10 @@ export interface LocalModelManifest {
   validatedAt: string;
   manifestPath: string;
   rejectionReasons: string[];
+  generationPolicy?: LocalModelGenerationPolicy;
+  executionProfile?: LocalModelPerformanceProfile;
+  artifactSource?: string;
+  artifactLicense?: string;
   rawInfo?: Record<string, unknown>;
 }
 
@@ -210,6 +241,9 @@ export interface BuildManifestInput {
   metadata: LocalModelMetadata;
   hardware: DeviceHardwareProfile;
   now: string;
+  generationPolicy?: LocalModelGenerationPolicy | undefined;
+  artifactSource?: string | undefined;
+  artifactLicense?: string | undefined;
 }
 
 export function canonicalModelFileName(role: LocalModelRole): string {
@@ -556,14 +590,14 @@ export function validateImportedModel(input: {
     }
   }
 
-  if (hardware.platform === "android" && !hasArm64Abi(hardware.supportedAbis)) {
-    reasons.push("Android local AI requires an arm64-v8a capable device.");
+  if ((hardware.platform === "android" || hardware.platform === "ios") && !hasArm64Abi(hardware.supportedAbis)) {
+    reasons.push("Downloaded local AI models require an arm64-capable device.");
   }
 
   const tierRequirements = getAndroidModelTierRequirements(metadata.modelTier);
   if (input.role === "chat" && tierRequirements) {
     if (hardware.memoryGB === null) {
-      reasons.push("Android RAM could not be detected, so Haki cannot safely activate this model.");
+      reasons.push("Device RAM could not be detected, so Haki cannot safely activate this model.");
     } else if (hardware.memoryGB < tierRequirements.minimumRamGB) {
       reasons.push(`${tierRequirements.label} requires at least ${tierRequirements.minimumRamGB}GB RAM.`);
     }
@@ -576,7 +610,7 @@ export function validateImportedModel(input: {
   }
 
   if (hardware.lowMemory === true) {
-    reasons.push("Android reports the app is in a low-memory state; import succeeded but model loading is disabled until memory pressure clears.");
+    reasons.push("The device reports a low-memory state; import succeeded but model loading is disabled until memory pressure clears.");
   }
 
   return Array.from(new Set(reasons));
@@ -614,6 +648,9 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
     validatedAt: input.now,
     manifestPath: input.manifestPath,
     rejectionReasons,
+    ...(input.generationPolicy ? { generationPolicy: input.generationPolicy } : {}),
+    ...(input.artifactSource ? { artifactSource: input.artifactSource } : {}),
+    ...(input.artifactLicense ? { artifactLicense: input.artifactLicense } : {}),
     ...(input.metadata.rawInfo ? { rawInfo: input.metadata.rawInfo } : {})
   };
 }

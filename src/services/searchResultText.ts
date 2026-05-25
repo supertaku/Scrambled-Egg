@@ -6,6 +6,5 @@ export function getDirectAnswer(result: SearchResult): string {
 }
 
 export function buildAnswerMessage(response: SearchResponse, topResult: SearchResult): string {
-  const answer = response.answerText?.trim() || getDirectAnswer(topResult);
-  return response.verificationNote ? `${answer}\n\n${response.verificationNote}` : answer;
+  return response.answerText?.trim() || getDirectAnswer(topResult);
 }

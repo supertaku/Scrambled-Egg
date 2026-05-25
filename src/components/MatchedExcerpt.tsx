@@ -26,7 +26,7 @@ export function MatchedExcerpt({ text, label = "Matched source excerpt" }: Match
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
-      <Text style={styles.excerpt}>
+      <Text selectable style={styles.excerpt}>
         {parts.map((part, index) => {
           const isMatch = part.startsWith("[match]") && part.endsWith("[/match]");
           const content = isMatch ? part.replace("[match]", "").replace("[/match]", "") : part;

@@ -1,6 +1,14 @@
 import type { DeviceAIMode } from "./DeviceAIMode";
 import type { LocalAIProvider } from "./LocalAIProvider";
-import type { DeviceCapabilityClass, LocalAIProviderId, LocalModelTier } from "./LocalAIProvider";
+import type {
+  AccelerationStatus,
+  DeviceCapabilityClass,
+  DeviceThermalState,
+  LocalExecutionBackend,
+  LocalAIProviderId,
+  LocalModelPerformanceProfile,
+  LocalModelTier
+} from "./LocalAIProvider";
 import { getDeviceHardwareProfile } from "./deviceHardwareProfile";
 import { deviceCapabilityClassForTier, recommendedDeviceModelTier } from "./localModelMetadata";
 import { selectDeviceAIMode, type ProviderProbe } from "./modeSelectionPolicy";
@@ -44,6 +52,11 @@ export interface ProviderCapabilityReport {
   safeInputBudgetTokens: number | null;
   maxOutputTokens: number | null;
   streamingSupported: boolean;
+  executionBackend: LocalExecutionBackend;
+  availableBackends: string[];
+  accelerationStatus: AccelerationStatus;
+  performanceProfile: LocalModelPerformanceProfile | null;
+  thermalState: DeviceThermalState;
   approximateDeviceCapability: DeviceCapabilityClass;
   architecture: string | null;
   freeStorageGB: number | null;
@@ -248,6 +261,11 @@ export class DefaultCapabilityDetector implements CapabilityDetector {
       safeInputBudgetTokens: probe.capabilities.safeInputBudgetTokens ?? null,
       maxOutputTokens: probe.capabilities.maxOutputTokens ?? null,
       streamingSupported: probe.capabilities.streamingSupported ?? false,
+      executionBackend: probe.capabilities.executionBackend ?? "unknown",
+      availableBackends: probe.capabilities.availableBackends ?? [],
+      accelerationStatus: probe.capabilities.accelerationStatus ?? "not_checked",
+      performanceProfile: probe.capabilities.performanceProfile ?? null,
+      thermalState: probe.capabilities.thermalState ?? "unknown",
       approximateDeviceCapability: probe.capabilities.approximateDeviceCapability,
       architecture: probe.capabilities.architecture ?? null,
       freeStorageGB: probe.capabilities.freeStorageGB ?? null,

@@ -147,6 +147,31 @@ function mergeCapabilities(
       embeddingProbe?.capabilities.streamingSupported ||
       fallbackCapabilities.streamingSupported
     ),
+    executionBackend:
+      summaryProbe?.capabilities.executionBackend ??
+      embeddingProbe?.capabilities.executionBackend ??
+      fallbackCapabilities.executionBackend ??
+      "unknown",
+    availableBackends:
+      summaryProbe?.capabilities.availableBackends ??
+      embeddingProbe?.capabilities.availableBackends ??
+      fallbackCapabilities.availableBackends ??
+      [],
+    accelerationStatus:
+      summaryProbe?.capabilities.accelerationStatus ??
+      embeddingProbe?.capabilities.accelerationStatus ??
+      fallbackCapabilities.accelerationStatus ??
+      "not_checked",
+    performanceProfile:
+      summaryProbe?.capabilities.performanceProfile ??
+      embeddingProbe?.capabilities.performanceProfile ??
+      fallbackCapabilities.performanceProfile ??
+      null,
+    thermalState:
+      summaryProbe?.capabilities.thermalState ??
+      embeddingProbe?.capabilities.thermalState ??
+      fallbackCapabilities.thermalState ??
+      "unknown",
     approximateDeviceCapability:
       summaryProbe?.capabilities.approximateDeviceCapability !== "unknown"
         ? summaryProbe?.capabilities.approximateDeviceCapability ?? approximateDeviceCapability

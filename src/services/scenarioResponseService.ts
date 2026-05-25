@@ -3,9 +3,16 @@ import { normalizeQuery } from "@/retrieval/queryNormalizer";
 import type { SearchResponse, SearchResponseType } from "@/types/search";
 
 import { detectReplyLanguage, isTagalogLike } from "./replyLanguageService";
-import type { QuestionScenario, StudentChatCapability, StudentQuestionIntent } from "./studentChatTypes";
+import type {
+  QuestionScenario,
+  StudentChatCapability,
+  StudentQuestionIntent,
+} from "./studentChatTypes";
 
-type SafeQuestionIntent = Extract<StudentQuestionIntent, { type: "safe_question" }>;
+type SafeQuestionIntent = Extract<
+  StudentQuestionIntent,
+  { type: "safe_question" }
+>;
 
 function responseFromText(input: {
   answerText: string;
@@ -18,6 +25,11 @@ function responseFromText(input: {
 }): SearchResponse {
   return {
     question: input.question,
+    requestedChatRole: "haki",
+    answerBasis:
+      input.responseType === "source"
+        ? "campus_sources_unavailable"
+        : "haki_guidance",
     normalizedQuestion: normalizeQuery(input.question),
     responseType: input.responseType ?? "general_advice",
     results: [],
@@ -26,17 +38,26 @@ function responseFromText(input: {
     answerText: input.answerText,
     citationsUsed: [],
     provenance: input.provenance ?? "Answered with safe student guidance",
-    activeMode: input.mode
+    activeMode: input.mode,
   };
 }
 
 export function extractOriginalRequest(question: string): string {
   return question
-    .replace(/^Summarize this for a student in plain language\. Keep it short and actionable:\s*/i, "")
-    .replace(/^Give clear step-by-step instructions or a checklist for this student request:\s*/i, "")
+    .replace(
+      /^Summarize this for a student in plain language\. Keep it short and actionable:\s*/i,
+      "",
+    )
+    .replace(
+      /^Give clear step-by-step instructions or a checklist for this student request:\s*/i,
+      "",
+    )
     .replace(/^Give safe, practical student advice for this request:\s*/i, "")
     .replace(/^Student scenario: [^\n]+\. .*?\nQuestion:\s*/i, "")
-    .replace(/^Student scenario: [^\n]+\. Student request type: [^\n]+\. [^\n]*\nQuestion:\s*/i, "")
+    .replace(
+      /^Student scenario: [^\n]+\. Student request type: [^\n]+\. [^\n]*\nQuestion:\s*/i,
+      "",
+    )
     .replace(/^Student request type: [^\n]+\. [^\n]+\nQuestion:\s*/i, "")
     .trim();
 }
@@ -49,7 +70,12 @@ function extractArithmeticExpression(question: string): string | null {
     .replace(/[xX]/g, "*")
     .replace(/\s+/g, "");
 
-  if (!expression || expression.length > 40 || !/[+\-*/]/.test(expression) || !/^[0-9+\-*/().]+$/.test(expression)) {
+  if (
+    !expression ||
+    expression.length > 40 ||
+    !/[+\-*/]/.test(expression) ||
+    !/^[0-9+\-*/().]+$/.test(expression)
+  ) {
     return null;
   }
 
@@ -135,7 +161,9 @@ function evaluateArithmeticExpression(expression: string): number | null {
 
 function formatArithmeticAnswer(value: number): string {
   const rounded = Math.abs(value) < 1e-10 ? 0 : value;
-  return Number.isInteger(rounded) ? String(rounded) : String(Number(rounded.toFixed(6)));
+  return Number.isInteger(rounded)
+    ? String(rounded)
+    : String(Number(rounded.toFixed(6)));
 }
 
 function answerBasicMath(question: string): string | null {
@@ -143,7 +171,9 @@ function answerBasicMath(question: string): string | null {
   if (!expression) return null;
 
   const value = evaluateArithmeticExpression(expression);
-  return value === null ? null : `${expression.replace(/\*/g, " x ")} = ${formatArithmeticAnswer(value)}`;
+  return value === null
+    ? null
+    : `${expression.replace(/\*/g, " x ")} = ${formatArithmeticAnswer(value)}`;
 }
 
 function relationshipFallback(question: string): string {
@@ -196,13 +226,16 @@ function detectCodingLanguage(question: string): CodingLanguage {
   if (/(?:c#|\bcsharp\b|\bc sharp\b)/i.test(question)) return "csharp";
   if (/(?:c\+\+|\bcpp\b|\bc plus plus\b)/i.test(question)) return "cpp";
   if (/\b(sql|database query|query)\b/i.test(question)) return "sql";
-  if (/\b(javascript|java script|node\.?js|js)\b/i.test(question)) return "javascript";
+  if (/\b(javascript|java script|node\.?js|js)\b/i.test(question))
+    return "javascript";
   if (/\bpython\b/i.test(question)) return "python";
   return "python";
 }
 
 function hasExplicitCodingLanguage(question: string): boolean {
-  return /(?:\bpython\b|\bjavascript\b|\bjava script\b|\bnode\.?js\b|\bjs\b|c\+\+|\bcpp\b|\bc plus plus\b|c#|\bcsharp\b|\bc sharp\b|\bsql\b)/i.test(question);
+  return /(?:\bpython\b|\bjavascript\b|\bjava script\b|\bnode\.?js\b|\bjs\b|c\+\+|\bcpp\b|\bc plus plus\b|c#|\bcsharp\b|\bc sharp\b|\bsql\b)/i.test(
+    question,
+  );
 }
 
 function codingLanguageLabel(language: CodingLanguage): string {
@@ -230,7 +263,7 @@ function sortingCodeForLanguage(language: CodingLanguage): string {
         "}",
         "",
         "console.log(sortNumbers([5, 2, 9, 1])); // [1, 2, 5, 9]",
-        "```"
+        "```",
       ].join("\n");
     case "cpp":
       return [
@@ -247,10 +280,10 @@ function sortingCodeForLanguage(language: CodingLanguage): string {
         "int main() {",
         "    std::vector<int> numbers = {5, 2, 9, 1};",
         "    for (int number : sortNumbers(numbers)) {",
-        "        std::cout << number << \" \";",
+        '        std::cout << number << " ";',
         "    }",
         "}",
-        "```"
+        "```",
       ].join("\n");
     case "csharp":
       return [
@@ -263,8 +296,8 @@ function sortingCodeForLanguage(language: CodingLanguage): string {
         "    return values.OrderBy(value => value).ToArray();",
         "}",
         "",
-        "Console.WriteLine(string.Join(\", \", SortNumbers(new[] { 5, 2, 9, 1 })));",
-        "```"
+        'Console.WriteLine(string.Join(", ", SortNumbers(new[] { 5, 2, 9, 1 })));',
+        "```",
       ].join("\n");
     case "sql":
       return [
@@ -272,7 +305,7 @@ function sortingCodeForLanguage(language: CodingLanguage): string {
         "SELECT id, name, score",
         "FROM students",
         "ORDER BY score DESC;",
-        "```"
+        "```",
       ].join("\n");
     default:
       return [
@@ -282,7 +315,7 @@ function sortingCodeForLanguage(language: CodingLanguage): string {
         "",
         "numbers = [5, 2, 9, 1]",
         "print(sort_numbers(numbers))  # [1, 2, 5, 9]",
-        "```"
+        "```",
       ].join("\n");
   }
 }
@@ -300,7 +333,7 @@ function movementCodeForLanguage(language: CodingLanguage): string {
         "}",
         "",
         "console.log(move({ x: 3, y: 4 }, 2, -1)); // { x: 5, y: 3 }",
-        "```"
+        "```",
       ].join("\n");
     case "cpp":
       return [
@@ -318,9 +351,9 @@ function movementCodeForLanguage(language: CodingLanguage): string {
         "",
         "int main() {",
         "    Position next = move({3, 4}, 2, -1);",
-        "    std::cout << next.x << \", \" << next.y;",
+        '    std::cout << next.x << ", " << next.y;',
         "}",
-        "```"
+        "```",
       ].join("\n");
     case "csharp":
       return [
@@ -333,14 +366,14 @@ function movementCodeForLanguage(language: CodingLanguage): string {
         "",
         "    void Update()",
         "    {",
-        "        float horizontal = Input.GetAxisRaw(\"Horizontal\");",
-        "        float vertical = Input.GetAxisRaw(\"Vertical\");",
+        '        float horizontal = Input.GetAxisRaw("Horizontal");',
+        '        float vertical = Input.GetAxisRaw("Vertical");',
         "        Vector3 direction = new Vector3(horizontal, 0f, vertical).normalized;",
         "",
         "        transform.Translate(direction * speed * Time.deltaTime, Space.World);",
         "    }",
         "}",
-        "```"
+        "```",
       ].join("\n");
     case "sql":
       return [
@@ -349,19 +382,19 @@ function movementCodeForLanguage(language: CodingLanguage): string {
         "SET x = x + :dx,",
         "    y = y + :dy",
         "WHERE player_id = :player_id;",
-        "```"
+        "```",
       ].join("\n");
     default:
       return [
         "```python",
         "def move(position, dx, dy):",
         "    return {",
-        "        \"x\": position[\"x\"] + dx,",
-        "        \"y\": position[\"y\"] + dy,",
+        '        "x": position["x"] + dx,',
+        '        "y": position["y"] + dy,',
         "    }",
         "",
         "print(move({\"x\": 3, \"y\": 4}, 2, -1))  # {'x': 5, 'y': 3}",
-        "```"
+        "```",
       ].join("\n");
   }
 }
@@ -376,7 +409,7 @@ function starterCodeForLanguage(language: CodingLanguage): string {
         "}",
         "",
         "console.log(calculateTotal([50, 25, 10])); // 85",
-        "```"
+        "```",
       ].join("\n");
     case "cpp":
       return [
@@ -395,7 +428,7 @@ function starterCodeForLanguage(language: CodingLanguage): string {
         "int main() {",
         "    std::cout << calculateTotal({50, 25, 10});",
         "}",
-        "```"
+        "```",
       ].join("\n");
     case "csharp":
       return [
@@ -409,7 +442,7 @@ function starterCodeForLanguage(language: CodingLanguage): string {
         "}",
         "",
         "Console.WriteLine(CalculateTotal(new[] { 50, 25, 10 }));",
-        "```"
+        "```",
       ].join("\n");
     case "sql":
       return [
@@ -417,7 +450,7 @@ function starterCodeForLanguage(language: CodingLanguage): string {
         "SELECT student_id, SUM(amount) AS total_amount",
         "FROM payments",
         "GROUP BY student_id;",
-        "```"
+        "```",
       ].join("\n");
     default:
       return [
@@ -426,7 +459,7 @@ function starterCodeForLanguage(language: CodingLanguage): string {
         "    return sum(prices)",
         "",
         "print(calculate_total([50, 25, 10]))  # 85",
-        "```"
+        "```",
       ].join("\n");
   }
 }
@@ -435,7 +468,9 @@ function codingFallback(question: string): string {
   const normalized = normalizeQuery(question);
   const language = detectCodingLanguage(question);
   const label = codingLanguageLabel(language);
-  const defaultNote = hasExplicitCodingLanguage(question) ? "" : "No language was mentioned, so I will default to Python.\n\n";
+  const defaultNote = hasExplicitCodingLanguage(question)
+    ? ""
+    : "No language was mentioned, so I will default to Python.\n\n";
 
   if (/\bsort|sorting|algorithm\b/.test(normalized)) {
     return [
@@ -445,7 +480,7 @@ function codingFallback(question: string): string {
       "",
       language === "sql"
         ? "Use `ORDER BY` when you want sorted query results."
-        : "This returns a sorted result without needing extra input from the user."
+        : "This returns a sorted result without needing extra input from the user.",
     ].join("\n");
   }
 
@@ -457,7 +492,7 @@ function codingFallback(question: string): string {
       "",
       language === "csharp"
         ? "This version assumes Unity movement. If you mean console C#, say so and I can adjust it."
-        : "This keeps the example simple: it updates a position using horizontal and vertical changes."
+        : "This keeps the example simple: it updates a position using horizontal and vertical changes.",
     ].join("\n");
   }
 
@@ -466,7 +501,7 @@ function codingFallback(question: string): string {
     "",
     starterCodeForLanguage(language),
     "",
-    "If you send the exact goal, I can adjust the function to match it."
+    "If you send the exact goal, I can adjust the function to match it.",
   ].join("\n");
 }
 
@@ -491,7 +526,7 @@ function generalKnowledgeFallback(question: string): string {
 function scenarioFallbackText(
   question: string,
   capability: StudentChatCapability,
-  scenario: QuestionScenario = "unknown_general"
+  scenario: QuestionScenario = "unknown_general",
 ): string {
   const request = extractOriginalRequest(question);
   const normalized = normalizeQuery(request);
@@ -506,17 +541,24 @@ function scenarioFallbackText(
 
       return "Hi! Ask me about TUP offices, enrollment, ID concerns, clinic or guidance help, student life, study help, or safe general questions \u{1F60A}";
     case "conversation_thanks":
-      return isTagalogLike(language) ? "Walang anuman \u{1F60A} Send ka lang ulit ng question anytime." : "You're welcome. Send another question anytime \u{1F60A}";
+      return isTagalogLike(language)
+        ? "Walang anuman \u{1F60A} Send ka lang ulit ng question anytime."
+        : "You're welcome. Send another question anytime \u{1F60A}";
     case "conversation_goodbye":
-      return isTagalogLike(language) ? "Bye. Ingat, and come back if you need campus or study help." : "Bye. Take care, and come back if you need campus or study help.";
+      return isTagalogLike(language)
+        ? "Bye. Ingat, and come back if you need campus or study help."
+        : "Bye. Take care, and come back if you need campus or study help.";
     case "capability_discovery":
-      return "I can help with campus offices, enrollment, Registrar/OSA/Clinic/Guidance questions, canteen and org info, study advice, safe general knowledge, and simple coding or explanation requests. For official TUP requirements, I use saved campus sources when available.";
+      return "I can help with campus offices, enrollment, Registrar, OSA, Clinic, Guidance, canteen and organization information, study advice, and general questions. For official TUP requirements, I check the saved campus guide when possible.";
     case "clarification":
       return isTagalogLike(language)
         ? "Sure. May 1 quick question ako: anong klaseng advice ang kailangan mo - studies, campus office transaction, student life, or personal campus situation?"
         : "Sure. I have 1 quick question: what kind of advice do you need - studies, a campus office transaction, student life, or a personal campus situation?";
     case "basic_math":
-      return answerBasicMath(request) ?? "I can help with simple arithmetic. Please send the numbers and operation, like `8 / 2` or `15 + 7`.";
+      return (
+        answerBasicMath(request) ??
+        "I can help with simple arithmetic. Please send the numbers and operation, like `8 / 2` or `15 + 7`."
+      );
     case "study_advice":
       return studyFallback(request);
     case "relationship_advice":
@@ -551,21 +593,10 @@ function scenarioFallbackText(
 }
 
 const SOURCE_MISS_INTROS = [
-  "Looks like we still don't have that information in our database. Great job finding that! Let Haki's admin know via email.",
-  "That detail is not in Haki's database yet. Nice catch! Please email Haki's admin so it can be reviewed and added.",
-  "Haki does not have that saved source right now. Good find! Send Haki's admin an email about it.",
-  "That info is still missing from the current database. Sharp catch! Let Haki's admin know through email.",
-  "I checked the saved campus data and that detail is not there yet. Great eye! Please email Haki's admin.",
-  "That one is not available in Haki's current database. Nice discovery! Pass it to Haki's admin by email.",
-  "We have not stored that campus detail yet. Good catch! Haki's admin should hear about it through email.",
-  "That answer is not in the saved database at the moment. Solid find! Please notify Haki's admin via email.",
-  "Haki's database does not include that detail yet. Good spot! Send it to Haki's admin through email.",
-  "That campus info is still waiting to be added to Haki. Great catch! Let the admin know via email.",
-  "I cannot find that detail in the current saved sources. Nice one! Please email Haki's admin about it.",
-  "That item is not covered by Haki's database yet. Great find! Flag it to Haki's admin by email.",
-  "The saved campus guide does not have that information yet. Good catch! Tell Haki's admin via email.",
-  "That detail is missing from the database for now. Nice catch! Let Haki's admin know by email.",
-  "Haki does not have a reliable saved entry for that yet. Great job spotting the gap! Please email Haki's admin."
+  "It seems I still do not have that information in the campus database. Good job finding that gap. Please email hakiadmin@gmail.com so Haki's admin can review it.",
+  "I could not find that campus information in my saved database yet. Thanks for spotting it. Please send it to hakiadmin@gmail.com for review.",
+  "That campus detail is not in my database yet. You can help improve Haki by emailing hakiadmin@gmail.com.",
+  "I checked my saved campus information but do not have that answer yet. Please let Haki's admin know at hakiadmin@gmail.com."
 ];
 
 let sourceMissVariantCursor = 0;
@@ -573,67 +604,58 @@ let sourceMissVariantCursor = 0;
 function nextSourceMissIntro(): string {
   const intro =
     SOURCE_MISS_INTROS[sourceMissVariantCursor % SOURCE_MISS_INTROS.length] ??
-    "Looks like we still don't have that information in our database. Great job finding that! Let Haki's admin know via email.";
+    "It seems I still do not have that information in the campus database. Good job finding that gap. Please email hakiadmin@gmail.com so Haki's admin can review it.";
   sourceMissVariantCursor += 1;
   return intro;
 }
 
-function sourceMissAdvice(question: string, scenario: QuestionScenario): string {
+function sourceMissAdvice(
+  question: string,
+  scenario: QuestionScenario,
+): string {
   const normalized = normalizeQuery(question);
-  const asksAboutAddingUnits =
-    /\b(add|adding|dagdag|magdagdag|kumuha|kuha)\b.*\b(units?|subjects?)\b|\badd load|load revision\b/i.test(question);
-  const asksAboutDropping =
-    /\b(dropout|drop out|mag[- ]?dropout|drop subject|dropping)\b/i.test(question);
-
-  if (asksAboutAddingUnits) {
-    return "Start with your course adviser or department. Prepare your COR, curriculum or checklist, target subject or units, and reason for adding before asking about add-load or load revision.";
-  }
-
-  if (asksAboutDropping) {
-    return "Talk to your course adviser before making it final. If the reason is personal, financial, or mental load, Guidance can help you think through options, then the Registrar can confirm any official record process.";
-  }
 
   if (scenario === "wellbeing_safety") {
-    if (/\bhurt|injured|injury|accident|sick|fainted|faint|dizzy|bleeding|chest pain|difficulty breathing\b/.test(normalized)) {
+    if (
+      /\bhurt|injured|injury|accident|sick|fainted|faint|dizzy|bleeding|chest pain|difficulty breathing\b/.test(
+        normalized,
+      )
+    ) {
       return "If you are hurt or feel sick now, ask the nearest guard, faculty member, class officer, or office staff for help and go to the Clinic if you can. For severe symptoms or danger, seek emergency help immediately.";
     }
 
     return "For safety, counseling, or urgent concerns, contact the relevant office directly, ask a trusted faculty member or guard for routing, and use emergency help if someone is in danger.";
   }
 
-  if (scenario === "student_admin" && /\bregistrar|cor|tor|transcript|records?\b/.test(normalized)) {
-    return "For Registrar-related questions, prepare your student ID or temporary proof of enrollment, student number, program/year level, and the document or concern you need, then verify the current requirements with the Registrar.";
-  }
-
-  if (scenario === "student_admin" && /\bid\b/.test(normalized)) {
-    return "For lost, damaged, or replacement ID concerns, prepare your student number, COR or registration form, proof of payment if required, and ask OSA about temporary ID or gate-pass options.";
-  }
-
-  if (scenario === "academic_support") {
-    return "If this is about grades, subjects, prerequisites, or academic standing, start with your instructor or course adviser, then verify record-related steps with the Registrar if needed.";
-  }
-
-  if (scenario === "campus_life") {
-    return "Try checking with the office, unit, or campus page that owns that place, event, service, or announcement.";
-  }
-
-  return "Try asking the relevant office, checking official announcements, or sending the exact document, deadline, place, or process name to Haki's admin for review.";
+  return "please ask the relevant office to verify current information and required steps, or send the exact document, deadline, place, or process name to Haki's admin for review.";
 }
 
-function shouldAskSourceClarification(question: string, intent: SafeQuestionIntent): boolean {
+function shouldAskSourceClarification(
+  question: string,
+  intent: SafeQuestionIntent,
+): boolean {
   if (intent.route !== "source_context" || intent.sourceScope) {
     return false;
   }
 
-  if (!["academic_support", "campus_life", "campus_office", "student_admin"].includes(intent.scenario)) {
+  if (
+    ![
+      "academic_support",
+      "campus_life",
+      "campus_office",
+      "student_admin",
+    ].includes(intent.scenario)
+  ) {
     return false;
   }
 
-  return /\b(how (do|can|should) i|process|procedure|steps?|requirements?)\b/i.test(question);
+  return /\b(how (do|can|should) i|process|procedure|steps?|requirements?)\b/i.test(
+    question,
+  );
 }
 
 function sourceClarificationText(): string {
-  return "I can check the saved TUPT sources, but I need 1 quick detail first: is this about a TUPT process, and which office or document should I look for?";
+  return "I can check the saved TUPT guide, but I need one detail first: which office or document is this about?";
 }
 
 function sourceMissText(question: string, scenario: QuestionScenario): string {
@@ -643,7 +665,7 @@ function sourceMissText(question: string, scenario: QuestionScenario): string {
 export function buildDeterministicSafeAnswerText(
   question: string,
   capability: StudentChatCapability,
-  scenario: QuestionScenario = "unknown_general"
+  scenario: QuestionScenario = "unknown_general",
 ): string {
   return scenarioFallbackText(question, capability, scenario);
 }
@@ -651,7 +673,7 @@ export function buildDeterministicSafeAnswerText(
 export function buildQuickScenarioResponse(
   question: string,
   intent: SafeQuestionIntent,
-  mode: DeviceAIMode
+  mode: DeviceAIMode,
 ): SearchResponse | null {
   const quickScenarios = new Set<QuestionScenario>([
     "adversarial",
@@ -660,25 +682,29 @@ export function buildQuickScenarioResponse(
     "clarification",
     "conversation_goodbye",
     "conversation_greeting",
-    "conversation_thanks"
+    "conversation_thanks",
   ]);
 
   if (!quickScenarios.has(intent.scenario)) return null;
 
   return responseFromText({
-    answerText: scenarioFallbackText(question, intent.capability, intent.scenario),
+    answerText: scenarioFallbackText(
+      question,
+      intent.capability,
+      intent.scenario,
+    ),
     confidence: intent.scenario === "clarification" ? "low" : "medium",
     mode,
     question,
     reliable: intent.scenario !== "clarification",
-    responseType: "general_advice"
+    responseType: "general_advice",
   });
 }
 
 export function buildSourceMissFallbackResponse(
   question: string,
   intent: SafeQuestionIntent,
-  mode: DeviceAIMode
+  mode: DeviceAIMode,
 ): SearchResponse {
   if (shouldAskSourceClarification(question, intent)) {
     return responseFromText({
@@ -688,7 +714,7 @@ export function buildSourceMissFallbackResponse(
       provenance: "No reliable saved source found",
       question,
       reliable: false,
-      responseType: "source"
+      responseType: "source",
     });
   }
 
@@ -699,6 +725,6 @@ export function buildSourceMissFallbackResponse(
     provenance: "No reliable saved source found",
     question,
     reliable: false,
-    responseType: "source"
+    responseType: "source",
   });
 }

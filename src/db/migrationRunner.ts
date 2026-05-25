@@ -193,6 +193,44 @@ async function upgradeToV3(db: SQLiteDatabase): Promise<void> {
   `);
 }
 
+async function upgradeToV4(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS chunk_embeddings_v4 (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chunk_id TEXT NOT NULL,
+      model_name TEXT NOT NULL,
+      embedding BLOB,
+      dimension INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(chunk_id, model_name),
+      FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE
+    );
+
+    INSERT OR REPLACE INTO chunk_embeddings_v4 (chunk_id, model_name, embedding, dimension, created_at)
+    SELECT chunk_id, model_name, embedding, dimension, created_at FROM chunk_embeddings;
+
+    DROP TABLE chunk_embeddings;
+    ALTER TABLE chunk_embeddings_v4 RENAME TO chunk_embeddings;
+
+    CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model_name ON chunk_embeddings(model_name);
+
+    CREATE TABLE IF NOT EXISTS chunk_embedding_status (
+      chunk_id TEXT NOT NULL,
+      model_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'not_generated',
+      last_error TEXT,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (chunk_id, model_name),
+      FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE
+    );
+
+    INSERT OR REPLACE INTO chunk_embedding_status (chunk_id, model_name, status, updated_at)
+    SELECT chunk_id, model_name, 'generated', CURRENT_TIMESTAMP FROM chunk_embeddings;
+
+    CREATE INDEX IF NOT EXISTS idx_chunk_embedding_status_model_name ON chunk_embedding_status(model_name);
+  `);
+}
+
 /**
  * List of all database migrations.
  * When adding a new migration, increment the version and add a new entry.
@@ -217,6 +255,13 @@ const migrations: Migration[] = [
     description: "Add compact conversation memory for related prior-chat context",
     up: async (db) => {
       await upgradeToV3(db);
+    }
+  },
+  {
+    version: 4,
+    description: "Version embeddings and backfill status by active embedding model",
+    up: async (db) => {
+      await upgradeToV4(db);
     }
   }
 ];

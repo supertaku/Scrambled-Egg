@@ -5,7 +5,7 @@ import {
 import { DefaultCapabilityDetector, type DeviceCapabilityReport } from "@/ai/CapabilityDetector";
 import type { LocalAIProvider } from "@/ai/LocalAIProvider";
 import { createLocalAIProviderRegistry, type LocalAIProviderRegistry } from "@/ai/providerRegistry";
-import { ensureBundledDefaultChatModel } from "@/ai/localModelManager";
+import { getActiveChatModelStatus } from "@/ai/localModelManager";
 import { getDatabase } from "@/db/database";
 import { assertFts5Available } from "@/db/ftsHealth";
 import { logger } from "@/utils/logger";
@@ -177,9 +177,9 @@ export function forceFallbackModeForResponse(mode: DeviceAIMode, reason: string)
  */
 export async function prewarmLocalAIForChat(): Promise<void> {
   try {
-    const bundleStatus = await ensureBundledDefaultChatModel();
+    const chatStatus = await getActiveChatModelStatus();
     let selected = await getSelectedAIMode();
-    if (bundleStatus.state === "available" && !selected.mode.capabilities.safeChat) {
+    if (chatStatus.state === "available" && !selected.mode.capabilities.safeChat) {
       await refreshDeviceCapabilities();
       selected = await getSelectedAIMode();
     }

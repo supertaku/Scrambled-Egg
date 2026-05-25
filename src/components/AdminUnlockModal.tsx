@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { LogOut, ShieldCheck } from "lucide-react-native";
-import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { disableAdminMode, getAdminMode, subscribeAdminMode, tryUnlockAdminMode } from "@/services/adminService";
 import { colors } from "@/theme/colors";
+import { PixelHaki } from "./mascot/PixelHaki";
 
 interface AdminUnlockModalProps {
   onClose: () => void;
@@ -73,21 +74,17 @@ export function AdminUnlockModal({ onClose, visible }: AdminUnlockModalProps) {
       <View style={styles.modalBackdrop}>
         <View style={styles.adminModal}>
           <View style={styles.interrogationFrame}>
-            <Image
-              resizeMode="contain"
-              source={require("../../assets/images/mascot/grayhawk-interrogating.png")}
-              style={styles.interrogationMascot}
-            />
+            <PixelHaki animated={false} height={100} state="detective" style={styles.interrogationMascot} width={68} />
             <View style={styles.questionBubble}>
               <Text style={styles.questionBubbleText}>?</Text>
             </View>
           </View>
 
-          <Text style={styles.adminTitle}>{adminMode ? "Admin mode is active" : "Admin sign in"}</Text>
+          <Text style={styles.adminTitle}>{adminMode ? "Administrator access is on" : "Administrator sign in"}</Text>
           <Text style={styles.adminText}>
             {adminMode
-              ? "Admin-only pages are visible. Exit admin mode when done managing documents."
-              : "Enter the admin code to unlock document management tools."}
+              ? "Administrator pages are available. Sign out when you are done managing campus files."
+              : "Enter the administrator code to manage campus files."}
           </Text>
 
           {adminMode ? (
@@ -110,13 +107,13 @@ export function AdminUnlockModal({ onClose, visible }: AdminUnlockModalProps) {
                   setAdminError(null);
                 }}
                 onSubmitEditing={handleAdminSubmit}
-                placeholder="Admin code"
+                placeholder="Administrator code"
                 placeholderTextColor={colors.muted}
                 secureTextEntry
                 style={styles.adminInput}
                 value={adminCode}
               />
-              {adminError ? <Text style={styles.adminError}>{adminError}</Text> : null}
+              {adminError ? <Text selectable style={styles.adminError}>{adminError}</Text> : null}
               <View style={styles.adminActions}>
                 <Pressable onPress={closeModal} style={[styles.adminButton, styles.adminButtonSecondary]}>
                   <Text style={styles.adminButtonSecondaryText}>Cancel</Text>
@@ -164,8 +161,7 @@ const styles = StyleSheet.create({
     width: 118
   },
   interrogationMascot: {
-    height: 98,
-    width: 98
+    marginTop: 10
   },
   questionBubble: {
     alignItems: "center",

@@ -12,13 +12,10 @@ import {
   Settings,
   ShieldCheck,
   User,
-  Utensils,
-  X
+  Utensils
 } from "lucide-react-native";
 import {
   Animated,
-  Dimensions,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -29,26 +26,34 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AdminUnlockModal } from "@/components/AdminUnlockModal";
 import { MascotHeader } from "@/components/MascotHeader";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { getAdminMode, subscribeAdminMode } from "@/services/adminService";
 import { getSeedTriviaItems } from "@/services/triviaService";
 import { colors } from "@/theme/colors";
 
-const { height: SCREEN_H } = Dimensions.get("window");
+interface HomeDialogueLine {
+  isTrivia: boolean;
+  text: string;
+}
 
-const openingGreeting = "Hi TUPian, Haki here. Kumusta ka today?";
+const openingGreeting: HomeDialogueLine = {
+  isTrivia: false,
+  text: "Hi TUPian, Haki here. How can I help today?"
+};
 
 const casualLines = [
-  "How's your day so far? Kaya pa ba?",
-  "Need help with an office concern? Message mo lang ako.",
-  "Random check: may baon ka bang ID today?",
-  "Anong campus mission natin today? Registrar? Clinic? Enrollment?",
-  "If may school process kang confusing, send mo lang sa Chat.",
-  "Hydrate ka muna. Tapos ask mo na yung concern mo."
+  "How is your day so far?",
+  "Need help with an office concern? Send me a message.",
+  "Quick check: did you bring your student ID today?",
+  "What is your campus task today: Registrar, Clinic, or enrollment?",
+  "If a school process is confusing, ask me in Chat.",
+  "Take a water break, then tell me what you need."
 ];
 
-function buildHomeDialogueLines() {
-  const triviaLines = getSeedTriviaItems().map((item) => `Did you know? ${item.title}. ${item.body}`);
-  return [...casualLines, ...triviaLines];
+function buildHomeDialogueLines(): HomeDialogueLine[] {
+  const standardLines = casualLines.map((text) => ({ isTrivia: false, text }));
+  const triviaLines = getSeedTriviaItems().map((item) => ({ isTrivia: true, text: item.body }));
+  return [...standardLines, ...triviaLines];
 }
 
 const SAMPLE_QUESTIONS = [
@@ -61,12 +66,12 @@ const SAMPLE_QUESTIONS = [
 const REMINDERS = [
   { icon: <IdCard color={colors.maroon} size={20} />, text: "Bring your student ID or student number." },
   { icon: <ListChecks color={colors.maroon} size={20} />, text: "Prepare the details of your concern before lining up." },
-  { icon: <Building2 color={colors.maroon} size={20} />, text: "If unsure, ask where your concern should be routed." }
+  { icon: <Building2 color={colors.maroon} size={20} />, text: "If unsure, ask which office can help." }
 ];
 
 const FAB_MENU = [
   {
-    label: "Food & Canteen",
+    label: "Food",
     icon: <Utensils color={colors.maroon} size={20} />,
     route: "/canteen" as const
   },
@@ -129,65 +134,60 @@ function PressableCard({
 
 // ─── FAB menu modal ─────────────────────────────────────────────────────────
 
-function FabMenu({ visible, onClose, onNavigate }: {
+function FabActionTray({ visible, onClose, onNavigate, reducedMotion }: {
   visible: boolean;
   onClose: () => void;
   onNavigate: (route: string) => void;
+  reducedMotion: boolean;
 }) {
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const sheetTranslateY = useRef(new Animated.Value(300)).current;
+  const [rendered, setRendered] = useState(visible);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
 
   useEffect(() => {
     if (visible) {
-      Animated.parallel([
-        Animated.timing(backdropOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-        Animated.spring(sheetTranslateY, { toValue: 0, friction: 9, tension: 80, useNativeDriver: true })
-      ]).start();
+      setRendered(true);
+      opacity.setValue(reducedMotion ? 1 : 0);
+      translateY.setValue(reducedMotion ? 0 : 10);
+      if (!reducedMotion) {
+        Animated.parallel([
+          Animated.timing(opacity, { toValue: 1, duration: 150, useNativeDriver: true }),
+          Animated.spring(translateY, { toValue: 0, friction: 8, tension: 115, useNativeDriver: true })
+        ]).start();
+      }
+    } else if (reducedMotion) {
+      setRendered(false);
     } else {
       Animated.parallel([
-        Animated.timing(backdropOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-        Animated.timing(sheetTranslateY, { toValue: 300, duration: 200, useNativeDriver: true })
-      ]).start();
+        Animated.timing(opacity, { toValue: 0, duration: 120, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 8, duration: 120, useNativeDriver: true })
+      ]).start(() => setRendered(false));
     }
-  }, [visible, backdropOpacity, sheetTranslateY]);
+  }, [opacity, reducedMotion, translateY, visible]);
 
-  if (!visible) return null;
+  if (!rendered) return null;
 
   return (
-    <Modal transparent animationType="none" visible={visible} onRequestClose={onClose}>
-      {/* Backdrop */}
-      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+    <>
+      <Pressable accessibilityLabel="Close quick actions" onPress={onClose} style={styles.trayDismiss} />
+      <Animated.View style={[styles.actionTray, { opacity, transform: [{ translateY }] }]}>
+        {FAB_MENU.map((item) => (
+          <TrayAction
+            key={item.route}
+            icon={item.icon}
+            label={item.label}
+            onPress={() => {
+              onClose();
+              onNavigate(item.route);
+            }}
+          />
+        ))}
       </Animated.View>
-
-      {/* Sheet */}
-      <Animated.View style={[styles.fabSheet, { transform: [{ translateY: sheetTranslateY }] }]}>
-        <View style={styles.fabSheetHandle} />
-        <View style={styles.fabSheetHeader}>
-          <Text style={styles.fabSheetTitle}>More Features</Text>
-          <Pressable onPress={onClose} style={styles.fabSheetClose}>
-            <X color={colors.muted} size={20} />
-          </Pressable>
-        </View>
-        <View style={styles.fabMenuItems}>
-          {FAB_MENU.map((item) => (
-            <FabMenuItem
-              key={item.route}
-              icon={item.icon}
-              label={item.label}
-              onPress={() => {
-                onClose();
-                setTimeout(() => onNavigate(item.route), 150);
-              }}
-            />
-          ))}
-        </View>
-      </Animated.View>
-    </Modal>
+    </>
   );
 }
 
-function FabMenuItem({ icon, label, onPress }: { icon: ReactNode; label: string; onPress: () => void }) {
+function TrayAction({ icon, label, onPress }: { icon: ReactNode; label: string; onPress: () => void }) {
   const scale = useRef(new Animated.Value(1)).current;
   const handlePressIn = () =>
     Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, friction: 6, tension: 200 }).start();
@@ -196,10 +196,9 @@ function FabMenuItem({ icon, label, onPress }: { icon: ReactNode; label: string;
 
   return (
     <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-      <Animated.View style={[styles.fabMenuItem, { transform: [{ scale }] }]}>
-        <View style={styles.fabMenuIcon}>{icon}</View>
-        <Text style={styles.fabMenuLabel}>{label}</Text>
-        <ChevronRight color={colors.muted} size={18} />
+      <Animated.View style={[styles.trayAction, { transform: [{ scale }] }]}>
+        <View style={styles.trayIcon}>{icon}</View>
+        <Text style={styles.trayLabel}>{label}</Text>
       </Animated.View>
     </Pressable>
   );
@@ -209,6 +208,7 @@ function FabMenuItem({ icon, label, onPress }: { icon: ReactNode; label: string;
 
 export default function HomeScreen() {
   const router = useRouter();
+  const reducedMotion = useReducedMotion();
   const dialogueLines = useMemo(() => buildHomeDialogueLines(), []);
   const [hakiLine, setHakiLine] = useState(openingGreeting);
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -217,7 +217,8 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      const nextLine = dialogueLines[Math.floor(Math.random() * dialogueLines.length)] ?? casualLines[0] ?? openingGreeting;
+      const nextLine = dialogueLines[Math.floor(Math.random() * dialogueLines.length)] ??
+        { isTrivia: false, text: casualLines[0] ?? openingGreeting.text };
       setHakiLine(nextLine);
     }, 15000);
     return () => clearInterval(intervalId);
@@ -297,16 +298,14 @@ export default function HomeScreen() {
         <Animated.View style={[styles.headerTopRow, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>
           <View style={styles.headerTextWrap}>
             <Text style={styles.headerTitle}>Haki Assistant</Text>
-            <Text style={styles.headerSubtitle}>Your offline campus guide</Text>
+            <Text style={styles.headerSubtitle}>Your campus guide, ready anytime</Text>
           </View>
           <View style={styles.headerActions}>
-            {adminMode ? (
-              <Pressable accessibilityLabel="Admin settings" onPress={() => router.push("/settings")} style={styles.profileButton}>
-                <View style={styles.profileIconCircle}>
-                  <Settings color={colors.white} size={18} />
-                </View>
-              </Pressable>
-            ) : null}
+            <Pressable accessibilityLabel="App settings" onPress={() => router.push("/settings")} style={styles.profileButton}>
+              <View style={styles.profileIconCircle}>
+                <Settings color={colors.white} size={18} />
+              </View>
+            </Pressable>
             <Pressable accessibilityLabel="Student profile" onPress={() => router.push("/profile")} style={styles.profileButton}>
               <View style={styles.profileIconCircle}>
                 <User color={colors.white} size={18} />
@@ -315,7 +314,8 @@ export default function HomeScreen() {
           </View>
         </Animated.View>
         <MascotHeader
-          message={hakiLine}
+          isTrivia={hakiLine.isTrivia}
+          message={hakiLine.text}
           status="teaching"
           onMascotPress={() => setShowAdminModal(true)}
         />
@@ -349,7 +349,7 @@ export default function HomeScreen() {
                   <Map color={colors.maroon} size={22} />
                 </View>
                 <Text style={styles.secondaryActionTitle}>Campus Map</Text>
-                <Text style={styles.secondaryActionText}>Peek at the map space while Haki builds navigation.</Text>
+                <Text style={styles.secondaryActionText}>Explore the campus map and find buildings.</Text>
               </PressableCard>
             </AnimatedCard>
 
@@ -400,11 +400,11 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* FAB menu bottom sheet */}
-      <FabMenu
+      <FabActionTray
         visible={showFabMenu}
         onClose={handleFabClose}
         onNavigate={(route) => router.push(route as never)}
+        reducedMotion={reducedMotion}
       />
     </SafeAreaView>
   );
@@ -572,7 +572,9 @@ const styles = StyleSheet.create({
   fabWrap: {
     position: "absolute",
     bottom: 96,
-    right: 22
+    right: 22,
+    zIndex: 52,
+    elevation: 52
   },
   fab: {
     width: 58,
@@ -588,69 +590,41 @@ const styles = StyleSheet.create({
     elevation: 10
   },
 
-  // FAB Menu sheet
-  backdrop: {
+  trayDismiss: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.45)"
+    zIndex: 30
   },
-  fabSheet: {
+  actionTray: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 164,
+    gap: 9,
+    right: 22,
+    zIndex: 44,
+    elevation: 44
+  },
+  trayAction: {
+    alignItems: "center",
     backgroundColor: colors.white,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingBottom: 48,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 20
-  },
-  fabSheetHandle: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: "center",
-    marginTop: 12,
-    marginBottom: 4
-  },
-  fabSheetHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 14
-  },
-  fabSheetTitle: { color: colors.ink, fontSize: 18, fontWeight: "900" },
-  fabSheetClose: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  fabMenuItems: { paddingHorizontal: 16, gap: 10 },
-  fabMenuItem: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: 18,
+    borderRadius: 24,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 14,
-    padding: 16
+    gap: 9,
+    minHeight: 48,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8
   },
-  fabMenuIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
+  trayIcon: {
+    width: 35,
+    height: 35,
+    borderRadius: 18,
     backgroundColor: colors.maroonSoft,
     alignItems: "center",
     justifyContent: "center"
   },
-  fabMenuLabel: { color: colors.ink, flex: 1, fontSize: 16, fontWeight: "800" }
+  trayLabel: { color: colors.ink, fontSize: 14, fontWeight: "800", minWidth: 68 }
 });

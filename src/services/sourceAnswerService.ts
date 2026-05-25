@@ -330,6 +330,8 @@ function responseForNoReliableAnswer(
 ): SearchResponse {
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "campus_sources_unavailable",
     normalizedQuestion,
     responseType: "source",
     results: [],
@@ -526,6 +528,8 @@ export function buildDeterministicSourceResponseFromDraft(
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "campus_sources",
     normalizedQuestion: draft.normalizedQuestion,
     responseType: "source",
     results: draft.results,
@@ -564,6 +568,8 @@ export async function buildSourceResponseFromDraft(
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "campus_sources",
     normalizedQuestion: draft.normalizedQuestion,
     responseType: "source",
     results: draft.results,

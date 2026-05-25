@@ -14,8 +14,6 @@
     "test:edge-cases": "tsx scripts/test-edge-cases.ts",
     "test:chat-scenarios": "tsx scripts/chat-scenario-eval.ts",
     "test:all": "npm run typecheck && npm run test:unit && npm run test:local-models && npm run test:golden && npm run test:edge-cases && npm run test:chat-scenarios",
-    "model:download:default-gguf": "powershell -ExecutionPolicy Bypass -File scripts/download-default-gguf-model.ps1",
-    "model:download:tiny-gguf": "powershell -ExecutionPolicy Bypass -File scripts/download-tiny-gguf-model.ps1",
     "apk:inspect": "powershell -ExecutionPolicy Bypass -File scripts/inspect-apk-assets.ps1",
     "eas-build-pre-install": "bash scripts/eas-build-pre-install.sh",
     "eas-build-post-install": "bash scripts/eas-build-pre-install.sh",
@@ -45,9 +43,13 @@
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.6",
+    "react-native-gesture-handler": "~2.30.0",
+    "react-native-keyboard-controller": "^1.21.8",
+    "react-native-reanimated": "4.2.1",
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
     "react-native-svg": "15.15.3",
+    "react-native-worklets": "0.7.4",
     "zod": "^4.4.1"
   },
   "devDependencies": {

@@ -1,75 +1,123 @@
-import { useEffect, useRef } from "react";
-import { Animated, Image, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "expo-router";
+import { ChevronRight } from "lucide-react-native";
+import { Animated, Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { CAMPUS_MAP_CANVAS } from "@/data/campusMapDestinations";
 import { colors } from "@/theme/colors";
 
+interface PreviewImageFrame {
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+}
+
+const COURT_FOCUS = { x: 0.515, y: 0.69 };
+
+function focusedPreviewFrame(viewportWidth: number, viewportHeight: number): PreviewImageFrame {
+  if (viewportWidth <= 0 || viewportHeight <= 0) {
+    return { height: 0, left: 0, top: 0, width: 0 };
+  }
+
+  const scale = Math.max(viewportWidth / CAMPUS_MAP_CANVAS.width, viewportHeight / CAMPUS_MAP_CANVAS.height);
+  const width = CAMPUS_MAP_CANVAS.width * scale;
+  const height = CAMPUS_MAP_CANVAS.height * scale;
+  return {
+    height,
+    left: Math.min(0, Math.max(viewportWidth - width, viewportWidth / 2 - width * COURT_FOCUS.x)),
+    top: Math.min(0, Math.max(viewportHeight - height, viewportHeight / 2 - height * COURT_FOCUS.y)),
+    width
+  };
+}
+
 export default function MapScreen() {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(24)).current;
-
-  // Floating bob animation for the mascot
-  const bobAnim = useRef(new Animated.Value(0)).current;
+  const router = useRouter();
+  const reducedMotion = useReducedMotion();
+  const entrance = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
+  const translate = useRef(new Animated.Value(reducedMotion ? 0 : 14)).current;
+  const buttonScale = useRef(new Animated.Value(1)).current;
+  const [previewFrame, setPreviewFrame] = useState<PreviewImageFrame>({
+    height: 0,
+    left: 0,
+    top: 0,
+    width: 0
+  });
 
   useEffect(() => {
+    if (reducedMotion) {
+      entrance.setValue(1);
+      translate.setValue(0);
+      return;
+    }
+
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 340,
-        useNativeDriver: true
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        friction: 9,
-        tension: 50,
-        useNativeDriver: true
-      })
+      Animated.timing(entrance, { duration: 260, toValue: 1, useNativeDriver: true }),
+      Animated.spring(translate, { friction: 9, tension: 64, toValue: 0, useNativeDriver: true })
     ]).start();
-  }, [fadeAnim, slideAnim]);
+  }, [entrance, reducedMotion, translate]);
 
-  useEffect(() => {
-    const bob = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bobAnim, {
-          toValue: -10,
-          duration: 1800,
-          useNativeDriver: true
-        }),
-        Animated.timing(bobAnim, {
-          toValue: 0,
-          duration: 1800,
-          useNativeDriver: true
-        })
-      ])
-    );
-    bob.start();
-    return () => bob.stop();
-  }, [bobAnim]);
+  const handlePressIn = () => {
+    if (!reducedMotion) {
+      Animated.spring(buttonScale, { friction: 8, tension: 210, toValue: 0.96, useNativeDriver: true }).start();
+    }
+  };
+
+  const handlePressOut = () => {
+    if (!reducedMotion) {
+      Animated.spring(buttonScale, { friction: 7, tension: 190, toValue: 1, useNativeDriver: true }).start();
+    }
+  };
+
+  const handlePreviewLayout = useCallback((event: LayoutChangeEvent) => {
+    const { height, width } = event.nativeEvent.layout;
+    setPreviewFrame(focusedPreviewFrame(width, height));
+  }, []);
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      <View style={styles.headerArea}>
-        <Text style={styles.headerTitle}>Map</Text>
-      </View>
-      <View style={styles.sheetContainer}>
-        <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <Animated.Image
-            accessibilityIgnoresInvertColors
-            resizeMode="contain"
-            source={require("../assets/images/mascot/haki-map-construction.png")}
-            style={[styles.image, { transform: [{ translateY: bobAnim }] }]}
-          />
-          <View style={styles.dialogueBubble}>
-            <View style={styles.comingSoonPill}>
-              <Text style={styles.comingSoonText}>Coming Soon</Text>
-            </View>
-            <Text style={styles.dialogueTitle}>Map is cooking</Text>
-            <Text style={styles.dialogueText}>
-              Haki is still building this map feature. No cap, campus navigation is under construction.
-            </Text>
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
+      <Animated.View style={[styles.page, { opacity: entrance, transform: [{ translateY: translate }] }]}>
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>Explore the campus</Text>
+          <Text style={styles.title}>TUPT Campus Map</Text>
+        </View>
+
+        <View style={styles.pixelFrame}>
+          <View onLayout={handlePreviewLayout} style={styles.pixelFrameInner}>
+            {previewFrame.width > 0 ? (
+              <Image
+                accessibilityIgnoresInvertColors
+                resizeMode="stretch"
+                source={require("../assets/images/map/tupt-campus-overview-pixel.png")}
+                style={[styles.previewImage, previewFrame]}
+              />
+            ) : null}
+            <View style={styles.tint} />
+            <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+              <Pressable
+                accessibilityHint="Opens the full-screen playable campus map."
+                accessibilityLabel="View Campus Map"
+                accessibilityRole="button"
+                onPress={() => router.push("/campus-map" as never)}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                style={styles.launchButton}
+              >
+                <View style={styles.launchInset}>
+                  <Text style={styles.launchText}>View Campus Map</Text>
+                  <ChevronRight color={colors.maroonDark} size={19} strokeWidth={3} />
+                </View>
+              </Pressable>
+            </Animated.View>
           </View>
-        </Animated.View>
-      </View>
+        </View>
+
+        <Text selectable style={styles.note}>
+          Walk around campus and tap buildings for details. Works even without internet.
+        </Text>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -79,83 +127,86 @@ const styles = StyleSheet.create({
     backgroundColor: colors.maroon,
     flex: 1
   },
-  headerArea: {
-    alignItems: "center",
-    backgroundColor: colors.maroon,
-    justifyContent: "center",
-    minHeight: 54,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    paddingTop: 8
-  },
-  headerTitle: {
-    color: colors.white,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: -0.3
-  },
-  sheetContainer: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
+  page: {
     flex: 1,
-    overflow: "hidden"
+    gap: 16,
+    paddingBottom: 104,
+    paddingHorizontal: 18,
+    paddingTop: 14
   },
-  content: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    paddingBottom: 110,
-    paddingHorizontal: 28
+  header: {
+    gap: 3
   },
-  image: {
-    aspectRatio: 1,
-    maxHeight: 360,
-    width: "100%"
-  },
-  dialogueBubble: {
-    backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderRadius: 22,
-    borderWidth: 1,
-    gap: 8,
-    marginTop: 14,
-    padding: 20,
-    width: "100%",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3
-  },
-  comingSoonPill: {
-    backgroundColor: colors.maroonSoft,
-    borderColor: "#E8C7D0",
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 5
-  },
-  comingSoonText: {
-    color: colors.maroon,
+  eyebrow: {
+    color: colors.goldLight,
     fontSize: 11,
     fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 1
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
   },
-  dialogueTitle: {
-    color: colors.maroon,
-    fontSize: 22,
+  title: {
+    color: colors.white,
+    fontSize: 26,
     fontWeight: "900",
-    textAlign: "center",
     letterSpacing: -0.4
   },
-  dialogueText: {
-    color: colors.muted,
-    fontSize: 14,
-    fontWeight: "500",
-    lineHeight: 20,
+  pixelFrame: {
+    backgroundColor: "#281B23",
+    borderColor: colors.gold,
+    borderWidth: 4,
+    flex: 1,
+    padding: 5,
+    shadowColor: "#000000",
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 0
+  },
+  pixelFrameInner: {
+    alignItems: "center",
+    borderColor: "#F0D786",
+    borderWidth: 2,
+    flex: 1,
+    justifyContent: "center",
+    overflow: "hidden"
+  },
+  previewImage: {
+    position: "absolute"
+  },
+  tint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(25, 12, 18, 0.36)"
+  },
+  launchButton: {
+    backgroundColor: colors.maroon,
+    borderBottomColor: colors.maroonDark,
+    borderBottomWidth: 5,
+    borderColor: "#F6D777",
+    borderLeftWidth: 4,
+    borderRightWidth: 4,
+    borderTopWidth: 4,
+    padding: 4
+  },
+  launchInset: {
+    alignItems: "center",
+    backgroundColor: "#FFDE82",
+    borderColor: "#3B2022",
+    borderWidth: 2,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 13
+  },
+  launchText: {
+    color: colors.maroonDark,
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 0.4
+  },
+  note: {
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
     textAlign: "center"
   }
 });

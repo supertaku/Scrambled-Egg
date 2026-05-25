@@ -561,5 +561,47 @@
         ]
       }
     ]
+  },
+  {
+    "document_id": "tup_taguig_it_building_rooms",
+    "document_title": "I.T. Building Rooms",
+    "document_type": "campus_location",
+    "category": "Campus Locations",
+    "office": "I.T. Building",
+    "version": "2026-v1",
+    "last_updated": "2026-05-24",
+    "authored_by": "Technological University of the Philippines - Taguig",
+    "source_url": "Campus room listing",
+    "chunks": [
+      {
+        "chunk_id": "tup_taguig_it_building_rooms_floor_directory",
+        "section_title": "I.T. Building Floor Directory",
+        "process_name": "I.T. Building Floor Directory",
+        "content": "The I.T. Building is the building for BSIT students. First floor: Room 101, Room 102, Room 103, Audit Office, and comfort room. Second floor: Room 201, Room 202, Room 203, IT Faculty, Conference Room, MTICS Office, and comfort room. Third floor: Room 301 (Computer Lab), Room 302 (Computer Lab), and IT Library. Fourth floor: IT Hall.",
+        "answer": "The I.T. Building is for BSIT students. First floor: Room 101, Room 102, Room 103, Audit Office, and comfort room. Second floor: Room 201, Room 202, Room 203, IT Faculty, Conference Room, MTICS Office, and comfort room. Third floor: Room 301 (Computer Lab), Room 302 (Computer Lab), and IT Library. Fourth floor: IT Hall.",
+        "citation": "I.T. Building Rooms, Floor Directory",
+        "steps": [
+          "First floor: Room 101, Room 102, Room 103, Audit Office, and comfort room.",
+          "Second floor: Room 201, Room 202, Room 203, IT Faculty, Conference Room, MTICS Office, and comfort room.",
+          "Third floor: Room 301 (Computer Lab), Room 302 (Computer Lab), and IT Library.",
+          "Fourth floor: IT Hall."
+        ],
+        "office_location": "I.T. Building",
+        "contact_info": "",
+        "tags": [
+          "i.t. building",
+          "it building",
+          "bsit",
+          "rooms",
+          "room directory",
+          "computer lab",
+          "it faculty",
+          "mtics office",
+          "it library",
+          "it hall",
+          "comfort room"
+        ]
+      }
+    ]
   }
 ]

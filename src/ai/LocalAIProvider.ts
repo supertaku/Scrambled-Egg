@@ -1,8 +1,29 @@
-import type { ChatContextTurn, ConfidenceLevel } from "@/types/search";
+import type { ChatContextTurn, ChatRole, ConfidenceLevel } from "@/types/search";
 
 export type LocalAIProviderId = "fallback" | "llama-rn" | "apple-foundation-models";
 
 export type DeviceCapabilityClass = "unknown" | "low" | "standard" | "high";
+
+export type LocalExecutionBackend = "cpu" | "metal" | "opencl" | "htp" | "apple-foundation-models" | "unknown";
+
+export type AccelerationStatus = "not_checked" | "benchmarking" | "selected" | "fallback" | "unavailable";
+
+export type DeviceThermalState = "nominal" | "fair" | "serious" | "critical" | "unknown";
+
+export interface LocalModelPerformanceProfile {
+  version: 1;
+  modelKey: string;
+  executionBackend: LocalExecutionBackend;
+  accelerationStatus: AccelerationStatus;
+  availableBackends: string[];
+  loadTimeMs: number | null;
+  firstTokenTimeMs: number | null;
+  decodeTokensPerSecond: number | null;
+  thermalStateBefore: DeviceThermalState;
+  thermalStateAfter: DeviceThermalState;
+  benchmarkedAt: string;
+  failureReason: string | null;
+}
 
 export type LocalModelTier =
   | "unknown"
@@ -39,6 +60,11 @@ export interface LocalAICapabilities {
   safeInputBudgetTokens?: number | null;
   maxOutputTokens?: number | null;
   streamingSupported?: boolean;
+  executionBackend?: LocalExecutionBackend;
+  availableBackends?: string[];
+  accelerationStatus?: AccelerationStatus;
+  performanceProfile?: LocalModelPerformanceProfile | null;
+  thermalState?: DeviceThermalState;
   approximateDeviceCapability: DeviceCapabilityClass;
   architecture?: string | null;
   freeStorageGB?: number | null;
@@ -82,6 +108,7 @@ export interface LocalSummaryResult {
 
 export interface SafeChatInput {
   question: string;
+  chatRole?: ChatRole;
   instruction: string;
   preferredModelTier?: LocalModelTier;
   appContext: string;
@@ -149,6 +176,11 @@ export function unavailableCapabilities(notes: string[], minimumOS: string | nul
     safeInputBudgetTokens: null,
     maxOutputTokens: null,
     streamingSupported: false,
+    executionBackend: "unknown",
+    availableBackends: [],
+    accelerationStatus: "unavailable",
+    performanceProfile: null,
+    thermalState: "unknown",
     approximateDeviceCapability: "unknown",
     memoryClass: null,
     unavailableReasons: notes,

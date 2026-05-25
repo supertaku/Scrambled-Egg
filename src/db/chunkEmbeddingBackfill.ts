@@ -59,10 +59,12 @@ export async function backfillChunkEmbeddingsIfNeeded(db: SQLiteDatabase): Promi
          FROM chunks c
          LEFT JOIN chunk_embeddings ce
            ON ce.chunk_id = c.chunk_id AND ce.model_name = ?
+         LEFT JOIN chunk_embedding_status ces
+           ON ces.chunk_id = c.chunk_id AND ces.model_name = ?
          WHERE ce.chunk_id IS NULL
-           AND IFNULL(c.embedding_status, 'not_generated') NOT IN ('skipped', 'failed')
+           AND IFNULL(ces.status, 'not_generated') NOT IN ('skipped', 'failed')
          LIMIT ?`,
-        [modelKey, BATCH_SIZE]
+        [modelKey, modelKey, BATCH_SIZE]
       );
 
       if (!pending.length) {
@@ -72,7 +74,12 @@ export async function backfillChunkEmbeddingsIfNeeded(db: SQLiteDatabase): Promi
       for (const row of pending) {
         const text = buildEmbedText(row);
         if (!text.trim()) {
-          await db.runAsync(`UPDATE chunks SET embedding_status = ? WHERE chunk_id = ?`, ["skipped", row.chunk_id]);
+          await db.runAsync(
+            `INSERT INTO chunk_embedding_status (chunk_id, model_name, status, updated_at)
+             VALUES (?, ?, 'skipped', CURRENT_TIMESTAMP)
+             ON CONFLICT(chunk_id, model_name) DO UPDATE SET status = 'skipped', last_error = NULL, updated_at = CURRENT_TIMESTAMP`,
+            [row.chunk_id, modelKey]
+          );
           continue;
         }
 
@@ -83,16 +90,28 @@ export async function backfillChunkEmbeddingsIfNeeded(db: SQLiteDatabase): Promi
           }
           const blob = floatsToBlob(vec);
           await db.runAsync(
-            `INSERT OR REPLACE INTO chunk_embeddings (chunk_id, model_name, embedding, dimension)
-             VALUES (?, ?, ?, ?)`,
+            `INSERT INTO chunk_embeddings (chunk_id, model_name, embedding, dimension)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(chunk_id, model_name) DO UPDATE SET embedding = excluded.embedding, dimension = excluded.dimension`,
             [row.chunk_id, modelKey, blob, vec.length]
           );
-          await db.runAsync(`UPDATE chunks SET embedding_status = ? WHERE chunk_id = ?`, ["generated", row.chunk_id]);
+          await db.runAsync(
+            `INSERT INTO chunk_embedding_status (chunk_id, model_name, status, updated_at)
+             VALUES (?, ?, 'generated', CURRENT_TIMESTAMP)
+             ON CONFLICT(chunk_id, model_name) DO UPDATE SET status = 'generated', last_error = NULL, updated_at = CURRENT_TIMESTAMP`,
+            [row.chunk_id, modelKey]
+          );
         } catch (error) {
-          await db.runAsync(`UPDATE chunks SET embedding_status = ? WHERE chunk_id = ?`, ["failed", row.chunk_id]);
+          const message = error instanceof Error ? error.message : String(error);
+          await db.runAsync(
+            `INSERT INTO chunk_embedding_status (chunk_id, model_name, status, last_error, updated_at)
+             VALUES (?, ?, 'failed', ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(chunk_id, model_name) DO UPDATE SET status = 'failed', last_error = excluded.last_error, updated_at = CURRENT_TIMESTAMP`,
+            [row.chunk_id, modelKey, message]
+          );
           logger.db.warn("Chunk embedding failed; skipping chunk and continuing backfill.", {
             chunkId: row.chunk_id,
-            error: error instanceof Error ? error.message : String(error)
+            error: message
           });
         }
       }

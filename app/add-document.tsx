@@ -68,7 +68,7 @@ export default function AddDocumentScreen() {
         setValidation(validateImportText(content));
       }
     } catch (err) {
-      setError("Failed to read the selected file.");
+      setError("Could not read the selected file.");
     }
   };
 
@@ -81,8 +81,8 @@ export default function AddDocumentScreen() {
       const result = await importDocumentsFromJson(jsonText);
       setImportResult(result);
       setValidation(validateImportText(jsonText));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Import failed.");
+    } catch {
+      setError("Could not add the file. Please check it and try again.");
     } finally {
       setLoading(false);
     }
@@ -92,27 +92,27 @@ export default function AddDocumentScreen() {
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <MascotHeader
-          message="Paste or pick a JSON file. Haki will validate it before adding it to the local guide."
-          subtitle="Import campus documents"
+          message="Choose a campus file or paste its contents below. Haki will check it before adding it."
+          subtitle="Add campus information"
         />
 
-        <AdminGate label="Document import is available in admin mode only.">
+        <AdminGate label="Adding campus files is available to administrators only.">
           <View style={styles.introCard}>
             <FileJson color={colors.maroon} size={22} />
             <View style={styles.introCopy}>
-              <Text style={styles.introTitle}>Import source documents</Text>
-              <Text style={styles.introText}>
-                Paste JSON or select a file to add it to this device.
+              <Text style={styles.introTitle}>Add campus information</Text>
+              <Text selectable style={styles.introText}>
+                Choose a JSON file or paste its contents to add it to this phone.
               </Text>
               <Pressable onPress={handleFilePicker} style={styles.pickerButton}>
                 <FilePlus color={colors.maroon} size={16} />
-                <Text style={styles.pickerButtonText}>Pick JSON file</Text>
+                <Text style={styles.pickerButtonText}>Choose file</Text>
               </Pressable>
             </View>
           </View>
 
           <View style={styles.editorBlock}>
-            <Text style={styles.label}>Document JSON</Text>
+            <Text style={styles.label}>File contents</Text>
             <TextInput
               autoCapitalize="none"
               autoCorrect={false}
@@ -134,22 +134,22 @@ export default function AddDocumentScreen() {
           <View style={styles.actions}>
             <Pressable onPress={handleValidate} style={[styles.actionButton, styles.secondaryButton]}>
               <CheckCircle2 color={colors.maroon} size={18} />
-              <Text style={styles.secondaryButtonText}>Validate</Text>
+              <Text style={styles.secondaryButtonText}>Check file</Text>
             </Pressable>
             <Pressable disabled={!canImport} onPress={handleImport} style={[styles.actionButton, !canImport ? styles.disabledButton : undefined]}>
               {loading ? <ActivityIndicator color={colors.white} /> : <Upload color={colors.white} size={18} />}
-              <Text style={styles.primaryButtonText}>Import JSON</Text>
+              <Text style={styles.primaryButtonText}>Add to guide</Text>
             </Pressable>
           </View>
 
           {validation?.ok ? (
             <View style={styles.successCard}>
-              <Text style={styles.cardTitle}>Valid JSON</Text>
-              <Text style={styles.cardText}>
-                {validation.preview.documentCount} document(s), {validation.preview.chunkCount} chunk(s) ready to import.
+              <Text style={styles.cardTitle}>Ready to add</Text>
+              <Text selectable style={styles.cardText}>
+                {validation.preview.documentCount} file(s) and {validation.preview.chunkCount} topic(s) are ready.
               </Text>
               {validation.preview.documents.map((document) => (
-                <Text key={document.documentId} style={styles.previewItem}>
+                <Text selectable key={document.documentId} style={styles.previewItem}>
                   {document.documentTitle} ({document.chunkCount} topics)
                 </Text>
               ))}
@@ -158,9 +158,9 @@ export default function AddDocumentScreen() {
 
           {validation && !validation.ok ? (
             <View style={styles.errorCard}>
-              <Text style={styles.cardTitle}>Validation errors</Text>
+              <Text style={styles.cardTitle}>This file needs attention</Text>
               {validation.issues.slice(0, 8).map((issue) => (
-                <Text key={`${issue.path}-${issue.message}`} style={styles.errorText}>
+                <Text selectable key={`${issue.path}-${issue.message}`} style={styles.errorText}>
                   {issue.path}: {issue.message}
                 </Text>
               ))}
@@ -169,19 +169,19 @@ export default function AddDocumentScreen() {
 
           {error ? (
             <View style={styles.errorCard}>
-              <Text style={styles.cardTitle}>Import failed</Text>
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.cardTitle}>Could not add file</Text>
+              <Text selectable style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
 
           {importResult ? (
             <View style={styles.successCard}>
-              <Text style={styles.cardTitle}>Import complete</Text>
-              <Text style={styles.cardText}>
-                Inserted {importResult.insertedDocuments} document(s) and {importResult.insertedChunks} chunk(s). Skipped{" "}
-                {importResult.skippedDocuments} duplicate document(s) and {importResult.skippedChunks} duplicate chunk(s).
+              <Text style={styles.cardTitle}>Added to guide</Text>
+              <Text selectable style={styles.cardText}>
+                Added {importResult.insertedDocuments} file(s) and {importResult.insertedChunks} topic(s). Skipped{" "}
+                {importResult.skippedDocuments} repeated file(s) and {importResult.skippedChunks} repeated topic(s).
               </Text>
-              <Text style={styles.cardText}>The campus guide has been updated.</Text>
+              <Text selectable style={styles.cardText}>The campus guide has been updated.</Text>
             </View>
           ) : null}
         </AdminGate>

@@ -1,4 +1,4 @@
-import { Dimensions, Platform } from "react-native";
+import { Dimensions } from "react-native";
 
 const { width, height } = Dimensions.get("window");
 
@@ -6,8 +6,10 @@ export const metrics = {
   screenWidth: width,
   screenHeight: height,
 
-  keyboard: {
-    chatVerticalOffset: Platform.OS === "ios" ? 78 : 90,
+  navigation: {
+    floatingTabBarBottom: 28,
+    floatingTabBarHeight: 62,
+    composerGap: 8,
   },
 
   animation: {

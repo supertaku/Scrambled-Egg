@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Lightbulb, Mail, Search, X } from "lucide-react-native";
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useDebouncedQuery } from "@/hooks/useDebouncedQuery";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { studentTips, type StudentTip } from "@/data/studentTips";
 import { colors } from "@/theme/colors";
-import { useDebouncedQuery } from "@/hooks/useDebouncedQuery";
 import { logger } from "@/utils/logger";
 
-// Category accent colors
+const REVIEW_EMAIL = "hakiadmin@gmail.com";
+
 const CATEGORY_COLORS: Record<string, string> = {
   Printing: "#2E7DB2",
   Documents: "#D4860A",
@@ -24,27 +26,42 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Campus Life": colors.maroon
 };
 
-export default function TipsScreen() {
-  const { clearQuery, debouncedQuery, query, setQuery } = useDebouncedQuery();
-  const filteredTips = useMemo(() => {
-    const normalized = debouncedQuery.trim().toLowerCase();
-    if (!normalized) return studentTips;
+function accentFor(category: string): string {
+  return CATEGORY_COLORS[category] ?? colors.maroon;
+}
 
-    return (studentTips as StudentTip[]).filter((tip) =>
-      [tip.author, tip.category, tip.content].some((value) => value.toLowerCase().includes(normalized))
-    );
-  }, [debouncedQuery]);
+export default function TipsScreen() {
+  const reducedMotion = useReducedMotion();
+  const { clearQuery, debouncedQuery, query, setQuery } = useDebouncedQuery();
+  const [category, setCategory] = useState<string | null>(null);
+  const categories = useMemo(() => [...new Set(studentTips.map((tip) => tip.category))], []);
+
+  const matchingTips = useMemo(() => {
+    const normalized = debouncedQuery.trim().toLowerCase();
+    return studentTips.filter((tip) => {
+      const categoryMatches = !category || tip.category === category;
+      const searchMatches = !normalized ||
+        [tip.author, tip.category, tip.content].some((value) => value.toLowerCase().includes(normalized));
+      return categoryMatches && searchMatches;
+    });
+  }, [category, debouncedQuery]);
+
+  const featuredTip = useMemo(() => {
+    if (matchingTips.length === 0) {
+      return null;
+    }
+    const day = Math.floor(Date.now() / 86_400_000);
+    return matchingTips[day % matchingTips.length] ?? null;
+  }, [matchingTips]);
+  const remainingTips = matchingTips.filter((tip) => tip.id !== featuredTip?.id);
 
   const handleEmailAdmin = async () => {
-    const email = "admin@tup.edu.ph";
-    const subject = "TUP Wiki: New Tip/Trick Submission";
-    const body = "Hi Admin,\n\nI would like to share a tip for the TUP Wiki app:\n\n[Write your tip here]\n\nRegards,\n[Your Name/Course]";
-
-    const url = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const subject = "Haki: Tips and Tricks Review Submission";
+    const body = "Hi Haki Admin,\n\nI would like to send this tip or correction for review:\n\n[Write your review here]\n\nRegards,\n[Your Name/Course]";
+    const url = `mailto:${REVIEW_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
+      if (await Linking.canOpenURL(url)) {
         await Linking.openURL(url);
       }
     } catch (error) {
@@ -52,369 +69,188 @@ export default function TipsScreen() {
     }
   };
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(24)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 340,
-        useNativeDriver: true
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        friction: 9,
-        tension: 50,
-        useNativeDriver: true
-      })
-    ]).start();
-  }, []);
-
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      <View style={styles.headerArea}>
-        <Text style={styles.headerTitle}>Tips</Text>
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
+      <View style={styles.header}>
+        <Text style={styles.headerLabel}>Student community</Text>
+        <Text style={styles.headerTitle}>Bulletin Board</Text>
       </View>
-      <View style={styles.sheetContainer}>
-        <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
-            <View style={styles.section}>
-              <View style={styles.headerTitleRow}>
-                <View style={styles.sectionIconBg}>
-                  <Lightbulb color={colors.maroon} size={20} />
-                </View>
-                <View>
-                  <Text style={styles.sectionLabel}>From students</Text>
-                  <Text style={styles.sectionTitle}>Tips & Tricks</Text>
-                </View>
+      <View style={styles.sheet}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.boardIntro}>
+            <View style={styles.introTitleRow}>
+              <View style={styles.ideaCircle}>
+                <Lightbulb color={colors.maroon} size={20} />
               </View>
-              <Text style={styles.sectionDesc}>Peer-style tips from student experience. Details can change, so verify before relying on a tip.</Text>
-
-              <View style={styles.searchBox}>
-                <Search color={colors.mutedLight} size={17} />
-                <TextInput
-                  value={query}
-                  onChangeText={setQuery}
-                  placeholder="Search tips, categories, or authors"
-                  placeholderTextColor={colors.mutedLight}
-                  style={styles.searchInput}
+              <View style={styles.introCopy}>
+                <Text style={styles.introTitle}>Tips & Tricks</Text>
+                <Text style={styles.introText}>Peer advice pinned by students. Verify changing details before relying on them.</Text>
+              </View>
+            </View>
+            <View style={styles.search}>
+              <Search color={colors.mutedLight} size={17} />
+              <TextInput
+                accessibilityLabel="Search student tips"
+                onChangeText={setQuery}
+                placeholder="Search the board"
+                placeholderTextColor={colors.mutedLight}
+                style={styles.searchInput}
+                value={query}
+              />
+              {query || category ? (
+                <Pressable
+                  accessibilityLabel="Clear tip filters"
+                  onPress={() => { clearQuery(); setCategory(null); }}
+                  style={styles.clear}
+                >
+                  <X color={colors.muted} size={16} />
+                </Pressable>
+              ) : null}
+            </View>
+            <ScrollView contentContainerStyle={styles.tapeRow} horizontal showsHorizontalScrollIndicator={false}>
+              {categories.map((item) => (
+                <TapeFilter
+                  active={category === item}
+                  category={item}
+                  key={item}
+                  onPress={() => setCategory(category === item ? null : item)}
                 />
-                {query ? (
-                  <Pressable accessibilityLabel="Clear search" onPress={clearQuery} style={styles.clearButton}>
-                    <X color={colors.muted} size={16} />
-                  </Pressable>
-                ) : null}
-              </View>
+              ))}
+            </ScrollView>
+          </View>
 
-              <View style={styles.tipsList}>
-                {filteredTips.map((tip, index) => (
-                  <TipCard key={tip.id} tip={tip} index={index} />
-                ))}
-                {filteredTips.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <Text style={styles.emptyTitle}>No tips found</Text>
-                    <Text style={styles.emptyText}>Try searching for documents, enrollment, study, files, or time.</Text>
-                  </View>
-                ) : null}
-              </View>
+          {featuredTip ? (
+            <View style={styles.featuredSection}>
+              <Text style={styles.boardLabel}>Pinned today</Text>
+              <FeaturedNote tip={featuredTip} />
             </View>
+          ) : null}
 
-            <View style={styles.actionSection}>
-              <View style={styles.actionCard}>
-                <View style={styles.actionIconRow}>
-                  <Mail color={colors.maroon} size={20} />
-                  <Text style={styles.actionTitle}>Got a student tip?</Text>
-                </View>
-                <Text style={styles.actionDesc}>Send a short peer tip for review before it becomes part of this screen.</Text>
+          <View style={styles.noteSection}>
+            {remainingTips.length > 0 ? <Text style={styles.boardLabel}>More from students</Text> : null}
+            {remainingTips.map((tip, index) => (
+              <BoardNote index={index} key={tip.id} reducedMotion={reducedMotion} tip={tip} />
+            ))}
+          </View>
 
-                <SubmitButton onPress={handleEmailAdmin} />
-              </View>
+          {matchingTips.length === 0 ? (
+            <View style={styles.emptyNote}>
+              <Text style={styles.emptyTitle}>Nothing pinned for that search</Text>
+              <Text style={styles.emptyText}>Try another category or clear your search.</Text>
             </View>
+          ) : null}
 
-          </ScrollView>
-        </Animated.View>
+          <Pressable accessibilityRole="button" onPress={handleEmailAdmin} style={styles.submitNote}>
+            <View style={styles.noteTapeGold} />
+            <Mail color={colors.maroon} size={20} />
+            <View style={styles.submitCopy}>
+              <Text style={styles.submitTitle}>Send a review</Text>
+              <Text style={styles.submitText}>Send tips or corrections to {REVIEW_EMAIL} before they are pinned.</Text>
+            </View>
+          </Pressable>
+        </ScrollView>
       </View>
     </SafeAreaView>
   );
 }
 
-function TipCard({ tip, index }: { tip: StudentTip; index: number }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(16)).current;
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
-        Animated.spring(slideAnim, { toValue: 0, friction: 9, tension: 70, useNativeDriver: true })
-      ]).start();
-    }, index * 50);
-    return () => clearTimeout(timer);
-  }, [index, fadeAnim, slideAnim]);
-
-  const accentColor = CATEGORY_COLORS[tip.category] ?? colors.maroon;
-
+function TapeFilter({ active, category, onPress }: { active: boolean; category: string; onPress: () => void }) {
+  const accent = accentFor(category);
   return (
-    <Animated.View
-      style={[
-        styles.tipCard,
-        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
-      ]}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={[styles.tapeFilter, { borderColor: `${accent}40` }, active ? { backgroundColor: accent } : undefined]}
     >
-      <View style={[styles.tipAccentBar, { backgroundColor: accentColor }]} />
-      <View style={styles.tipBody}>
-        <View style={styles.tipHeader}>
-          <View style={[styles.categoryBadge, { backgroundColor: `${accentColor}18`, borderColor: `${accentColor}30` }]}>
-            <Text style={[styles.categoryText, { color: accentColor }]}>{tip.category}</Text>
-          </View>
-          <Text style={styles.authorText}>{tip.author}</Text>
-        </View>
-        <Text style={styles.tipContent}>{tip.content}</Text>
-      </View>
-    </Animated.View>
-  );
-}
-
-function SubmitButton({ onPress }: { onPress: () => void }) {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = () =>
-    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, friction: 6, tension: 200 }).start();
-  const handlePressOut = () =>
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 5, tension: 160 }).start();
-
-  return (
-    <Pressable style={styles.emailButton} onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-      <Animated.View style={[styles.emailButtonInner, { transform: [{ scale }] }]}>
-        <Mail color={colors.white} size={17} />
-        <Text style={styles.emailButtonText}>Send your own advice</Text>
-      </Animated.View>
+      <Text style={[styles.tapeText, { color: active ? colors.white : accent }]}>{category}</Text>
     </Pressable>
   );
 }
 
+function FeaturedNote({ tip }: { tip: StudentTip }) {
+  const accent = accentFor(tip.category);
+  return (
+    <View style={styles.featuredNote}>
+      <View style={[styles.noteTape, { backgroundColor: `${accent}35` }]} />
+      <View style={styles.pin} />
+      <Text style={[styles.noteCategory, { color: accent }]}>{tip.category}</Text>
+      <Text selectable style={styles.featuredText}>{tip.content}</Text>
+      <Text selectable style={styles.author}>Pinned from {tip.author}</Text>
+    </View>
+  );
+}
+
+function BoardNote({ index, reducedMotion, tip }: { index: number; reducedMotion: boolean; tip: StudentTip }) {
+  const opacity = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
+  const translateY = useRef(new Animated.Value(reducedMotion ? 0 : 10)).current;
+  const accent = accentFor(tip.category);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      opacity.setValue(1);
+      translateY.setValue(0);
+      return;
+    }
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(opacity, { duration: 230, toValue: 1, useNativeDriver: true }),
+        Animated.spring(translateY, { friction: 9, tension: 70, toValue: 0, useNativeDriver: true })
+      ]).start();
+    }, Math.min(index * 42, 320));
+    return () => clearTimeout(timer);
+  }, [index, opacity, reducedMotion, translateY]);
+
+  return (
+    <Animated.View style={[styles.boardNote, { opacity, transform: [{ translateY }] }]}>
+      <View style={[styles.noteTapeSmall, { backgroundColor: `${accent}28` }]} />
+      <View style={styles.noteHeader}>
+        <Text style={[styles.noteCategory, { color: accent }]}>{tip.category}</Text>
+        <Text selectable style={styles.author}>{tip.author}</Text>
+      </View>
+      <Text selectable style={styles.noteText}>{tip.content}</Text>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
-  safeArea: {
-    backgroundColor: colors.maroon,
-    flex: 1
-  },
-  headerArea: {
-    alignItems: "center",
-    backgroundColor: colors.maroon,
-    justifyContent: "center",
-    minHeight: 54,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12
-  },
-  headerTitle: {
-    color: colors.white,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: -0.3
-  },
-  sheetContainer: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
-    flex: 1,
-    overflow: "hidden"
-  },
-  scroll: {
-    flex: 1
-  },
-  content: {
-    backgroundColor: colors.surface,
-    gap: 20,
-    paddingTop: 24,
-    paddingBottom: 114
-  },
-  section: {
-    paddingHorizontal: 18,
-    gap: 12
-  },
-  headerTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12
-  },
-  sectionIconBg: {
-    backgroundColor: colors.maroonSoft,
-    borderRadius: 14,
-    padding: 10,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  sectionLabel: {
-    color: colors.maroon,
-    fontSize: 11,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 0.8
-  },
-  sectionTitle: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: -0.3
-  },
-  sectionDesc: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "500",
-    lineHeight: 19
-  },
-  searchBox: {
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 46,
-    paddingHorizontal: 13,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1
-  },
-  searchInput: {
-    color: colors.ink,
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "600",
-    paddingVertical: 10
-  },
-  clearButton: {
-    alignItems: "center",
-    height: 30,
-    justifyContent: "center",
-    width: 30
-  },
-  tipsList: {
-    gap: 12
-  },
-  tipCard: {
-    backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 18,
-    overflow: "hidden",
-    flexDirection: "row",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1
-  },
-  tipAccentBar: {
-    width: 4,
-    flexShrink: 0
-  },
-  tipBody: {
-    flex: 1,
-    padding: 16,
-    gap: 10
-  },
-  tipHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center"
-  },
-  categoryBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1
-  },
-  categoryText: {
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.3
-  },
-  authorText: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "700"
-  },
-  tipContent: {
-    color: colors.ink,
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: "500"
-  },
-  emptyState: {
-    backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 5,
-    padding: 18
-  },
-  emptyTitle: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "900"
-  },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 19
-  },
-  actionSection: {
-    paddingHorizontal: 18
-  },
-  actionCard: {
-    backgroundColor: colors.maroonSoft,
-    borderRadius: 22,
-    padding: 20,
-    gap: 10,
-    borderColor: "#E8C7D0",
-    borderWidth: 1
-  },
-  actionIconRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8
-  },
-  actionTitle: {
-    color: colors.maroonDark,
-    fontSize: 17,
-    fontWeight: "900"
-  },
-  actionDesc: {
-    color: colors.maroon,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: "500"
-  },
-  emailButton: {
-    marginTop: 4
-  },
-  emailButtonInner: {
-    backgroundColor: colors.maroon,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    shadowColor: colors.maroon,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4
-  },
-  emailButtonText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: "800"
-  }
+  safeArea: { backgroundColor: colors.maroon, flex: 1 },
+  header: { gap: 2, paddingBottom: 15, paddingHorizontal: 20, paddingTop: 8 },
+  headerLabel: { color: colors.goldLight, fontSize: 11, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
+  headerTitle: { color: colors.white, fontSize: 24, fontWeight: "900", letterSpacing: -0.5 },
+  sheet: { backgroundColor: "#F5EFE6", borderTopLeftRadius: 30, borderTopRightRadius: 30, flex: 1, overflow: "hidden" },
+  content: { gap: 18, paddingBottom: 118, paddingHorizontal: 18, paddingTop: 20 },
+  boardIntro: { backgroundColor: "#FFF9F0", borderColor: "#E7D8C5", borderRadius: 22, borderWidth: 1, gap: 15, padding: 16 },
+  introTitleRow: { alignItems: "center", flexDirection: "row", gap: 12 },
+  ideaCircle: { alignItems: "center", backgroundColor: colors.goldSoft, borderRadius: 14, height: 46, justifyContent: "center", width: 46 },
+  introCopy: { flex: 1, gap: 3 },
+  introTitle: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  introText: { color: colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 17 },
+  search: { alignItems: "center", backgroundColor: colors.white, borderColor: "#E7D8C5", borderRadius: 15, borderWidth: 1, flexDirection: "row", gap: 8, height: 50, paddingHorizontal: 13 },
+  searchInput: { color: colors.ink, flex: 1, fontSize: 14, fontWeight: "600" },
+  clear: { alignItems: "center", height: 44, justifyContent: "center", width: 36 },
+  tapeRow: { gap: 8, paddingVertical: 2 },
+  tapeFilter: { backgroundColor: "#FFF4E3", borderRadius: 5, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 9, transform: [{ rotate: "-0.5deg" }] },
+  tapeText: { fontSize: 12, fontWeight: "900" },
+  featuredSection: { gap: 10 },
+  boardLabel: { color: colors.maroon, fontSize: 11, fontWeight: "900", letterSpacing: 0.9, textTransform: "uppercase" },
+  featuredNote: { backgroundColor: "#FFF7D9", borderColor: "#E6D697", borderRadius: 9, borderWidth: 1, gap: 10, padding: 20, paddingTop: 25, position: "relative" },
+  noteTape: { height: 17, left: "39%", position: "absolute", top: -8, transform: [{ rotate: "-2deg" }], width: 78 },
+  pin: { backgroundColor: colors.maroon, borderColor: colors.white, borderRadius: 7, borderWidth: 2, height: 14, position: "absolute", right: 16, top: 15, width: 14 },
+  noteCategory: { fontSize: 11, fontWeight: "900", letterSpacing: 0.7, textTransform: "uppercase" },
+  featuredText: { color: colors.ink, fontSize: 16, fontWeight: "600", lineHeight: 24 },
+  author: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+  noteSection: { gap: 11 },
+  boardNote: { backgroundColor: "#FFFCF6", borderColor: "#E7D8C5", borderRadius: 10, borderWidth: 1, gap: 10, padding: 16, paddingTop: 20, position: "relative" },
+  noteTapeSmall: { height: 13, left: 20, position: "absolute", top: -6, transform: [{ rotate: "-3deg" }], width: 52 },
+  noteHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
+  noteText: { color: colors.ink, fontSize: 14, fontWeight: "500", lineHeight: 21 },
+  emptyNote: { backgroundColor: "#FFF9F0", borderColor: "#E7D8C5", borderRadius: 12, borderWidth: 1, gap: 6, padding: 20 },
+  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "900" },
+  emptyText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
+  submitNote: { alignItems: "center", backgroundColor: colors.maroonSoft, borderColor: "#E8C7D0", borderRadius: 12, borderWidth: 1, flexDirection: "row", gap: 13, minHeight: 84, padding: 16, position: "relative" },
+  noteTapeGold: { backgroundColor: colors.goldSoft, height: 14, position: "absolute", right: 22, top: -7, transform: [{ rotate: "2deg" }], width: 58 },
+  submitCopy: { flex: 1, gap: 4 },
+  submitTitle: { color: colors.maroonDark, fontSize: 16, fontWeight: "900" },
+  submitText: { color: colors.maroon, fontSize: 12, fontWeight: "600", lineHeight: 17 }
 });

@@ -66,7 +66,7 @@ export function buildCanteenFoodResponse(
   const matches = matchingFoodLines(normalizedQuestion);
   const lines = matches.length > 0 ? matches : storeMenuLines();
   const answerText = [
-    "Based on Haki's official canteen sources, you can check:",
+    "From Haki's canteen guide, you can check:",
     "",
     ...lines.map((line, index) => `${index + 1}. ${line}`),
     "",
@@ -75,6 +75,8 @@ export function buildCanteenFoodResponse(
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "safety_or_app_guidance",
     normalizedQuestion,
     responseType: "general_advice",
     results: [],

@@ -4,6 +4,8 @@ import { RefreshCw, ThumbsDown, ThumbsUp, User as UserIcon } from "lucide-react-
 
 import { colors } from "@/theme/colors";
 import type { ChatFeedbackRating, ChatMessage } from "@/types/chat";
+import type { SuggestedModeAction } from "@/types/search";
+import { PixelHakiPortrait } from "../mascot/PixelHaki";
 import { ChatSourceCard } from "./ChatSourceCard";
 
 interface ChatMessageBubbleProps {
@@ -11,11 +13,13 @@ interface ChatMessageBubbleProps {
   userAvatarUri?: string | null;
   onContinue?: () => void;
   onFeedback?: (messageId: string, rating: ChatFeedbackRating) => void;
+  onHakiAvatarPress?: () => void;
   onRetry?: () => void;
+  onSuggestedModeAction?: (action: SuggestedModeAction) => void;
 }
 
 /** Renders a single chat message bubble with avatar and optional source card. */
-function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeedback, onRetry }: ChatMessageBubbleProps) {
+function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeedback, onHakiAvatarPress, onRetry, onSuggestedModeAction }: ChatMessageBubbleProps) {
   const fromUser = message.sender === "user";
   const { response } = message;
   const result = message.result ?? response?.topResult ?? response?.results[0];
@@ -28,6 +32,8 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.94)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
+  const avatarScale = useRef(new Animated.Value(1)).current;
+  const avatarTurn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -36,6 +42,22 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
       Animated.spring(slideAnim, { toValue: 0, friction: 9, tension: 100, useNativeDriver: true })
     ]).start();
   }, [fadeAnim, scaleAnim, slideAnim]);
+
+  const handleHakiAvatarPress = () => {
+    Animated.parallel([
+      Animated.sequence([
+        Animated.spring(avatarScale, { toValue: 0.88, friction: 7, tension: 200, useNativeDriver: true }),
+        Animated.spring(avatarScale, { toValue: 1.08, friction: 6, tension: 180, useNativeDriver: true }),
+        Animated.spring(avatarScale, { toValue: 1, friction: 6, tension: 150, useNativeDriver: true })
+      ]),
+      Animated.sequence([
+        Animated.timing(avatarTurn, { duration: 90, toValue: 1, useNativeDriver: true }),
+        Animated.timing(avatarTurn, { duration: 150, toValue: -1, useNativeDriver: true }),
+        Animated.timing(avatarTurn, { duration: 100, toValue: 0, useNativeDriver: true })
+      ])
+    ]).start();
+    onHakiAvatarPress?.();
+  };
 
   return (
     <Animated.View
@@ -46,13 +68,24 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
       ]}
     >
       {!fromUser && (
-        <View style={styles.hakiAvatarContainer}>
-          <Image
-            source={require("../../../assets/images/mascot/haki-chat-head.png")}
-            style={styles.hakiAvatar}
-            resizeMode="contain"
-          />
-        </View>
+        <Pressable
+          accessibilityHint="Opens Haki answer mode choices."
+          accessibilityLabel="Choose Haki answer mode"
+          accessibilityRole="button"
+          onPress={handleHakiAvatarPress}
+          style={styles.hakiAvatarContainer}
+        >
+          <Animated.View
+            style={{
+              transform: [
+                { scale: avatarScale },
+                { rotate: avatarTurn.interpolate({ inputRange: [-1, 0, 1], outputRange: ["-7deg", "0deg", "7deg"] }) }
+              ]
+            }}
+          >
+            <PixelHakiPortrait size={34} style={styles.hakiAvatar} />
+          </Animated.View>
+        </Pressable>
       )}
 
       <View style={[styles.bubbleContent, fromUser ? styles.userBubbleContent : styles.hakiBubbleContent]}>
@@ -64,7 +97,7 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
             </>
           ) : null}
           {!fromUser ? <Text style={styles.senderName}>Haki</Text> : null}
-          <Text style={[styles.messageText, fromUser ? styles.userMessageText : styles.hakiMessageText]}>
+          <Text selectable style={[styles.messageText, fromUser ? styles.userMessageText : styles.hakiMessageText]}>
             {message.text}
           </Text>
           {response && !fromUser ? (
@@ -74,6 +107,21 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
             <View style={styles.continueContainer}>
               <Text style={styles.continueText}>Response stopped. Continue?</Text>
               <ContinueButton onPress={onContinue} />
+            </View>
+          ) : null}
+          {!fromUser && response?.suggestedModeActions?.length && onSuggestedModeAction ? (
+            <View style={styles.modeActions}>
+              {response.suggestedModeActions.map((action) => (
+                <Pressable
+                  accessibilityLabel={action.label}
+                  accessibilityRole="button"
+                  key={action.mode}
+                  onPress={() => onSuggestedModeAction(action)}
+                  style={({ pressed }) => [styles.modeActionButton, pressed ? styles.modeActionPressed : undefined]}
+                >
+                  <Text style={styles.modeActionText}>{action.label}</Text>
+                </Pressable>
+              ))}
             </View>
           ) : null}
         </View>
@@ -217,8 +265,7 @@ const styles = StyleSheet.create({
     elevation: 3
   },
   hakiAvatar: {
-    width: 34,
-    height: 34
+    marginTop: 2
   },
   userAvatarContainer: {
     width: 36,
@@ -379,6 +426,29 @@ const styles = StyleSheet.create({
   continueButtonText: {
     color: colors.maroon,
     fontSize: 13,
+    fontWeight: "800"
+  },
+  modeActions: {
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    gap: 7,
+    marginTop: 12,
+    paddingTop: 10
+  },
+  modeActionButton: {
+    backgroundColor: colors.maroonSoft,
+    borderColor: "#E8C7D0",
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 8
+  },
+  modeActionPressed: {
+    opacity: 0.72
+  },
+  modeActionText: {
+    color: colors.maroon,
+    fontSize: 12,
     fontWeight: "800"
   }
 });

@@ -25,7 +25,7 @@ function AnimatedNode({ node, index, isPrimary, groupKey }: { node: string; inde
   return (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
       <View style={[styles.node, isPrimary ? styles.nodePrimary : undefined]}>
-        <Text style={[styles.nodeText, isPrimary ? styles.nodeTextPrimary : undefined]}>{node}</Text>
+        <Text selectable style={[styles.nodeText, isPrimary ? styles.nodeTextPrimary : undefined]}>{node}</Text>
       </View>
     </Animated.View>
   );
@@ -97,7 +97,7 @@ export default function OrganizationScreen() {
                 <View style={styles.introCopy}>
                   <Text style={styles.introLabel}>TUP Taguig</Text>
                   <Text style={styles.introTitle}>University organization</Text>
-                  <Text style={styles.introText}>
+                  <Text selectable style={styles.introText}>
                     Browse common offices and academic groups used for routing campus concerns.
                   </Text>
                 </View>
@@ -124,10 +124,10 @@ export default function OrganizationScreen() {
                   <UsersRound color={colors.gold} size={20} />
                   <View style={styles.chartHeaderCopy}>
                     <Text style={styles.smallLabel}>Selected group</Text>
-                    <Text style={styles.chartTitle}>{selectedGroup.name}</Text>
+                    <Text selectable style={styles.chartTitle}>{selectedGroup.name}</Text>
                   </View>
                 </View>
-                <Text style={styles.description}>{selectedGroup.description}</Text>
+                <Text selectable style={styles.description}>{selectedGroup.description}</Text>
 
                 <View style={styles.chart}>
                   {selectedGroup.nodes.map((node, index) => (
@@ -149,8 +149,8 @@ export default function OrganizationScreen() {
               {/* Note card */}
               <View style={styles.noteCard}>
                 <Text style={styles.noteTitle}>Data note</Text>
-                <Text style={styles.noteText}>
-                  Office routing should still be verified with official campus announcements or the responsible office.
+                <Text selectable style={styles.noteText}>
+                  Please confirm office directions with official campus announcements or the office concerned.
                 </Text>
               </View>
             </View>

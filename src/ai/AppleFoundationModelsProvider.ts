@@ -37,7 +37,7 @@ export class AppleFoundationModelsProvider implements LocalAIProvider {
   }
 
   async getCapabilities(): Promise<LocalAICapabilities> {
-    const minimumOS = "Supported Apple Intelligence iOS devices";
+    const minimumOS = APPLE_INTELLIGENCE_REQUIREMENTS.minimumOS;
     if (Platform.OS !== "ios") {
       return unavailableCapabilities(["Apple Foundation Models are iOS-only."], minimumOS);
     }
@@ -95,6 +95,11 @@ export class AppleFoundationModelsProvider implements LocalAIProvider {
         modelLoadTimeMs: nativeCapabilities.modelLoadTimeMs ?? null,
         lastInferenceTimeMs: nativeCapabilities.lastInferenceTimeMs ?? null,
         streamingSupported: Boolean(nativeModule.streamSafeChat) || nativeCapabilities.streamingSupported === true,
+        executionBackend: "apple-foundation-models",
+        availableBackends: ["apple-foundation-models"],
+        accelerationStatus: runtimeReady ? "selected" : "unavailable",
+        performanceProfile: null,
+        thermalState: "unknown",
         approximateDeviceCapability: nativeCapabilities.approximateDeviceCapability ?? "unknown",
         architecture: nativeCapabilities.architecture
           ? Array.isArray(nativeCapabilities.architecture)
@@ -107,7 +112,7 @@ export class AppleFoundationModelsProvider implements LocalAIProvider {
         unavailableReasons,
         notes: [
           "Optional Apple Intelligence provider. It must be backed by an iOS native module.",
-          `${APPLE_INTELLIGENCE_REQUIREMENTS.supportedDevices}; ${APPLE_INTELLIGENCE_REQUIREMENTS.minimumOS}; ${APPLE_INTELLIGENCE_REQUIREMENTS.minimumFreeStorageGB}GB free storage.`,
+          `${APPLE_INTELLIGENCE_REQUIREMENTS.supportedDevices}; ${APPLE_INTELLIGENCE_REQUIREMENTS.minimumOS}; model readiness is reported by Apple Foundation Models availability.`,
           "The native bridge must refuse unsupported devices and unavailable Foundation Models sessions. FTS5 remains the fallback on every device."
         ]
       };

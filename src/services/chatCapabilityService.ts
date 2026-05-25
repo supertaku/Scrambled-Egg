@@ -335,12 +335,21 @@ function isProfileQuestion(question: string): boolean {
   return /\b(who am i|what do you know about me|my profile|what is my name|what course am i|what program am i|what year am i|how old (am )?i|my age)\b/i.test(question);
 }
 
-function buildSummaryText(draft: SourceAnswerDraft): string {
+function summaryResults(draft: SourceAnswerDraft): SearchResult[] {
+  const topResult = draft.topResult;
+  if (!draft.reliable || !topResult) return [];
+
+  const matchingResults = draft.results.filter((result) => result.documentId === topResult.documentId);
+  return matchingResults.some((result) => result.chunkId === topResult.chunkId)
+    ? matchingResults.slice(0, 3)
+    : [topResult, ...matchingResults].slice(0, 3);
+}
+
+function buildSummaryText(draft: SourceAnswerDraft, citedResults: SearchResult[]): string {
   const topResult = draft.topResult;
   if (!draft.reliable || !topResult) return SAFE_FALLBACK_MESSAGE;
 
-  const points = draft.results
-    .slice(0, 3)
+  const points = citedResults
     .map(summaryPoint)
     .filter(Boolean);
   const uniquePoints = uniqueCompact(points);
@@ -368,7 +377,7 @@ function buildInstructionText(draft: SourceAnswerDraft): string {
   const lines = ["Quick answer:"];
 
   lines.push("", visibleSteps.length > 0 ? formatNumberedList(visibleSteps) : `1. ${firstSentences(getDirectAnswer(topResult), 1, SUMMARY_POINT_MAX_LENGTH)}`);
-  if (hiddenStepCount > 0) lines.push("", `The source card has ${hiddenStepCount} more item${hiddenStepCount === 1 ? "" : "s"}.`);
+  if (hiddenStepCount > 0) lines.push("", `The reference section has ${hiddenStepCount} more item${hiddenStepCount === 1 ? "" : "s"}.`);
   if (extraLines.length > 0) lines.push("", ...extraLines);
 
   return lines.join("\n");
@@ -435,6 +444,8 @@ export function buildDeviceSpecificationResponse(
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "safety_or_app_guidance",
     normalizedQuestion: normalizeQuery(question),
     responseType: "general_advice",
     results: [],
@@ -473,6 +484,8 @@ export function buildOrganizationOfficersResponse(
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "safety_or_app_guidance",
     normalizedQuestion: normalizeQuery(question),
     responseType: "general_advice",
     results: [],
@@ -503,6 +516,8 @@ export function buildWellbeingSupportResponse(
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "safety_or_app_guidance",
     normalizedQuestion: normalizeQuery(question),
     responseType: "general_advice",
     results: [],
@@ -528,10 +543,13 @@ export function buildProfileContextResponse(
   const name = profileLine(profileContext, "Name");
   const course = profileLine(profileContext, "Course/program");
   const year = profileLine(profileContext, "Year level");
+  const section = profileLine(profileContext, "Section");
 
   if (/\b(age|old)\b/.test(normalized)) {
     return {
       question,
+      requestedChatRole: "haki",
+      answerBasis: "safety_or_app_guidance",
       normalizedQuestion: normalizeQuery(question),
       responseType: "general_advice",
       results: [],
@@ -547,11 +565,14 @@ export function buildProfileContextResponse(
   const details = [
     name ? `Name: ${name}` : null,
     course ? `Course/program: ${course}` : null,
-    year ? `Year level: ${year}` : null
+    year ? `Year level: ${year}` : null,
+    section ? `Section: ${section}` : null
   ].filter(Boolean);
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "safety_or_app_guidance",
     normalizedQuestion: normalizeQuery(question),
     responseType: "general_advice",
     results: [],
@@ -576,6 +597,8 @@ export function buildDeterministicCapabilityResponse(
   if (clarificationText) {
     return {
       question,
+      requestedChatRole: "haki",
+      answerBasis: "campus_sources_unavailable",
       normalizedQuestion: draft.normalizedQuestion,
       responseType: "source",
       results: [],
@@ -588,10 +611,19 @@ export function buildDeterministicCapabilityResponse(
     };
   }
 
-  const answerText = capability === "instruction" ? buildInstructionText(draft) : buildSummaryText(draft);
+  const citedResults = !draft.reliable || !topResult
+    ? []
+    : capability === "instruction"
+      ? [topResult]
+      : summaryResults(draft);
+  const answerText = capability === "instruction"
+    ? buildInstructionText(draft)
+    : buildSummaryText(draft, citedResults);
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: draft.reliable && Boolean(topResult) ? "campus_sources" : "campus_sources_unavailable",
     normalizedQuestion: draft.normalizedQuestion,
     responseType: responseTypeForCapability(capability),
     results: draft.results,
@@ -599,7 +631,7 @@ export function buildDeterministicCapabilityResponse(
     reliable: draft.reliable,
     ...(topResult ? { topResult } : {}),
     answerText,
-    citationsUsed: topResult ? [topResult.chunkId] : [],
+    citationsUsed: citedResults.map((result) => result.chunkId),
     provenance: draft.provenance,
     activeMode: draft.selectedMode.mode,
     ...(draft.confidence === "medium" ? { verificationNote: MEDIUM_CONFIDENCE_NOTE } : {})
@@ -612,6 +644,8 @@ export function buildGeneralAdviceUnavailableResponse(question: string, mode: De
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "haki_guidance",
     normalizedQuestion: normalizeQuery(question),
     responseType: "general_advice",
     results: [],
@@ -635,6 +669,8 @@ export function buildSafeQuestionFallbackResponse(
 
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "haki_guidance",
     normalizedQuestion: normalizeQuery(question),
     responseType: capability === "instruction" ? "instruction" : "general_advice",
     results: [],
@@ -650,13 +686,15 @@ export function buildSafeQuestionFallbackResponse(
 export function buildImageGenerationResponse(question: string, mode: DeviceAIMode): SearchResponse {
   return {
     question,
+    requestedChatRole: "haki",
+    answerBasis: "safety_or_app_guidance",
     normalizedQuestion: normalizeQuery(question),
     responseType: "image_generation",
     results: [],
     confidence: "low",
     reliable: false,
     answerText:
-      "Image generation is not enabled in this build yet. I can help write the image prompt, poster copy, layout idea, or infographic outline for now. On high-end devices, this should become an optional local model download instead of a required feature.",
+      "Creating images is not available here yet. I can still help write an image idea, poster text, layout plan, or infographic outline.",
     citationsUsed: [],
     provenance: mode.provenance,
     activeMode: mode

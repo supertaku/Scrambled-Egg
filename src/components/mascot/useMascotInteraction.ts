@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing } from "react-native";
+import { Animated, AppState, Easing } from "react-native";
 import { Accelerometer } from "expo-sensors";
 
 import {
@@ -14,6 +14,7 @@ import {
 } from "./mascotConfig";
 
 interface UseMascotInteractionInput {
+  interactionVisible: boolean;
   message: string | undefined;
   onAdminRequest: (() => void) | undefined;
   status: MascotStatus;
@@ -23,7 +24,8 @@ const SHAKE_DELTA_THRESHOLD = 1.65;
 const SHAKE_MAGNITUDE_THRESHOLD = 2.45;
 const SHAKE_COOLDOWN_MS = 4500;
 
-export function useMascotInteraction({ message, onAdminRequest, status }: UseMascotInteractionInput) {
+export function useMascotInteraction({ interactionVisible, message, onAdminRequest, status }: UseMascotInteractionInput) {
+  const [appActive, setAppActive] = useState(AppState.currentState === "active");
   const [interactiveState, setInteractiveState] = useState<InteractiveMascotState>("awake");
   const [wakeDialogueVisible, setWakeDialogueVisible] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -177,8 +179,21 @@ export function useMascotInteraction({ message, onAdminRequest, status }: UseMas
   }, [runTapBounce]);
 
   useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      setAppActive(nextState === "active");
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
     let active = true;
     let subscription: ReturnType<typeof Accelerometer.addListener> | null = null;
+
+    if (!appActive || !interactionVisible) {
+      lastAccelerationRef.current = null;
+      return undefined;
+    }
 
     void Accelerometer.isAvailableAsync()
       .then((available) => {
@@ -211,9 +226,10 @@ export function useMascotInteraction({ message, onAdminRequest, status }: UseMas
 
     return () => {
       active = false;
+      lastAccelerationRef.current = null;
       subscription?.remove();
     };
-  }, [triggerGroggy]);
+  }, [appActive, interactionVisible, triggerGroggy]);
 
   const handleSingleTap = useCallback(() => {
     setWakeDialogueVisible(false);

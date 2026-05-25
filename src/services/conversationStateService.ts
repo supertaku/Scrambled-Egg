@@ -1,5 +1,5 @@
 import type { ChatMessage } from "@/types/chat";
-import type { ConversationState, SearchOptions } from "@/types/search";
+import type { ConversationState, SearchOptions, SearchResult, SourceAnchor } from "@/types/search";
 
 import type { StudentQuestionIntent } from "./studentChatTypes";
 
@@ -48,6 +48,45 @@ function topicFromIntent(intent: StudentQuestionIntent): string | undefined {
   return intent.scenario === "unknown_general" ? intent.capability : intent.scenario;
 }
 
+function sourceAnchorFromResult(result: SearchResult): SourceAnchor {
+  return {
+    ...(result.category ? { category: result.category } : {}),
+    chunkId: result.chunkId,
+    documentId: result.documentId,
+    label: result.processName ?? result.sectionTitle ?? result.documentTitle,
+    ...(result.office ? { office: result.office } : {})
+  };
+}
+
+function latestSourceContext(messages: ChatMessage[]): {
+  hasAmbiguousSourceAnchor?: boolean;
+  lastSourceAnchor?: SourceAnchor;
+} {
+  const latestTurn = [...messages]
+    .reverse()
+    .find((message) => message.id !== "opening" && message.text.trim().length > 0);
+  const response = latestTurn?.sender === "haki" ? latestTurn.response : undefined;
+  if (
+    !response?.reliable ||
+    !["campus_sources", "haki_composed"].includes(response.answerBasis) ||
+    response.citationsUsed.length === 0
+  ) {
+    return {};
+  }
+
+  const citedIds = new Set(response.citationsUsed);
+  const citedResults = [response.topResult, latestTurn?.result, ...response.results]
+    .filter((result): result is SearchResult => Boolean(result && citedIds.has(result.chunkId)))
+    .filter((result, index, results) => results.findIndex((candidate) => candidate.chunkId === result.chunkId) === index);
+
+  if (citedIds.size !== 1 || citedResults.length !== 1) {
+    return { hasAmbiguousSourceAnchor: true };
+  }
+
+  const sourceResult = citedResults[0];
+  return sourceResult ? { lastSourceAnchor: sourceAnchorFromResult(sourceResult) } : {};
+}
+
 function isAmbiguousFollowUp(question: string): boolean {
   const normalized = question.toLowerCase().trim();
   if (normalized.split(/\s+/).length > 5) return false;
@@ -63,7 +102,16 @@ export function buildConversationState(input: {
   const combined = `${priorUserText} ${input.question}`.trim();
   const activeEntity = detectActiveEntity(combined);
   const userGoal = detectUserGoal(combined);
-  const lastSourceScope = scopeFromIntent(input.intent);
+  const sourceContext = latestSourceContext(input.messages);
+  const lastSourceScope = scopeFromIntent(input.intent) ?? (
+    sourceContext.lastSourceAnchor
+      ? {
+          ...(sourceContext.lastSourceAnchor.office ? { office: sourceContext.lastSourceAnchor.office } : {}),
+          ...(sourceContext.lastSourceAnchor.category ? { category: sourceContext.lastSourceAnchor.category } : {}),
+          documentId: sourceContext.lastSourceAnchor.documentId
+        }
+      : undefined
+  );
   const currentTopic = topicFromIntent(input.intent);
   const unresolvedQuestion = isAmbiguousFollowUp(input.question)
     ? "The latest user message is a short follow-up; preserve the prior subject and ask a clarification if the target is unclear."
@@ -72,6 +120,7 @@ export function buildConversationState(input: {
   return {
     ...(activeEntity ? { activeEntity } : {}),
     ...(currentTopic ? { currentTopic } : {}),
+    ...sourceContext,
     ...(lastSourceScope ? { lastSourceScope } : {}),
     ...(unresolvedQuestion ? { unresolvedQuestion } : {}),
     ...(userGoal ? { userGoal } : {})
@@ -87,6 +136,7 @@ export function formatConversationState(state: ConversationState | undefined): s
     state.currentTopic ? `Current topic: ${state.currentTopic}` : "",
     state.activeEntity ? `Active actor/entity: ${state.activeEntity}` : "",
     state.userGoal ? `User goal: ${state.userGoal}` : "",
+    state.lastSourceAnchor ? `Last cited source: ${state.lastSourceAnchor.label}` : "",
     state.lastSourceScope
       ? `Last source scope: ${[
           state.lastSourceScope.office,

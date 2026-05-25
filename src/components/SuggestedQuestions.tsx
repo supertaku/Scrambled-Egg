@@ -2,24 +2,43 @@ import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors } from "@/theme/colors";
+import type { ChatRole } from "@/types/search";
 
-const suggestions = [
-  "How do I file a complaint?",
-  "How do I request a good moral character?",
-  "What should I do if I lose my ID?",
-  "How do I prepare for an exam?"
-];
+const suggestions: Record<ChatRole, string[]> = {
+  haki: [
+    "How do I file a complaint?",
+    "I lost my ID and I feel stressed. What can I do?",
+    "How do I prepare for an exam?",
+    "What is photosynthesis?"
+  ],
+  information_officer: [
+    "How do I file a complaint?",
+    "How do I request a good moral character?",
+    "What should I do if I lose my ID?"
+  ],
+  friendly_buddy: [
+    "I feel stressed about my studies. What should I do first?",
+    "How can I make a difficult decision calmly?",
+    "How can I start a respectful difficult conversation?"
+  ],
+  researcher: [
+    "What is photosynthesis?",
+    "Explain how sorting algorithms work.",
+    "What causes a solar eclipse?"
+  ]
+};
 
 interface SuggestedQuestionsProps {
+  chatRole: ChatRole;
   onSelect: (question: string) => void;
 }
 
-export function SuggestedQuestions({ onSelect }: SuggestedQuestionsProps) {
+export function SuggestedQuestions({ chatRole, onSelect }: SuggestedQuestionsProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>Suggested questions</Text>
       <View style={styles.chips}>
-        {suggestions.map((question, index) => (
+        {suggestions[chatRole].map((question, index) => (
           <ChipItem key={question} question={question} index={index} onSelect={onSelect} />
         ))}
       </View>

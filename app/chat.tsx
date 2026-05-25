@@ -1,65 +1,69 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   Animated,
   FlatList,
   Image,
-  KeyboardAvoidingView,
+  type LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import LottieView from "lottie-react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 
+import { FeatherLoader } from "@/components/chat/FeatherLoader";
 import { ChatMessageBubble } from "@/components/chat/ChatMessageBubble";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
+import { ChatRoleSelector } from "@/components/chat/ChatRoleSelector";
+import { PixelHaki, PixelHakiPortrait } from "@/components/mascot/PixelHaki";
 import { SuggestedQuestions } from "@/components/SuggestedQuestions";
 import { getAppDatabase } from "@/data/appRepository";
 import { useChatMessages } from "@/hooks/useChatMessages";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import type { DeviceCapabilityReport } from "@/ai/CapabilityDetector";
 import type { DeviceAIMode } from "@/ai/DeviceAIMode";
-import { ensureBundledDefaultChatModel } from "@/ai/localModelManager";
+import { getActiveChatModelStatus } from "@/ai/localModelManager";
 import {
   getCurrentAIMode,
   getDeviceCapabilityReport,
   prewarmLocalAIForChat,
   refreshDeviceCapabilities
 } from "@/services/modeSelectionService";
+import { getChatPrivacySettings } from "@/services/chatPrivacySettingsService";
 import { classifyStudentQuestionIntent } from "@/services/questionIntentService";
-import { getStudentProfile, studentProfileToChatContext } from "@/services/studentProfileService";
+import { getStudentAvatarUri, getStudentProfile, studentProfileToChatContext } from "@/services/studentProfileService";
 import { colors } from "@/theme/colors";
 import { metrics } from "@/theme/metrics";
 import type { ChatMessage } from "@/types/chat";
-
-function formatModelTier(mode: DeviceAIMode): string | null {
-  const tier = mode.capabilities.modelTier;
-  if (tier === "tiny") return "Tiny";
-  if (tier === "enhanced") return "Enhanced";
-  if (tier === "minimum") return "Minimum";
-  if (tier === "good") return "Good";
-  if (tier === "flagship") return "Flagship";
-  if (tier === "apple-intelligence") return "Apple";
-  return null;
-}
+import type { ChatRole, SuggestedModeAction } from "@/types/search";
+import { logger } from "@/utils/logger";
 
 function getModelIndicator(mode: DeviceAIMode | null, _report: DeviceCapabilityReport | null): string {
-  if (!mode) return "Detecting Model...";
-  const providerId = mode.summaryProviderId ?? mode.embeddingProviderId;
-  const tier = formatModelTier(mode);
+  if (!mode) return "Getting ready...";
+  return mode.capabilities.safeChat ? "All Haki modes ready" : "Campus information ready";
+}
 
-  if (providerId === "apple-foundation-models") return "Apple Intelligence";
-  if (providerId === "llama-rn") return tier ? `llama.rn - ${tier}` : "llama.rn";
-  if (mode.id === "fts5-only" || mode.id === "fallback-fts5-only") {
-    return "FTS5 Search";
+function getChatRoleSessionNotice(chatRole: ChatRole): string {
+  if (chatRole === "information_officer") {
+    return "Information Officer answers only from saved campus information. Verify important details with the relevant office.";
   }
 
-  return mode.label;
+  if (chatRole === "friendly_buddy") {
+    return "Friendly Buddy offers empathetic support only. It is not a therapist and does not provide campus facts.";
+  }
+
+  if (chatRole === "researcher") {
+    return "Researcher discusses non-campus facts. Always verify important information because Haki can make mistakes.";
+  }
+
+  return "Haki uses saved sources for campus information. Verify important details because Haki can make mistakes.";
 }
 
 const HAKI_LOADING_LINES = [
@@ -73,6 +77,14 @@ const HAKI_LOADING_LINES = [
   "Oh praise the Lord",
   "Ang mga isda",
   "Na lumalangoy",
+  "Ay mahal ng Diyos (ay mahal ng Diyos)",
+  "Hindi kumukupas (hindi kumukupas)",
+  "Ang mga isda na lumalangoy",
+  "Ay mahal ng Diyos 'di kumukupas",
+  "'Wag ka nang malungkot",
+  "Oh praise the Lord",
+  "Ang mga bata (ang mga bata)",
+  "Na naglalaro (na naglalaro)",
   "Ay mahal ng Diyos",
   "Hindi kumukupas",
   "Ang mga bata na naglalaro",
@@ -102,11 +114,21 @@ function shouldShowHelpListeningHaki(question: string | null): boolean {
 }
 
 export default function ChatScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { height: viewportHeight } = useWindowDimensions();
+  const keyboardVisible = useKeyboardState((state) => state.isVisible);
+  const keyboardHeight = useKeyboardState((state) => state.height);
   const [draft, setDraft] = useState("");
   const [aiMode, setAiMode] = useState<DeviceAIMode | null>(null);
   const [capabilityReport, setCapabilityReport] = useState<DeviceCapabilityReport | null>(null);
   const [userAvatarUri, setUserAvatarUri] = useState<string | null>(null);
   const [profileContext, setProfileContext] = useState<string | null>(null);
+  const [useRelatedHistory, setUseRelatedHistory] = useState(false);
+  const [chatRole, setChatRole] = useState<ChatRole>("haki");
+  const [chatRoleNotice, setChatRoleNotice] = useState<string | null>(null);
+  const [roleMenuVisible, setRoleMenuVisible] = useState(false);
+  const [composerHeight, setComposerHeight] = useState(0);
   const [loadingLineIndex, setLoadingLineIndex] = useState(0);
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -127,7 +149,7 @@ export default function ChatScreen() {
     submitFeedback,
     setInitializing,
     setError
-  } = useChatMessages(profileContext);
+  } = useChatMessages(profileContext, chatRole, useRelatedHistory);
 
   const {
     voiceState,
@@ -155,10 +177,9 @@ export default function ChatScreen() {
         // the first send doesn't pay the cold-start cost. Errors are swallowed
         // inside prewarmLocalAIForChat; the real request will retry / fall back.
         void prewarmLocalAIForChat();
-      } catch (err) {
+      } catch {
         if (mountedRef.current) {
-          const message = err instanceof Error ? err.message : "Haki had trouble opening the guide.";
-          setError(message);
+          setError("Haki had trouble getting ready. Please try again.");
         }
       } finally {
         if (mountedRef.current) {
@@ -177,21 +198,27 @@ export default function ChatScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      void getStudentProfile()
-        .then((profile) => {
+      void getChatPrivacySettings()
+        .then(async (privacy) => {
+          const [avatarUri, profile] = await Promise.all([
+            getStudentAvatarUri(),
+            privacy.useProfileContext ? getStudentProfile() : Promise.resolve(null)
+          ]);
           if (!active) return;
-          setUserAvatarUri(profile.avatarUri?.trim() || null);
-          setProfileContext(studentProfileToChatContext(profile));
+          setUserAvatarUri(avatarUri || null);
+          setProfileContext(profile ? studentProfileToChatContext(profile) : null);
+          setUseRelatedHistory(privacy.useRelatedHistory);
         })
         .catch(() => {
           if (!active) return;
           setUserAvatarUri(null);
           setProfileContext(null);
+          setUseRelatedHistory(false);
         });
 
       void (async () => {
         try {
-          await ensureBundledDefaultChatModel();
+          await getActiveChatModelStatus();
           if (!active) return;
           let mode = await getCurrentAIMode();
           if (!mode.capabilities.safeChat) {
@@ -220,13 +247,40 @@ export default function ChatScreen() {
 
   const trimmedDraft = draft.trim();
   const canSend = trimmedDraft.length >= 3 && !loading && !initializing;
+  const generatedModesAvailable = Boolean(aiMode?.capabilities.safeChat);
   const showSuggestedQuestions = messages.length === 1 && !loading && !initializing;
   const displayedMessages = useMemo(
     () => (streamingMessage ? [...messages, streamingMessage] : messages),
     [messages, streamingMessage]
   );
   const loadingLine = HAKI_LOADING_LINES[loadingLineIndex % HAKI_LOADING_LINES.length] ?? HAKI_LOADING_LINES[0];
-  const showHelpListeningHaki = loading && shouldShowHelpListeningHaki(pendingQuestion);
+  const showHelpListeningHaki = loading && (
+    chatRole === "friendly_buddy" || shouldShowHelpListeningHaki(pendingQuestion)
+  );
+  const composerBottomPadding = keyboardVisible
+    ? Math.max(insets.bottom, metrics.navigation.composerGap)
+    : metrics.navigation.floatingTabBarBottom
+      + metrics.navigation.floatingTabBarHeight
+      + metrics.navigation.composerGap
+      + insets.bottom;
+
+  const handleComposerLayout = useCallback((event: LayoutChangeEvent) => {
+    setComposerHeight(event.nativeEvent.layout.height);
+  }, []);
+
+  useEffect(() => {
+    if (!__DEV__ || !keyboardVisible) return;
+    logger.ui.log("Chat composer keyboard geometry.", {
+      keyboardBehavior: Platform.OS === "ios" ? "padding" : "height",
+      composerBottomPadding,
+      composerHeight,
+      keyboardVisible,
+      keyboardHeight,
+      platform: Platform.OS,
+      safeAreaBottom: insets.bottom,
+      viewportHeight
+    });
+  }, [composerBottomPadding, composerHeight, insets.bottom, keyboardHeight, keyboardVisible, viewportHeight]);
 
   useEffect(() => {
     if (!loading || streaming || !pendingQuestion) {
@@ -246,6 +300,30 @@ export default function ChatScreen() {
     if (error) setError(null);
   }, [error, setError]);
 
+  const handleChatRoleChange = useCallback((role: ChatRole) => {
+    if (loading || initializing) return;
+    setChatRole(role);
+    setChatRoleNotice(null);
+    setRoleMenuVisible(false);
+  }, [initializing, loading]);
+
+  const handleSuggestedModeAction = useCallback((action: SuggestedModeAction, question: string) => {
+    if (loading || initializing) return;
+    setChatRole(action.mode);
+    setChatRoleNotice(null);
+    setRoleMenuVisible(false);
+    void sendMessage(question, { chatRole: action.mode });
+  }, [initializing, loading, sendMessage]);
+
+  const handleOpenModels = useCallback(() => {
+    setRoleMenuVisible(false);
+    router.push("/models" as never);
+  }, [router]);
+
+  const toggleRoleMenu = useCallback(() => {
+    setRoleMenuVisible((current) => !current);
+  }, []);
+
   const handleSend = useCallback(() => {
     void sendMessage(draft);
     setDraft("");
@@ -259,8 +337,12 @@ export default function ChatScreen() {
     if (lastFailedQuestion) void sendMessage(lastFailedQuestion);
   }, [lastFailedQuestion, sendMessage]);
 
-  const handleContinue = useCallback(() => {
-    void sendMessage("Continue");
+  const handleContinue = useCallback((message: ChatMessage) => {
+    void sendMessage("Continue", {
+      chatRole: message.response?.requestedChatRole ?? "haki",
+      continuation: true,
+      ...(message.question ? { intentQuestion: message.question } : {})
+    });
   }, [sendMessage]);
 
   const handleVoice = useCallback(() => {
@@ -320,13 +402,17 @@ export default function ChatScreen() {
         <ChatMessageBubble
           message={item}
           userAvatarUri={userAvatarUri}
-          {...(showContinue ? { onContinue: handleContinue } : {})}
+          {...(showContinue ? { onContinue: () => handleContinue(item) } : {})}
+          {...(item.sender === "haki" && !isStreamingMessage ? { onHakiAvatarPress: toggleRoleMenu } : {})}
           {...(item.sender === "haki" && !isStreamingMessage ? { onFeedback: submitFeedback } : {})}
+          {...(item.sender === "haki" && item.question && item.response?.suggestedModeActions?.length
+            ? { onSuggestedModeAction: (action: SuggestedModeAction) => handleSuggestedModeAction(action, item.question!) }
+            : {})}
           {...(isFailedUserMessage ? { onRetry: handleRetry } : {})}
         />
       );
     },
-    [userAvatarUri, displayedMessages.length, loading, streamingMessage, handleContinue, handleRetry, submitFeedback]
+    [userAvatarUri, displayedMessages.length, loading, streamingMessage, handleContinue, handleRetry, submitFeedback, toggleRoleMenu, handleSuggestedModeAction]
   );
 
   // Entry animation
@@ -347,17 +433,18 @@ export default function ChatScreen() {
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <View style={styles.headerArea}>
         <Text style={styles.headerTitle}>Chat</Text>
-        <View style={styles.modelIndicator}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Manage chat options" onPress={() => router.push("/models" as never)} style={styles.modelIndicator}>
           <Text numberOfLines={1} style={styles.modelIndicatorText}>
             {getModelIndicator(aiMode, capabilityReport)}
           </Text>
-        </View>
+        </Pressable>
       </View>
       <View style={styles.sheetContainer}>
         <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateX: slideAnim }] }}>
           <KeyboardAvoidingView
+            automaticOffset
             behavior={Platform.OS === "ios" ? "padding" : "height"}
-            keyboardVerticalOffset={metrics.keyboard.chatVerticalOffset}
+            keyboardVerticalOffset={0}
             style={styles.screen}
           >
             <View style={styles.chatBackgroundWrapper} pointerEvents="none">
@@ -369,17 +456,18 @@ export default function ChatScreen() {
             </View>
 
             <View style={styles.listAndStreamColumn}>
+              <View style={styles.sessionNotice}>
+                <Text style={styles.sessionNoticeText}>
+                  {getChatRoleSessionNotice(chatRole)}
+                </Text>
+              </View>
               {showHelpListeningHaki ? (
                 <View style={styles.listeningPanel} pointerEvents="none">
                   <View style={styles.branchScene}>
                     <View style={styles.branchLine} />
                     <View style={styles.branchOffshoot} />
                     <View style={styles.branchLeaf} />
-                    <Image
-                      source={require("../assets/images/mascot/grayhawk-idle.png")}
-                      style={styles.listeningMascot}
-                      resizeMode="contain"
-                    />
+                    <PixelHaki height={60} state="helping" style={styles.listeningMascot} width={40} />
                   </View>
                   <View style={styles.listeningBubble}>
                     <View style={styles.listeningBubbleTailBorder} />
@@ -394,6 +482,7 @@ export default function ChatScreen() {
                 data={displayedMessages}
                 keyExtractor={(item) => item.id}
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
                 showsVerticalScrollIndicator={false}
                 style={styles.messageList}
                 contentContainerStyle={styles.messages}
@@ -401,40 +490,22 @@ export default function ChatScreen() {
                 onScroll={handleMessageScroll}
                 scrollEventThrottle={16}
                 onContentSizeChange={scrollToLatestMessage}
-                ListHeaderComponent={
-                  <View style={styles.sessionNotice}>
-                    <Text style={styles.sessionNoticeText}>
-                      {aiMode?.capabilities.safeChat
-                        ? "Haki keeps this chat until you restart the app. Replies combine the offline campus guide with on-device AI when available."
-                        : "Haki keeps this chat until you restart the app. Without local safe chat, answers use offline search over the saved campus guide - open Settings > AI status to see whether full on-device replies can activate."}
-                    </Text>
-                  </View>
-                }
                 ListFooterComponent={
                   <>
                     {showSuggestedQuestions ? (
                       <View style={styles.suggestedQuestionsWrap}>
-                        <SuggestedQuestions onSelect={handleSuggestedQuestion} />
+                        <SuggestedQuestions chatRole={chatRole} onSelect={handleSuggestedQuestion} />
                       </View>
                     ) : null}
                     {loading && !streaming ? (
                       <View style={styles.hakiRow}>
                         <View style={styles.hakiAvatarContainer}>
-                          <Image
-                            source={require("../assets/images/mascot/haki-chat-head.png")}
-                            style={styles.hakiAvatar}
-                            resizeMode="contain"
-                          />
+                          <PixelHakiPortrait size={34} style={styles.hakiAvatar} />
                         </View>
                         <View style={[styles.bubble, styles.hakiBubble, styles.typingBubble]}>
                           <View pointerEvents="none" style={styles.hakiBubbleTailBorder} />
                           <View pointerEvents="none" style={styles.hakiBubbleTail} />
-                          <LottieView
-                            autoPlay
-                            loop
-                            source={require("../assets/animations/haki-feathers.json")}
-                            style={styles.loadingAnimation}
-                          />
+                          <FeatherLoader />
                           <Text style={styles.typingText}>
                             {pendingQuestion ? loadingLine : "Haki is getting ready..."}
                           </Text>
@@ -444,6 +515,19 @@ export default function ChatScreen() {
                   </>
                 }
               />
+              {roleMenuVisible ? (
+                <View style={styles.roleDropdown}>
+                  <ChatRoleSelector
+                    disabled={loading || initializing}
+                    modesAvailable={generatedModesAvailable}
+                    notice={chatRoleNotice}
+                    onChange={handleChatRoleChange}
+                    onClose={() => setRoleMenuVisible(false)}
+                    onOpenModels={handleOpenModels}
+                    value={chatRole}
+                  />
+                </View>
+              ) : null}
             </View>
 
             <ChatInputBar
@@ -462,6 +546,8 @@ export default function ChatScreen() {
               speechSupport={speechSupport}
               onVoicePress={handleVoice}
               onCancelVoice={cancelAutoSend}
+              bottomPadding={composerBottomPadding}
+              onLayout={handleComposerLayout}
             />
           </KeyboardAvoidingView>
         </Animated.View>
@@ -506,6 +592,13 @@ const styles = StyleSheet.create({
   },
   screen: { backgroundColor: "transparent", flex: 1 },
   listAndStreamColumn: { flex: 1 },
+  roleDropdown: {
+    left: 14,
+    position: "absolute",
+    right: 54,
+    top: 12,
+    zIndex: 20
+  },
   listeningPanel: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.9)",
@@ -557,10 +650,8 @@ const styles = StyleSheet.create({
   },
   listeningMascot: {
     bottom: 9,
-    height: 58,
-    left: 22,
+    left: 30,
     position: "absolute",
-    width: 58
   },
   listeningBubble: {
     backgroundColor: colors.white,
@@ -650,6 +741,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     marginBottom: 8,
+    marginHorizontal: 16,
+    marginTop: 14,
+    maxWidth: "92%",
     paddingHorizontal: 12,
     paddingVertical: 7
   },
@@ -672,8 +766,7 @@ const styles = StyleSheet.create({
     width: 36
   },
   hakiAvatar: {
-    height: 34,
-    width: 34
+    marginTop: 2
   },
   bubble: { borderRadius: 20, maxWidth: "82%", paddingHorizontal: 14, paddingVertical: 10, position: "relative" },
   hakiBubble: {
@@ -716,6 +809,5 @@ const styles = StyleSheet.create({
     zIndex: 2
   },
   typingBubble: { alignItems: "center", flexDirection: "row", gap: 8 },
-  loadingAnimation: { height: 32, width: 32 },
   typingText: { color: colors.muted, fontSize: 13, fontWeight: "700" }
 });

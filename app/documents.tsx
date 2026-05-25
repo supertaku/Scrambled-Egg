@@ -23,8 +23,8 @@ export default function DocumentsScreen() {
     try {
       const db = await getAppDatabase();
       setDocuments(await getDocumentSummaries(db));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load documents.");
+    } catch {
+      setError("Could not load campus files. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -39,17 +39,17 @@ export default function DocumentsScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <MascotHeader message="Admin view ito, TUPian. Dito mo makikita ang saved campus documents." subtitle="Document library" />
+        <MascotHeader message="These are the campus files available to Haki." subtitle="Campus files" />
 
-        <AdminGate label="Document metadata is available in admin mode only.">
+        <AdminGate label="Campus file details are available to administrators only.">
           <View style={styles.toolbar}>
             <View style={styles.toolbarTitle}>
               <BookOpenText color={colors.maroon} size={22} />
-              <Text style={styles.title}>Local documents</Text>
+              <Text style={styles.title}>Campus files</Text>
             </View>
             <View style={styles.toolbarActions}>
               <Pressable
-                accessibilityLabel="Import source document JSON"
+                accessibilityLabel="Add a campus file"
                 accessibilityRole="button"
                 onPress={() => router.push("/add-document")}
                 style={styles.refreshButton}
@@ -65,33 +65,33 @@ export default function DocumentsScreen() {
           {loading ? (
             <View style={styles.statusCard}>
               <ActivityIndicator color={colors.maroon} />
-              <Text style={styles.statusText}>Loading local document metadata...</Text>
+              <Text style={styles.statusText}>Loading campus files...</Text>
             </View>
           ) : null}
 
           {error ? (
             <View style={styles.errorCard}>
-              <Text style={styles.errorText}>{error}</Text>
+              <Text selectable style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
 
           {!loading && documents.length === 0 ? (
             <View style={styles.statusCard}>
-              <Text style={styles.statusTitle}>No documents indexed</Text>
-              <Text style={styles.statusText}>Import campus document files or restart the app to load bundled demo documents.</Text>
+              <Text style={styles.statusTitle}>No campus files found</Text>
+              <Text style={styles.statusText}>Add a campus file or restart the app to restore the included guide.</Text>
             </View>
           ) : null}
 
           <View style={styles.list}>
             {documents.map((document) => (
               <View key={document.documentId} style={styles.card}>
-                <Text style={styles.documentTitle}>{document.documentTitle}</Text>
+                <Text selectable style={styles.documentTitle}>{document.documentTitle}</Text>
                 <View style={styles.metaGrid}>
                   <Meta label="Category" value={document.category} />
                   <Meta label="Office" value={document.office} />
                   <Meta label="Type" value={document.documentType} />
                   <Meta label="Version" value={document.version} />
-                  <Meta label="Chunks" value={document.chunkCount} />
+                  <Meta label="Topics" value={document.chunkCount} />
                   <Meta label="Last updated" value={document.lastUpdated} />
                 </View>
               </View>
@@ -111,7 +111,7 @@ function Meta({ label, value }: { label: string; value: string | number | null }
   return (
     <View style={styles.metaItem}>
       <Text style={styles.metaLabel}>{label}</Text>
-      <Text style={styles.metaValue}>{value}</Text>
+      <Text selectable style={styles.metaValue}>{value}</Text>
     </View>
   );
 }

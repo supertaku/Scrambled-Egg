@@ -409,10 +409,16 @@ async function runTests() {
   const whoAmIResponse = buildProfileContextResponse(
     "who am i",
     testMode,
-    "Student profile context.\nName: Joshua\nCourse/program: BSIT\nYear level: 4th-year"
+    "Student profile context.\nName: Joshua\nCourse/program: BSIT\nYear level: 4th-year\nSection: BSIT 4A"
   );
   failed += assertCase(
-    Boolean(whoAmIResponse?.answerText && /Name: Joshua|Course\/program: BSIT|Year level: 4th-year/i.test(whoAmIResponse.answerText)),
+    Boolean(
+      whoAmIResponse?.answerText &&
+      /Name: Joshua/i.test(whoAmIResponse.answerText) &&
+      /Course\/program: BSIT/i.test(whoAmIResponse.answerText) &&
+      /Year level: 4th-year/i.test(whoAmIResponse.answerText) &&
+      /Section: BSIT 4A/i.test(whoAmIResponse.answerText)
+    ),
     "profile question uses saved profile details only",
     whoAmIResponse?.answerText
   );
