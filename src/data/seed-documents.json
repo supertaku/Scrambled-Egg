@@ -334,20 +334,64 @@
       {
         "chunk_id": "safety_emergency_response_guide",
         "section_title": "Emergency Response Guide",
-        "process_name": "Emergency Response Guide",
-        "content": "Fire Emergency (Action: Evacuate): Drop down to the floor and crawl low, under any smoke to your exit. Heavy smoke and poisonous gases collect first along the ceiling. If you cannot get to someone needing assistance, leave the home and call 9-1-1 or the fire department. Tell the emergency operator where the person is located. If you open a door, open it slowly. Be ready to shut it quickly if heavy smoke or fire is present. If you cannot get out, close the door and cover vents and cracks around doors with cloth or tape to keep smoke out. Earthquake Emergency (Action: Duck, Cover and Hold): Wherever you are, drop down to your hands and knees and hold on to something sturdy. If you are using a wheelchair or walker with a seat, make sure your wheels are locked and remain seated until the shaking stops. Cover your head and neck with your arms. If a sturdy table or desk is nearby, crawl underneath it for shelter. If no shelter is nearby, crawl next to an interior wall away from windows. If you are under a table or desk, hold on with one hand and be ready to move with it if it moves. Eruption Emergency (Action: Move to a Safe Location): Listen to the radio and news for civil defense advice and follow instructions. If outside at the time of eruption, seek shelter in a car or a building. If caught in volcanic ashfalls, wear a dust mask or use a handkerchief or cloth over your nose and mouth. Stay indoors as volcanic ash is a health hazard, especially if you have respiratory difficulties such as asthma or bronchitis. Emergency Emergency (Action: Contact Front Desk): Follow your emergency plan. Get your emergency kit. Make sure you are safe before assisting others. Listen to the radio or television for information from local officials and follow their instructions. Stay put until all is safe or until you are ordered to evacuate. Emergency Numbers: Bureau of Fire Protection: (02) 8426-0219, (02) 8426-0246, Philippine Red Cross: 143 or (02) 8527-8385 loc 185, Philippine National Police: 117 or (02) 8722-0650, MMDA: (02) 8824-6110 to 77",
-        "answer": "For Emergency Response Guide, follow the emergency instructions. For example, in case of Fire, Evacuate.",
+        "process_name": "Fire and Earthquake Emergency Response",
+        "content": "Fire Emergency (Action: Evacuate): Drop down to the floor and crawl low, under any smoke to your exit. Heavy smoke and poisonous gases collect first along the ceiling. If you cannot get to someone needing assistance, leave the home and call 9-1-1 or the fire department. Tell the emergency operator where the person is located. If you open a door, open it slowly. Be ready to shut it quickly if heavy smoke or fire is present. If you cannot get out, close the door and cover vents and cracks around doors with cloth or tape to keep smoke out. Earthquake Emergency (Action: Duck, Cover and Hold): Wherever you are, drop down to your hands and knees and hold on to something sturdy. If you are using a wheelchair or walker with a seat, make sure your wheels are locked and remain seated until the shaking stops. Cover your head and neck with your arms. If a sturdy table or desk is nearby, crawl underneath it for shelter. If no shelter is nearby, crawl next to an interior wall away from windows. If you are under a table or desk, hold on with one hand and be ready to move with it if it moves.",
+        "answer": "For fire, evacuate by crawling low under smoke toward the exit. For earthquake, duck, cover, and hold until the shaking stops.",
         "citation": "Campus Safety and Emergency Response, Emergency Response Guide",
         "steps": [
           "Fire: Evacuate. Drop down to the floor and crawl low, under any smoke to your exit.",
-          "Earthquake: Duck, Cover and Hold. Wherever you are, drop down to your hands and knees and hold on to something sturdy.",
-          "Eruption: Move to a Safe Location. Listen to the radio and news for civil defense advice and follow instructions.",
-          "Emergency: Contact Front Desk. Follow your emergency plan."
+          "Earthquake: Duck, Cover and Hold. Wherever you are, drop down to your hands and knees and hold on to something sturdy."
         ],
         "tags": [
           "safety",
           "emergency",
-          "emergency response guide"
+          "emergency response guide",
+          "fire",
+          "earthquake"
+        ]
+      },
+      {
+        "chunk_id": "safety_eruption_emergency_response",
+        "section_title": "Emergency Response Guide",
+        "process_name": "Eruption Emergency Response",
+        "content": "Eruption Emergency (Action: Move to a Safe Location): Listen to the radio and news for civil defense advice and follow instructions. If outside at the time of eruption, seek shelter in a car or a building. If caught in volcanic ashfalls, wear a dust mask or use a handkerchief or cloth over your nose and mouth. Stay indoors as volcanic ash is a health hazard, especially if you have respiratory difficulties such as asthma or bronchitis.",
+        "answer": "For eruption emergencies, move to a safe location, follow civil defense instructions, seek shelter, and protect your nose and mouth from ashfall.",
+        "citation": "Campus Safety and Emergency Response, Emergency Response Guide",
+        "steps": [
+          "Eruption: Move to a Safe Location. Listen to the radio and news for civil defense advice and follow instructions.",
+          "If caught in volcanic ashfall, wear a dust mask or use a handkerchief or cloth over your nose and mouth.",
+          "Stay indoors because volcanic ash is a health hazard."
+        ],
+        "tags": [
+          "safety",
+          "emergency",
+          "emergency response guide",
+          "eruption",
+          "ashfall"
+        ]
+      },
+      {
+        "chunk_id": "safety_general_emergency_numbers",
+        "section_title": "Emergency Response Guide",
+        "process_name": "Emergency Numbers",
+        "content": "Emergency Emergency (Action: Contact Front Desk): Follow your emergency plan. Get your emergency kit. Make sure you are safe before assisting others. Listen to the radio or television for information from local officials and follow their instructions. Stay put until all is safe or until you are ordered to evacuate. Emergency Numbers: Bureau of Fire Protection: (02) 8426-0219, (02) 8426-0246, Philippine Red Cross: 143 or (02) 8527-8385 loc 185, Philippine National Police: 117 or (02) 8722-0650, MMDA: (02) 8824-6110 to 77",
+        "answer": "For a general emergency, follow your emergency plan, get your emergency kit, make sure you are safe before assisting others, and follow local officials' instructions.",
+        "citation": "Campus Safety and Emergency Response, Emergency Response Guide",
+        "steps": [
+          "Emergency: Contact Front Desk. Follow your emergency plan.",
+          "Get your emergency kit.",
+          "Make sure you are safe before assisting others.",
+          "Follow information from local officials and stay put until all is safe or until you are ordered to evacuate."
+        ],
+        "tags": [
+          "safety",
+          "emergency",
+          "emergency response guide",
+          "emergency numbers",
+          "bureau of fire protection",
+          "philippine red cross",
+          "philippine national police",
+          "mmda"
         ]
       }
     ]
@@ -455,7 +499,7 @@
         "chunk_id": "policy_austerity_measures_in_the_campus_sec_0",
         "section_title": "Austerity Measures in the Campus - Electricity and Water",
         "process_name": "Electricity and Water",
-        "content": "Reference: Office Order No. 7 s. 2025. ACUs and other electrical office equipment should be energized from 8:00 AM to 4:00 PM only, except during the conduct of night classes and overtime services of non-teaching staff where they can be used up to 7:00 PM only. Airconditioning units must be maintained at low cool during lunch breaks (12:00-1:00). Digital aircons should set the unit at F2 (24). Electric fans, lights, ACUs and other similar loads should be shut off after classes and office hours. Use of TV sets, if there are any, are allowed only for viewing of news and for special broadcasts, e.g. Malacañang announcement, SONA, etc. Ovens and other cooking appliances should only be used to support classroom laboratory activities. Computers not in use are to be turned off. Playing computer games and social networking is strictly prohibited in all classrooms and offices. The use of floodlights in the campus grounds is allowed only for PE and other related classes or curricular/major activities approved by proper authorities. Access to offices, workshops, or laboratory rooms during Sundays, Holidays, and other days when there are no classes is not allowed, unless prior permission is sought from proper authorities. Staying overnight in the campus is not allowed unless authorized by concerned university officials. All leaking faucets and toilet flushes should be reported immediately and acted upon by the Maintenance Staff. Wasteful use of water must be discouraged. Official vehicle trips should be reduced through trip planning and passenger pooling to save on gasoline expenses. Use of electricity at the TUP Gymnasium will be limited to 5:30 PM to 7:30 PM with prior permission sought from proper authorities. I.T. Building Auditorium shall be used for official function only.",
+        "content": "Reference: Office Order No. 7 s. 2025. ACUs and other electrical office equipment should be energized from 8:00 AM to 4:00 PM only, except during the conduct of night classes and overtime services of non-teaching staff where they can be used up to 7:00 PM only. Airconditioning units must be maintained at low cool during lunch breaks (12:00-1:00). Digital aircons should set the unit at F2 (24). Electric fans, lights, ACUs and other similar loads should be shut off after classes and office hours. Use of TV sets, if there are any, are allowed only for viewing of news and for special broadcasts, e.g. Malacañang announcement, SONA, etc. Ovens and other cooking appliances should only be used to support classroom laboratory activities. Computers not in use are to be turned off. Playing computer games and social networking is strictly prohibited in all classrooms and offices. The use of floodlights in the campus grounds is allowed only for PE and other related classes or curricular/major activities approved by proper authorities. All leaking faucets and toilet flushes should be reported immediately and acted upon by the Maintenance Staff. Wasteful use of water must be discouraged.",
         "answer": "Regarding Electricity and Water under Austerity Measures in the Campus: ACUs and other electrical office equipment should be energized from 8:00 AM to 4:00 PM only, except during the conduct of night classes and overtime services of non-teaching staff where they can be used up to 7:00 PM only.",
         "citation": "Campus Policies, Electricity and Water",
         "steps": [
@@ -467,10 +511,26 @@
           "Computers not in use are to be turned off.",
           "Playing computer games and social networking is strictly prohibited in all classrooms and offices.",
           "The use of floodlights in the campus grounds is allowed only for PE and other related classes or curricular/major activities approved by proper authorities.",
+          "All leaking faucets and toilet flushes should be reported immediately and acted upon by the Maintenance Staff.",
+          "Wasteful use of water must be discouraged."
+        ],
+        "tags": [
+          "policy",
+          "guidelines",
+          "austerity measures in the campus",
+          "electricity and water"
+        ]
+      },
+      {
+        "chunk_id": "policy_austerity_measures_in_the_campus_sec_0_facilities",
+        "section_title": "Austerity Measures in the Campus - Electricity and Water",
+        "process_name": "Facilities, Overnight Stay, Vehicle Trips, and Venue Electricity",
+        "content": "Reference: Office Order No. 7 s. 2025. Access to offices, workshops, or laboratory rooms during Sundays, Holidays, and other days when there are no classes is not allowed, unless prior permission is sought from proper authorities. Staying overnight in the campus is not allowed unless authorized by concerned university officials. Official vehicle trips should be reduced through trip planning and passenger pooling to save on gasoline expenses. Use of electricity at the TUP Gymnasium will be limited to 5:30 PM to 7:30 PM with prior permission sought from proper authorities. I.T. Building Auditorium shall be used for official function only.",
+        "answer": "Under the campus austerity measures, access to rooms on no-class days, overnight stays, official vehicle trips, Gymnasium electricity use, and I.T. Building Auditorium use are restricted unless properly authorized.",
+        "citation": "Campus Policies, Electricity and Water",
+        "steps": [
           "Access to offices, workshops, or laboratory rooms during Sundays, Holidays, and other days when there are no classes is not allowed, unless prior permission is sought from proper authorities.",
           "Staying overnight in the campus is not allowed unless authorized by concerned university officials.",
-          "All leaking faucets and toilet flushes should be reported immediately and acted upon by the Maintenance Staff.",
-          "Wasteful use of water must be discouraged.",
           "Official vehicle trips should be reduced through trip planning and passenger pooling to save on gasoline expenses.",
           "Use of electricity at the TUP Gymnasium will be limited to 5:30 PM to 7:30 PM with prior permission sought from proper authorities.",
           "I.T. Building Auditorium shall be used for official function only."

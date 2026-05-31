@@ -5,6 +5,8 @@ import { buildSafeFtsQueries, tokenizeQuery } from "@/retrieval/queryNormalizer"
 import type { ChatContextTurn, SearchOptions } from "@/types/search";
 import { MAX_RECENT_QUESTIONS, STORAGE_KEYS } from "@/utils/constants";
 import type { StudentQuestionIntent } from "./studentChatTypes";
+import { clearChatFeedback } from "./chatFeedbackService";
+import { clearPendingChatRequest } from "./pendingChatRequestService";
 
 /** Returns the student's most recently asked questions from local storage. */
 export async function getRecentQuestions(): Promise<string[]> {
@@ -234,5 +236,10 @@ export async function clearConversationMemory(): Promise<void> {
 }
 
 export async function clearChatMemory(): Promise<void> {
-  await Promise.all([clearRecentQuestions(), clearConversationMemory()]);
+  await Promise.all([
+    clearRecentQuestions(),
+    clearConversationMemory(),
+    clearPendingChatRequest(),
+    clearChatFeedback()
+  ]);
 }

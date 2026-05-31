@@ -59,6 +59,16 @@ CREATE TABLE IF NOT EXISTS chunk_embedding_status (
   FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chunk_embedding_index (
+  chunk_id TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  dimension INTEGER NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (chunk_id, model_name),
+  FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS conversation_memory (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   question TEXT NOT NULL,
@@ -141,5 +151,6 @@ CREATE INDEX IF NOT EXISTS idx_chunks_office ON chunks(office);
 CREATE INDEX IF NOT EXISTS idx_chunks_category ON chunks(category);
 CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model_name ON chunk_embeddings(model_name);
 CREATE INDEX IF NOT EXISTS idx_chunk_embedding_status_model_name ON chunk_embedding_status(model_name);
+CREATE INDEX IF NOT EXISTS idx_chunk_embedding_index_model_name ON chunk_embedding_index(model_name);
 CREATE INDEX IF NOT EXISTS idx_conversation_memory_created_at ON conversation_memory(created_at);
 `;

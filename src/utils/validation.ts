@@ -3,6 +3,16 @@ import { z } from "zod";
 import type { ImportPreview, StructuredDocument, ValidationIssue, ValidationResult } from "@/types/document";
 
 const optionalTrimmedString = z.string().trim().optional();
+const requiredTrimmedString = z.string().trim().min(1);
+const isoDateString = requiredTrimmedString.regex(/^\d{4}-\d{2}-\d{2}$/, "Use ISO date format YYYY-MM-DD.");
+
+const MAX_IMPORT_DOCUMENTS = 50;
+const MAX_CHUNKS_PER_DOCUMENT = 200;
+const MAX_IMPORT_CHUNKS = 2_000;
+const MAX_IMPORT_JSON_CHARS = 5 * 1024 * 1024;
+const MAX_SOURCE_TEXT_LENGTH = 12_000;
+const MAX_ANSWER_LENGTH = 3_000;
+const MAX_METADATA_LENGTH = 500;
 
 const stringArraySchema = z
   .array(z.string().trim())
@@ -13,9 +23,9 @@ export const documentChunkSchema = z.object({
   chunk_id: z.string().trim().min(1, "chunk_id is required."),
   section_title: optionalTrimmedString,
   process_name: optionalTrimmedString,
-  content: z.string().trim().min(1, "content is required."),
-  answer: optionalTrimmedString,
-  citation: optionalTrimmedString,
+  content: z.string().trim().min(1, "content is required.").max(MAX_SOURCE_TEXT_LENGTH, `content must be ${MAX_SOURCE_TEXT_LENGTH} characters or less.`),
+  answer: z.string().trim().max(MAX_ANSWER_LENGTH, `answer must be ${MAX_ANSWER_LENGTH} characters or less.`).optional(),
+  citation: requiredTrimmedString.max(MAX_METADATA_LENGTH, `citation must be ${MAX_METADATA_LENGTH} characters or less.`),
   page_number: z.number().finite().int().positive().optional(),
   tags: stringArraySchema,
   synonyms: stringArraySchema,
@@ -33,13 +43,13 @@ export const structuredDocumentSchema = z.object({
   category: optionalTrimmedString,
   office: optionalTrimmedString,
   version: optionalTrimmedString,
-  last_updated: optionalTrimmedString,
-  authored_by: optionalTrimmedString,
-  source_url: optionalTrimmedString,
-  chunks: z.array(documentChunkSchema).min(1, "chunks must be a non-empty array.")
+  last_updated: isoDateString,
+  authored_by: requiredTrimmedString.max(MAX_METADATA_LENGTH, `authored_by must be ${MAX_METADATA_LENGTH} characters or less.`),
+  source_url: requiredTrimmedString.max(MAX_METADATA_LENGTH, `source_url must be ${MAX_METADATA_LENGTH} characters or less.`),
+  chunks: z.array(documentChunkSchema).min(1, "chunks must be a non-empty array.").max(MAX_CHUNKS_PER_DOCUMENT, `documents can include at most ${MAX_CHUNKS_PER_DOCUMENT} chunks.`)
 });
 
-export const structuredDocumentsSchema = z.array(structuredDocumentSchema);
+export const structuredDocumentsSchema = z.array(structuredDocumentSchema).max(MAX_IMPORT_DOCUMENTS, `import can include at most ${MAX_IMPORT_DOCUMENTS} documents.`);
 
 function issuePath(path: readonly PropertyKey[]): string {
   if (path.length === 0) {
@@ -98,6 +108,18 @@ function validateUniqueIds(documents: StructuredDocument[]): ValidationIssue[] {
   return issues;
 }
 
+function validateImportSize(documents: StructuredDocument[]): ValidationIssue[] {
+  const chunkCount = documents.reduce((total, document) => total + document.chunks.length, 0);
+  if (chunkCount > MAX_IMPORT_CHUNKS) {
+    return [{
+      path: "$",
+      message: `Import can include at most ${MAX_IMPORT_CHUNKS} chunks. Split larger updates into smaller batches.`
+    }];
+  }
+
+  return [];
+}
+
 export function validateStructuredDocuments(input: unknown): ValidationResult {
   const parsed = structuredDocumentsSchema.safeParse(input);
 
@@ -112,9 +134,9 @@ export function validateStructuredDocuments(input: unknown): ValidationResult {
   }
 
   const documents: StructuredDocument[] = parsed.data;
-  const duplicateIssues = validateUniqueIds(documents);
-  if (duplicateIssues.length > 0) {
-    return { ok: false, issues: duplicateIssues };
+  const issues = [...validateUniqueIds(documents), ...validateImportSize(documents)];
+  if (issues.length > 0) {
+    return { ok: false, issues };
   }
 
   return {
@@ -127,6 +149,9 @@ export function validateStructuredDocuments(input: unknown): ValidationResult {
 export function parseAndValidateDocuments(jsonText: string): ValidationResult {
   if (jsonText.trim().length === 0) {
     return { ok: false, issues: [{ path: "$", message: "Paste a JSON array before validating." }] };
+  }
+  if (jsonText.length > MAX_IMPORT_JSON_CHARS) {
+    return { ok: false, issues: [{ path: "$", message: "JSON import is too large. Split campus document updates into smaller files." }] };
   }
 
   try {

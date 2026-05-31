@@ -199,6 +199,7 @@ export interface LocalModelManifest {
   modelTier: LocalModelTier;
   chatTemplate?: ChatTemplateValidation;
   recommendedModelTier: LocalModelTier;
+  embeddingDimension?: number | null;
   importedAt: string;
   validatedAt: string;
   manifestPath: string;

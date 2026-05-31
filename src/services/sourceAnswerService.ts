@@ -344,6 +344,24 @@ function responseForNoReliableAnswer(
   };
 }
 
+function modeWithVectorFallback(mode: DeviceAIMode, reason: string): DeviceAIMode {
+  return {
+    ...mode,
+    provenance: "Retrieved directly from source",
+    retrieverStrategy: "fts5",
+    embeddingProviderId: null,
+    embeddingProviderName: null,
+    capabilities: {
+      ...mode.capabilities,
+      embeddings: false,
+      reranking: false,
+      unavailableReasons: [...mode.capabilities.unavailableReasons, reason],
+      notes: [...mode.capabilities.notes, reason]
+    },
+    fallbackReason: reason
+  };
+}
+
 async function runRetrieval(
   db: SQLiteDatabase,
   question: string,
@@ -386,18 +404,13 @@ async function runRetrieval(
       selectedMode,
       provenance: ftsResults.length > 0 ? "Retrieved with hybrid search" : "Retrieved with semantic search"
     };
-  } catch (error) {
-    disableAIProviderForSession(embeddingProvider.id, error);
-    if (attempt < MAX_PROVIDER_RETRIES) {
-      const fallbackSelection = await getSelectedAIMode();
-      return runRetrieval(db, question, options, fallbackSelection, attempt + 1);
-    }
-
+  } catch {
+    const reason = "Vector retrieval failed; using FTS5 for this answer.";
     return {
       results: ftsResults,
       selectedMode: {
-        mode: forceFallbackModeForResponse(mode, "Vector retrieval failed; using FTS5 for this answer."),
-        summaryProvider: null,
+        mode: modeWithVectorFallback(mode, reason),
+        summaryProvider: selectedMode.summaryProvider,
         embeddingProvider: null
       },
       provenance: "Retrieved directly from source"

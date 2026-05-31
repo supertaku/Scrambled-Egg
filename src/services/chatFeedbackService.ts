@@ -95,3 +95,11 @@ export async function saveChatFeedback(
   await feedbackWriteQueue;
   return entry;
 }
+
+export async function clearChatFeedback(): Promise<void> {
+  feedbackWriteQueue = feedbackWriteQueue
+    .catch(() => undefined)
+    .then(() => AsyncStorage.removeItem(STORAGE_KEYS.CHAT_FEEDBACK));
+
+  await feedbackWriteQueue;
+}

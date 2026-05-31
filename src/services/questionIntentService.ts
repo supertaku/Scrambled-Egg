@@ -51,11 +51,16 @@ const GENERAL_ADVICE_PATTERNS = [
 const SAFETY_PATTERNS: Array<{ category: SafetyCategory; patterns: RegExp[]; reason: string }> = [
   {
     category: "self_harm",
-    reason: "Self-harm method request",
+    reason: "Self-harm or suicidal ideation request",
     patterns: [
       /\b(kill myself|suicide method|how to suicide|self harm method|painless death)\b/i,
+      /\b(i\s*(want|wanna|need)\s*to\s*(die|kill myself|end my life)|i'?m\s*suicidal|im\s*suicidal)\b/i,
+      /\b(i\s*do\s*not\s*want\s*to\s*live|i\s*don't\s*want\s*to\s*live|i\s*cannot\s*keep\s*living|i\s*can't\s*keep\s*living)\b/i,
+      /\b(no\s*reason\s*to\s*live|better\s*off\s*dead|wish\s*i\s*was\s*dead|wish\s*i\s*were\s*dead)\b/i,
       /\b(how (do|can) i)\b.*\b(hurt myself|end my life)\b/i,
-      /\b(paano|pano)\b.*\b(saktan ang sarili|magpakamatay|tapusin buhay)\b/i
+      /\b(paano|pano)\b.*\b(saktan ang sarili|magpakamatay|tapusin buhay)\b/i,
+      /\b(gusto ko|nais ko|balak ko)\b.*\b(mamatay|magpakamatay|mawala|tapusin buhay)\b/i,
+      /\b(ayoko na mabuhay|hindi ko na kaya mabuhay|di ko na kaya mabuhay)\b/i
     ]
   },
   {
@@ -127,8 +132,23 @@ const SAFETY_PATTERNS: Array<{ category: SafetyCategory; patterns: RegExp[]; rea
 const SEMANTIC_SAFETY_CONCEPTS: Array<{ category: SafetyCategory; terms: string[]; reason: string }> = [
   {
     category: "self_harm",
-    reason: "Self-harm method request",
-    terms: ["kms", "unalive myself", "end it all", "hurt myself", "magpakamatay", "saktan sarili"]
+    reason: "Self-harm or suicidal ideation request",
+    terms: [
+      "kms",
+      "unalive myself",
+      "end it all",
+      "hurt myself",
+      "want to die",
+      "suicidal",
+      "dont want to live",
+      "do not want to live",
+      "better off dead",
+      "wish i was dead",
+      "magpakamatay",
+      "mamatay",
+      "ayoko na mabuhay",
+      "saktan sarili"
+    ]
   },
   {
     category: "violence",

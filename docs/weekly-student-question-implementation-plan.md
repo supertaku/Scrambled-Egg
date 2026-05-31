@@ -10,29 +10,37 @@
 | Recommended backend | Supabase Free Plan for v1 |
 | Student identity model | Anonymous Supabase Auth sessions; no visible sign-in/sign-up experience |
 | Administrator workflow for v1 | Supabase Dashboard moderation and scheduling; no in-app admin publishing |
-| Publication model | Two approved answers per display day for six days |
-| Content deletion policy | Purge answer text after the final display slot, except content under an unresolved moderation hold |
+| Question modes | Moderated free-text sharing and structured multiple-choice poll |
+| Publication model | Text mode shows two approved answers per display day for six days; poll mode shows aggregate percentage results on Home during the six display days |
+| Content deletion policy | Purge answer text and individual poll votes after the final display period, except text content under an unresolved moderation hold |
 | Source verification date | May 26, 2026 |
 
 ## 1. Executive Summary
 
-Weekly Question is a new online-only social feature in which an administrator posts a simple weekly prompt and students anonymously submit short written answers. After one submission day, selected answers are displayed to the student audience at two scheduled times per day for six display days.
+Weekly Question is a new online-only social feature in which an administrator posts one simple weekly prompt and students respond anonymously. It supports two question modes:
+
+| Mode | Student Response | Public Result |
+| --- | --- | --- |
+| `open_text` | A short written answer | After one submission day, selected moderated answers are displayed at two scheduled times per day for six display days |
+| `multiple_choice_poll` | One administrator-defined choice | After voting closes, all valid votes are aggregated into percentages and presented as a visual graph on the Haki Home screen during the six display days |
 
 Example prompts:
 
-- "What is the best advice given to you by someone?"
-- "What do you like more, cats or dogs?"
+- Open text: "What is the best advice given to you by someone?"
+- Multiple-choice poll: "Which do you like more?" with choices `Cat`, `Dog`, and `Other`.
 
 This feature is feasible in the current Haki project because it can be added as an independent online module without changing the local AI system, official campus retrieval behavior, or offline availability of existing features.
 
 The implementation must treat student answers as user-generated content (UGC), even when questions are casual and expected responses are harmless. Students can type text that contains harassment, personal information, offensive material, or misinformation regardless of the question. For that reason:
 
-- Raw submissions must never be shown publicly.
+- Raw text submissions and individual poll votes must never be shown publicly.
 - Random display may operate only on administrator-approved answers.
 - Reporting, removal, and abusive-user blocking controls are required.
 - Student answers must never become Haki knowledge sources or official campus answers.
 
-The recommended v1 implementation uses Supabase because the feature is naturally relational: one cycle has one question, many submissions, moderation decisions, up to twelve publication slots, and optional reports. Supabase offers official Expo React Native integration, anonymous authentication, Row Level Security (RLS), dashboard-based moderation, and documented scheduling support through Supabase Cron.
+Multiple-choice polls substantially reduce content-moderation exposure because students do not type public content; they choose among options written by the administrator. Poll results still require privacy safeguards: individual votes must remain private, and the graph must not be published when too few students participated.
+
+The recommended v1 implementation uses Supabase because the feature is naturally relational: one cycle has one question, text submissions or poll votes, moderation decisions or aggregate results, publication slots, and optional reports. Supabase offers official Expo React Native integration, anonymous authentication, Row Level Security (RLS), dashboard-based moderation, and documented scheduling support through Supabase Cron.
 
 ## 2. Goals And Non-Goals
 
@@ -42,14 +50,16 @@ The implementation must:
 
 1. Provide a distinct Weekly Question experience for Haki users.
 2. Allow students to participate without creating visible accounts or submitting identity fields.
-3. Accept one short text response from an anonymous app user for each weekly question.
-4. Hold all submissions for moderation before they can be displayed.
-5. Support administrator manual selection or random selection from approved content only.
-6. Display two answers per day for six days, for up to twelve displayed answers per cycle.
-7. Keep publication scheduling consistent in Philippine time.
-8. Provide controls to report published content and suppress content when necessary.
-9. Purge student answer text after each completed weekly display cycle, subject to unresolved-report holds.
-10. Operate without affecting Haki's offline assistant behavior or authoritative campus-content rules.
+3. Support either a moderated short-text question or a structured multiple-choice poll for each cycle.
+4. Accept one response from an anonymous app user per weekly question.
+5. Hold all free-text submissions for moderation before they can be displayed.
+6. Support administrator manual selection or random selection from approved free-text content only.
+7. Display two text answers per day for six days, for up to twelve displayed answers per open-text cycle.
+8. Aggregate poll votes into percentages and show a visual Home screen result card for qualifying multiple-choice cycles.
+9. Keep publication scheduling consistent in Philippine time.
+10. Provide controls to report published text content and report an inappropriate administrator-created prompt or poll.
+11. Purge student answer text and individual poll votes after each completed weekly display cycle, subject to unresolved text-report holds.
+12. Operate without affecting Haki's offline assistant behavior or authoritative campus-content rules.
 
 ### 2.2 Non-Goals For Version One
 
@@ -57,6 +67,7 @@ Version one must not include:
 
 - Replies, comments, reactions, likes, follower features, direct messages, or student profiles.
 - Student images, attachments, hyperlinks, audio, video, or rich media.
+- Student-entered text attached to a multiple-choice poll, including typed "Other" responses.
 - Public browsing of past answers or an archive of old cycles.
 - Verification that a participant is an enrolled TUP student.
 - Push notifications announcing newly displayed answers.
@@ -83,7 +94,7 @@ Weekly Question must be implemented as a separate feature domain:
 
 | Domain | Ownership |
 | --- | --- |
-| Weekly prompts, submissions, moderation, scheduled displays, reports | New remote Weekly Question module |
+| Weekly prompts, text submissions, poll votes, aggregate poll results, moderation, scheduled displays, reports | New remote Weekly Question module |
 | Existing Tips & Tricks cards | Existing local tips feature; unchanged |
 | Official campus documents and retrieval | Existing local source data; unchanged |
 | Haki chat, local model and answer orchestration | Existing AI services; unchanged |
@@ -99,7 +110,7 @@ No Weekly Question data may be:
 - described to students as verified university information;
 - used to answer campus procedural questions.
 
-The screen must visually label displayed content as anonymous student responses, not university guidance.
+The Weekly Question screen must visually label displayed text content as anonymous student responses, not university guidance. The Home screen graph must label percentages as anonymous student poll results, not campus statistics or an official university survey.
 
 ## 4. Product Experience
 
@@ -109,7 +120,8 @@ Version one should introduce a new route rather than combining the feature with 
 
 Recommended entry model:
 
-- Create a dedicated Weekly Question screen reachable from a card or action on Home.
+- Create a dedicated Weekly Question screen reachable from a card or action on Home for submission, response display and full poll-result context.
+- For a published `multiple_choice_poll` cycle, add a compact graph card directly to the Home dashboard showing the aggregate percentages and linking to Weekly Question.
 - Keep the existing five primary tabs unchanged for v1 to avoid overcrowding the bottom navigation.
 - A future product decision may promote Weekly Question to a tab if engagement justifies it.
 
@@ -120,15 +132,17 @@ Recommended user-facing feature name:
 
 ### 4.2 Weekly Cycle
 
-Each weekly cycle consists of one submission period and six display days:
+Each weekly cycle has exactly one question mode selected before publication: `open_text` or `multiple_choice_poll`. The mode cannot change after submissions open.
 
-| Stage | Duration | Student Experience | Admin Experience |
-| --- | --- | --- | --- |
-| Draft | Before publishing | No new question shown | Admin creates prompt and dates |
-| Submission open | One full day | Students see the prompt and submit once | Admin may observe submission count only |
-| Review and scheduling | After close, before first display slot | Submissions closed; display start message shown | Admin approves/rejects and schedules answers |
-| Display active | Six days | Students see the current displayed answer | Admin handles reports/removal |
-| Cycle closed | After last display slot | No prior answer content exposed | Purge runs, subject to report holds |
+Each weekly cycle consists of one response period and six display days:
+
+| Stage | Duration | Open-Text Student Experience | Poll Student Experience | Admin Experience |
+| --- | --- | --- | --- | --- |
+| Draft | Before publishing | No new question shown | No new poll shown | Admin creates prompt, mode, dates and any options |
+| Submission open | One full day | Students see the prompt and submit text once | Students select one administrator-defined option once; results are hidden while voting is open | Admin may observe response count only |
+| Review and scheduling | After close, before first display period | Submissions closed; display start message shown | Votes closed; aggregate result is generated if the minimum response threshold is reached | Admin approves/rejects text and schedules answers, or confirms the poll-result display |
+| Display active | Six days | Students see the current displayed answer in Weekly Question | Students see the aggregate graph on Home and in Weekly Question | Admin handles reports/removal |
+| Cycle closed | After final display period | No prior answer content exposed | Graph is no longer public | Purge runs, subject to text-report holds |
 
 ### 4.3 Default Calendar Template
 
@@ -138,14 +152,14 @@ The administrative default template is:
 
 | Day | Phase |
 | --- | --- |
-| Monday, 12:00 AM to 11:59 PM Asia/Manila | Submissions open |
+| Monday, 12:00 AM to 11:59 PM Asia/Manila | Text submissions or poll voting open |
 | Tuesday through Sunday | Six display days |
 
 The administrator may choose a different start date before publishing the question. Once submissions open, the schedule must not be edited in a way that shortens already communicated participation or display periods.
 
 ### 4.4 Display Slots
 
-Each display day has two answer slots:
+For an `open_text` cycle, each display day has two answer slots:
 
 | Slot | Local Display Period |
 | --- | --- |
@@ -154,13 +168,20 @@ Each display day has two answer slots:
 
 Outside those periods, the feature displays the weekly question and an appropriate status, but does not expose a scheduled answer unless the product later explicitly adds an overnight persistence behavior.
 
+For a `multiple_choice_poll` cycle:
+
+- There are no individual-answer slots.
+- The aggregate result graph is public on Home and the Weekly Question screen throughout the six display days.
+- Public poll results are generated only after voting closes, so early results do not influence later responses.
+- The graph is removed from public access after the sixth display day ends.
+
 Technical time rule:
 
 - User-facing scheduling is interpreted in `Asia/Manila`.
 - Persist schedule timestamps as UTC `timestamptz` values.
-- Calculate the twelve slots when a cycle is scheduled, rather than calculating them differently on individual clients.
+- For text cycles, calculate the twelve slots when a cycle is scheduled; for poll cycles, calculate one six-day graph visibility period. Do not calculate publication windows differently on individual clients.
 
-### 4.5 Insufficient Approved Answers
+### 4.5 Insufficient Approved Answers For Open-Text Questions
 
 A normal full cycle requires twelve approved answers. A cycle may receive fewer than twelve safe answers.
 
@@ -173,11 +194,40 @@ Version one behavior is:
 
 This prioritizes trust and predictable moderation over artificially filling all slots.
 
+### 4.6 Poll Options And Percentage Results
+
+A `multiple_choice_poll` is a structured-response question, not a free-text response question.
+
+Rules for options:
+
+- The administrator supplies between two and six options before publishing the cycle.
+- Each option label is plain text, limited to 40 characters, and reviewed together with the prompt.
+- If an `Other` choice is appropriate, it is an administrator-defined selectable option only; v1 does not permit a student to type an explanation.
+- Options become immutable once voting opens.
+- Each anonymous identity may select exactly one option for the cycle.
+
+Public percentage-result rules:
+
+- Keep individual votes private at all times.
+- Do not expose live totals while voting is open.
+- Publish a graph only when at least five valid votes were received; this is a v1 privacy safeguard to avoid disclosing a very small group's individual preferences.
+- If fewer than five valid votes are received, display `Not enough responses to show results this week.` rather than a graph.
+- Generate counts and graph percentages on the backend after the voting window closes.
+- Display each option with its label, percentage and a proportional visual bar.
+- Show the total number of valid responses with the graph, since the context of a percentage matters.
+
+Percentage calculation:
+
+1. Count valid votes for each option.
+2. Divide each option count by total valid votes.
+3. Convert results to whole-number display percentages using the largest-remainder method so visible percentages add to exactly 100%.
+4. Preserve server-generated counts and percentage values for the six-day public display period; the mobile app must not recompute them from raw votes.
+
 ## 5. Selection Modes
 
 ### 5.1 Supported Modes
 
-Each cycle has one selection mode:
+Selection modes apply only when `question_mode = open_text`. Each open-text cycle has one selection mode:
 
 | Mode | Description | Required Control |
 | --- | --- | --- |
@@ -211,11 +261,24 @@ Workflow:
 
 The randomness is for content variety only; it is not used to make a decision about a student or award any benefit. No specialized fairness algorithm is required in v1.
 
+### 5.4 Multiple-Choice Poll Publication
+
+A `multiple_choice_poll` cycle does not use `manual` or `random_approved` answer selection because no individual response is published.
+
+Workflow:
+
+1. Administrator creates and reviews a prompt and two to six fixed options.
+2. Students privately select one option during the response window.
+3. After voting closes, the backend counts valid votes and applies the five-response publication threshold.
+4. If eligible, the backend creates a fixed aggregate result snapshot for public display.
+5. The Home screen graph and Weekly Question detail screen read only that snapshot during the six display days.
+6. After the display period ends, individual votes and public result snapshot values are purged under the retention policy.
+
 ## 6. Safety, UGC And Privacy Requirements
 
 ### 6.1 Why Moderation Still Applies
 
-Simple prompts lower expected risk but do not eliminate open-text risk. A participant can submit:
+Simple open-text prompts lower expected risk but do not eliminate risk. A participant can submit:
 
 - identifying personal information;
 - harassment or insults;
@@ -224,21 +287,33 @@ Simple prompts lower expected risk but do not eliminate open-text risk. A partic
 - accusations about real people;
 - misleading claims presented as advice.
 
-This is UGC when it becomes visible to another user. Apple App Review Guideline 1.2 and the Google Play UGC policy therefore apply if the app is distributed through those stores.
+Open-text answers are UGC when they become visible to another user. Apple App Review Guideline 1.2 and the Google Play UGC policy therefore apply if the app is distributed through those stores.
 
-### 6.2 Student Submission Policy
+For multiple-choice polls, students do not submit public text; the administrator controls every visible option label and only aggregate results are displayed. Poll prompts and options still require administrator review before publication, a reporting path for inappropriate visible material, and private treatment of individual votes.
 
-Before the first submission for a question, the student must accept a concise content policy and publication notice. Acceptance is recorded per anonymous session and policy version.
+### 6.2 Student Response Policy
 
-Required policy points:
+Before the first response to a question, the student must accept a concise participation and privacy notice. Acceptance is recorded per anonymous session and policy version.
 
-- Responses may be displayed anonymously to other students if selected.
+Required points for all modes:
+
+- Participation is anonymous in the interface, but an internal anonymous account identifier is used to limit duplicate participation and respond to abuse.
+- Submitted data is used only for operating the Weekly Question feature, moderation where applicable and temporary public presentation.
+- Data is deleted after the completed display cycle except where temporarily retained to resolve a report or safety issue.
+
+Additional points for open-text mode:
+
+- Written responses may be displayed anonymously to other students if selected.
 - Do not submit your name, student number, class/section, contact details, account handle, or location.
 - Do not identify, accuse, insult, threaten, or reveal information about another person.
 - Do not submit sexual, violent, discriminatory, illegal, or promotional content.
 - Answers are moderated and may be rejected, removed, or reported.
 - Haki may block abusive anonymous participation.
-- Submitted text is deleted after the completed display cycle unless it is temporarily retained to resolve a report or safety issue.
+
+Additional points for poll mode:
+
+- The selected option is counted privately and displayed only as part of an aggregate percentage result when enough students participate.
+- Individual selections are not shown to students or tied to a public identity.
 
 ### 6.3 Prompt Safety Rules
 
@@ -251,6 +326,12 @@ Allowed prompt characteristics:
 - positive college-life or hobby discussion;
 - no need to name people, courses, instructors, offices, or incidents.
 
+Additional multiple-choice prompt rules:
+
+- Every visible choice is authored or selected by the administrator.
+- Polls ask low-risk preferences or opinions, not protected, intimate or sensitive characteristics.
+- `Other` may be included as a fixed option, but it must not open a free-text field in v1.
+
 Prompts to avoid:
 
 - requests to name a best or worst instructor, classmate, office, organization, or employee;
@@ -261,7 +342,7 @@ Prompts to avoid:
 
 ### 6.4 Reporting And Blocking
 
-Displayed answers must provide a report action while they are visible.
+Displayed open-text answers must provide a report action while they are visible. A displayed poll graph must provide a report path for an inappropriate administrator-authored prompt or option; it does not report an individual student's vote.
 
 A report record captures:
 
@@ -279,6 +360,8 @@ Suggested report categories:
 - Offensive or sexual content
 - Spam or advertising
 - Other safety concern
+
+For a poll graph report, capture the cycle identifier rather than a submission identifier, and provide categories appropriate to the prompt/options, such as inappropriate question, offensive choice label, or other concern.
 
 Blocking policy:
 
@@ -300,9 +383,11 @@ Under the Philippine Data Privacy Act of 2012:
 Implementation requirements:
 
 - Provide a privacy notice before submission.
-- Collect only the text, anonymous technical identity, required moderation fields, and operational timestamps.
+- For open-text cycles, collect only the answer text, anonymous technical identity, required moderation fields and operational timestamps.
+- For poll cycles, collect only the selected option identifier, anonymous technical identity and operational timestamps; do not allow explanatory text.
+- Expose poll choices publicly only as aggregate results meeting the minimum response threshold.
 - Do not request student number, full name, email, profile, course, year level, or demographic information.
-- Document the purpose: moderation and temporary anonymous public display of selected responses.
+- Document the purpose: moderation and temporary anonymous public display of selected text responses or qualifying aggregate poll results.
 - Provide moderation/contact information for privacy or removal requests.
 - Delete content according to the retention policy in Section 12.
 
@@ -321,7 +406,7 @@ Reasons:
 | Expo mobile client integration | Official Expo React Native quickstart documents `@supabase/supabase-js` integration |
 | No visible student accounts | Anonymous Sign-Ins provide an authenticated anonymous user |
 | Restrict private submissions | PostgreSQL RLS controls row-level access |
-| Structured moderation and slots | PostgreSQL tables naturally represent cycles, submissions, reports and slots |
+| Structured moderation, votes and results | PostgreSQL tables naturally represent cycles, text submissions, private poll votes, aggregate result snapshots, reports and slots |
 | Initial admin operations | Supabase Dashboard and SQL Editor avoid insecure app-side admin authority |
 | Purge automation | Supabase Cron can schedule SQL/database-function jobs |
 | Pilot free tier | Free Plan documentation lists two active free projects, 500 MB database per project, 50,000 MAU and 5 GB egress |
@@ -358,9 +443,9 @@ On first use of Weekly Question:
 2. The app restores an existing anonymous auth session if available.
 3. If no session exists, the app calls Supabase anonymous sign-in.
 4. The app persists the session using the official Expo-supported session storage approach.
-5. The app uses the authenticated anonymous user ID only for submission ownership, reports, limits, and blocking.
+5. The app uses the authenticated anonymous user ID only for response ownership, reports, limits, and blocking.
 
-The UI does not display sign-up/sign-in terminology. It can state: `Participation is anonymous; do not include identifying details in your answer.`
+The UI does not display sign-up/sign-in terminology. For text mode it can state: `Participation is anonymous; do not include identifying details in your answer.` For poll mode it can state: `Your selection is private and appears only in aggregate results.`
 
 ### 8.3 Anti-Abuse Controls
 
@@ -368,20 +453,20 @@ Supabase documentation states that anonymous sign-ins can be abused, recommends 
 
 Version one release gating requirement:
 
-- Validate a supported anti-bot flow for the Expo native client before enabling public anonymous submission.
+- Validate a supported anti-bot flow for the Expo native client before enabling public anonymous responses.
 
 If CAPTCHA or Turnstile integration is not reliable in the mobile app:
 
-- do not launch open public submissions solely protected by RLS;
+- do not launch open public responses solely protected by RLS;
 - evaluate a protected server-side submission endpoint with rate limiting, or use Firebase App Check as part of a revised backend decision.
 
 Database safeguards that remain required regardless of CAPTCHA:
 
-- one submission per anonymous identity per question;
-- maximum answer length;
+- one response per anonymous identity per question, implemented as one text submission or one poll vote according to the cycle mode;
+- maximum answer length for text questions and valid-option enforcement for polls;
 - blocked-author check;
 - open-submission-window check;
-- no student reads of raw submissions;
+- no student reads of raw submissions or individual poll votes;
 - no student updates to moderation fields;
 - rate monitoring and a kill switch that can close submissions.
 
@@ -390,10 +475,12 @@ Database safeguards that remain required regardless of CAPTCHA:
 Version one admin work occurs in Supabase Dashboard:
 
 - create and publish questions;
-- monitor submission counts;
-- review raw responses;
+- define and review poll options when the question mode requires them;
+- monitor response counts;
+- review raw text responses;
 - mark responses approved or rejected;
 - populate display slots manually or invoke random-approved assignment;
+- publish or suppress eligible aggregate poll-result graphs;
 - review reports;
 - remove displayed content;
 - block abusive anonymous identities;
@@ -406,7 +493,7 @@ The current Haki `AdminGate` and local PIN must not authorize any remote write a
 ### 9.1 General Rules
 
 - Store remote feature data only in Supabase.
-- Do not synchronize raw submission bodies into Haki's local SQLite database.
+- Do not synchronize raw text submission bodies or individual poll votes into Haki's local SQLite database.
 - Use UUID primary keys generated by the backend.
 - Use `timestamptz` for all stored timestamps.
 - Store `Asia/Manila` as the cycle display timezone for user-facing interpretation.
@@ -420,9 +507,11 @@ The schema must constrain values equivalent to:
 | Entity | Values |
 | --- | --- |
 | Cycle status | `draft`, `submissions_open`, `reviewing`, `display_active`, `display_complete`, `purged`, `cancelled` |
-| Selection mode | `manual`, `random_approved` |
+| Question mode | `open_text`, `multiple_choice_poll` |
+| Selection mode | `manual`, `random_approved` for `open_text` cycles; null for polls |
 | Submission status | `pending`, `approved`, `rejected`, `scheduled`, `removed`, `held_for_report` |
 | Slot status | `empty`, `scheduled`, `removed`, `expired`, `purged` |
+| Poll result status | `pending`, `published`, `below_threshold`, `removed`, `purged` |
 | Report status | `open`, `reviewed`, `actioned`, `dismissed` |
 | Block status | `active`, `expired`, `revoked` |
 
@@ -434,13 +523,15 @@ Purpose: Store one prompt and the schedule/lifecycle for a weekly feature cycle.
 | --- | --- | --- |
 | `id` | UUID primary key | Cycle identifier |
 | `prompt` | Text, required | Question displayed to students |
+| `question_mode` | Constrained text | `open_text` or `multiple_choice_poll` |
 | `status` | Constrained text | Lifecycle state |
-| `selection_mode` | Constrained text | Manual or random-approved scheduling |
+| `selection_mode` | Constrained text, nullable | Manual or random-approved scheduling for text questions only |
 | `display_timezone` | Text, required | Set to `Asia/Manila` in v1 |
 | `submissions_open_at` | Timestamp with timezone | Beginning of submission access |
 | `submissions_close_at` | Timestamp with timezone | End of submission access |
 | `display_start_date_local` | Date | First of six display days for admin readability |
-| `submission_character_limit` | Integer | Set by configuration; recommended v1 default: 280 |
+| `submission_character_limit` | Integer, nullable | Set for text mode; recommended v1 default: 280 |
+| `poll_minimum_public_responses` | Integer, nullable | Set to 5 for poll mode in v1 |
 | `policy_version` | Text | Submission policy accepted for this cycle |
 | `created_at` | Timestamp with timezone | Audit timestamp |
 | `published_at` | Timestamp with timezone, nullable | Time prompt became available |
@@ -450,6 +541,7 @@ Purpose: Store one prompt and the schedule/lifecycle for a weekly feature cycle.
 Validation rules:
 
 - Prompt must be non-empty and within an admin-defined maximum length.
+- A text cycle requires `selection_mode` and a character limit; a poll cycle requires null `selection_mode`, at least two active options and the minimum response threshold.
 - Submission close time must be after submission open time.
 - Display must begin after submission close time.
 - Once `submissions_open` begins, the prompt and policy version are immutable.
@@ -457,7 +549,7 @@ Validation rules:
 
 ### 9.4 `weekly_submissions`
 
-Purpose: Temporarily store student answers and moderation status.
+Purpose: Temporarily store open-text student answers and moderation status. This table is used only when `question_mode = open_text`.
 
 | Field | Type | Purpose |
 | --- | --- | --- |
@@ -480,9 +572,73 @@ Constraints:
 
 The one-answer rule is device/session-based and must not be represented as verified one-person or one-student enforcement.
 
-### 9.5 `weekly_display_slots`
+### 9.5 `weekly_poll_options`
 
-Purpose: Represent twelve potential public display periods for each cycle.
+Purpose: Store administrator-defined options for a `multiple_choice_poll` cycle.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `id` | UUID primary key | Option identifier |
+| `cycle_id` | UUID foreign key | Parent poll cycle |
+| `label` | Text, required | Public option label, such as `Cat`, `Dog`, or `Other` |
+| `display_order` | Integer | Stable graph and selection order |
+| `created_at` | Timestamp with timezone | Audit timestamp |
+
+Constraints:
+
+- Each poll cycle has between two and six options.
+- Labels are unique within a cycle and are limited to 40 characters.
+- Students cannot create or alter options.
+- Options are immutable after the cycle starts accepting votes.
+
+### 9.6 `weekly_poll_votes`
+
+Purpose: Temporarily store individual private choices for a `multiple_choice_poll` cycle.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `id` | UUID primary key | Vote identifier |
+| `cycle_id` | UUID foreign key | Parent poll cycle |
+| `option_id` | UUID foreign key | Chosen option within the same cycle |
+| `voter_user_id` | UUID, required | Anonymous Supabase Auth user identifier |
+| `submitted_at` | Timestamp with timezone | Vote time |
+
+Constraints:
+
+- Unique `(cycle_id, voter_user_id)` enforces one vote per anonymous identity per poll.
+- `option_id` must belong to `cycle_id`.
+- Insert is permitted only during the cycle response window.
+- Student clients cannot read, update or delete individual votes after insertion.
+- Votes do not include free text or a moderation status.
+
+### 9.7 `weekly_poll_results`
+
+Purpose: Store a public aggregate snapshot after poll voting closes and before individual votes are purged.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `id` | UUID primary key | Aggregate result record |
+| `cycle_id` | UUID foreign key | Parent poll cycle |
+| `option_id` | UUID foreign key | Related public option |
+| `vote_count` | Integer | Number of valid votes for this option |
+| `display_percentage` | Integer | Server-allocated percentage from 0 through 100 |
+| `total_vote_count` | Integer | Total valid responses for the poll |
+| `status` | Constrained text | Publication/removal/purge state |
+| `calculated_at` | Timestamp with timezone | Snapshot time |
+| `visible_from` | Timestamp with timezone | Graph publication start |
+| `visible_until` | Timestamp with timezone | Graph publication end |
+
+Rules:
+
+- Generate results after voting closes; do not publish live totals.
+- Result rows become public only if `total_vote_count >= 5`.
+- `display_percentage` values for a public cycle must add to exactly 100 using the server-side largest-remainder calculation.
+- Public results must never include `voter_user_id` or a join path available to student clients.
+- If the threshold is not reached, store only non-public status/operational evidence needed to render the below-threshold state.
+
+### 9.8 `weekly_display_slots`
+
+Purpose: Represent twelve potential public display periods for each `open_text` cycle.
 
 | Field | Type | Purpose |
 | --- | --- | --- |
@@ -505,15 +661,16 @@ Rules:
 - Public reads must expose an answer only when the slot is currently visible and not removed.
 - Slot metadata may remain after purge for count and operational evidence, but it must not preserve answer text or author identity.
 
-### 9.6 `weekly_reports`
+### 9.9 `weekly_reports`
 
 Purpose: Capture student reports of displayed content.
 
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `id` | UUID primary key | Report identifier |
-| `slot_id` | UUID foreign key | Reported display slot |
-| `submission_id` | UUID foreign key | Content under review |
+| `cycle_id` | UUID foreign key | Related question cycle |
+| `slot_id` | UUID foreign key, nullable | Reported open-text display slot |
+| `submission_id` | UUID foreign key, nullable | Open-text content under review |
 | `reporter_user_id` | UUID | Anonymous reporting user |
 | `reason` | Constrained text | Category selected by reporter |
 | `note` | Text, nullable | Strictly length-limited optional context |
@@ -523,12 +680,13 @@ Purpose: Capture student reports of displayed content.
 
 Rules:
 
-- One report per `(slot_id, reporter_user_id)`.
-- A new open report automatically places the associated submission under moderation hold until resolved.
+- Open-text reports are unique per `(slot_id, reporter_user_id)`; poll prompt/graph reports are unique per `(cycle_id, reporter_user_id)`.
+- A new open report about an open-text answer automatically places the associated submission under moderation hold until resolved.
+- A new poll report may suppress the aggregate graph after administrator review, but does not create a hold on any individual vote because no student-authored text is displayed.
 - The report insert response must not disclose the reported author's identifier.
 - Once a report is resolved and the content no longer needs retention, the related answer can be purged.
 
-### 9.7 `weekly_blocked_authors`
+### 9.10 `weekly_blocked_authors`
 
 Purpose: Block repeated abusive anonymous identities without retaining their answers.
 
@@ -543,19 +701,20 @@ Purpose: Block repeated abusive anonymous identities without retaining their ans
 Rules:
 
 - Do not store answer content in the blocked-author table.
-- Submissions from an active blocked identity are rejected by backend policy.
+- Text submissions and poll votes from an active blocked identity are rejected by backend policy.
 - If a student changes anonymous identity, the block may be evaded; this limitation must be accepted for v1 or addressed through stronger anti-abuse measures later.
 
-### 9.8 `weekly_cycle_metrics`
+### 9.11 `weekly_cycle_metrics`
 
 Purpose: Retain non-content operational statistics after answer content is deleted.
 
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `cycle_id` | UUID primary key | Cycle reference |
-| `submission_count` | Integer | Total submitted responses |
-| `approved_count` | Integer | Approved response count |
-| `displayed_count` | Integer | Published slot count |
+| `response_count` | Integer | Total text submissions or poll votes received |
+| `approved_count` | Integer, nullable | Approved text response count; null for poll cycles |
+| `displayed_count` | Integer, nullable | Published text slot count; null for poll cycles |
+| `poll_result_published` | Boolean | Whether a qualifying aggregate graph was shown |
 | `report_count` | Integer | Count of reports |
 | `purge_completed_at` | Timestamp with timezone | Deletion confirmation |
 
@@ -569,9 +728,10 @@ The mobile app needs only limited public read capabilities:
 
 | Operation | Returned Data |
 | --- | --- |
-| Fetch current cycle state | Prompt, submission status/window, display status, policy version and character limit |
-| Fetch current displayed answer | Current slot timing and selected answer text only when visible |
-| Fetch student's submission state | Whether this anonymous identity already submitted for the cycle, not the stored answer body |
+| Fetch current cycle state | Prompt, question mode, response window, display status, policy version and relevant input constraints |
+| Fetch current displayed text answer | Current slot timing and selected answer text only when an open-text slot is visible |
+| Fetch current poll result | Option labels, aggregate counts/percentages, total response count and display dates only when an eligible poll graph is public |
+| Fetch student's response state | Whether this anonymous identity already responded for the cycle, not its stored text or selected option |
 | Fetch policy content/version | Terms required before submitting |
 
 The client must never receive:
@@ -579,6 +739,8 @@ The client must never receive:
 - pending submissions;
 - rejected submissions;
 - approved answers not currently displayed;
+- individual poll votes or voter identifiers;
+- poll aggregates before voting closes or below the public threshold;
 - anonymous author IDs;
 - admin moderation notes;
 - block records;
@@ -588,16 +750,21 @@ The client must never receive:
 
 | Operation | Required Checks |
 | --- | --- |
-| Submit answer | Authenticated anonymous session; submissions open; policy accepted; not blocked; no prior submission; text length valid |
-| Report displayed answer | Authenticated anonymous session; answer currently or recently displayed; no duplicate report; valid reason |
+| Submit text answer | Text cycle; authenticated anonymous session; responses open; policy accepted; not blocked; no prior response; text length valid |
+| Cast poll vote | Poll cycle; authenticated anonymous session; responses open; policy accepted; not blocked; no prior response; selected option belongs to cycle |
+| Report displayed answer | Authenticated anonymous session; text answer currently or recently displayed; no duplicate report; valid reason |
+| Report poll prompt/graph | Authenticated anonymous session; poll currently publicly visible; no duplicate cycle report; valid reason |
 
 The student client cannot:
 
 - approve, reject, schedule or delete answers;
 - create or modify questions;
 - modify display slots;
+- read or calculate poll results from raw votes;
 - read moderation queues;
 - invoke purge or random scheduling.
+
+To ensure a client cannot participate through the wrong mode, response insertion should be performed through mode-specific database functions or equivalent policies that validate `question_mode`: text rows can be created only for `open_text` cycles, and vote rows can be created only for `multiple_choice_poll` cycles.
 
 ### 10.3 Administrative Operations
 
@@ -605,15 +772,16 @@ Administrative operations occur only through trusted dashboard access or trusted
 
 | Operation | Effect |
 | --- | --- |
-| Create cycle | Create question and initial dates |
-| Open submissions | Make the cycle visible and writable during the open period |
-| Review response | Set answer to approved or rejected |
-| Generate slots | Create twelve UTC display slots from six Manila dates |
+| Create cycle | Create question, mode and initial dates; define poll options when applicable |
+| Open responses | Make the cycle visible and writable during the open period |
+| Review text response | Set a text answer to approved or rejected |
+| Generate text slots | Create twelve UTC display slots from six Manila dates for open-text cycles |
 | Assign slot manually | Connect one approved response to a slot |
 | Assign slots randomly | Fill vacant slots from distinct approved responses only |
+| Generate poll aggregate | Count private poll votes after close, apply threshold and allocate public graph percentages |
 | Remove published content | Immediately stop public display and open or resolve associated moderation work |
 | Block anonymous author | Prevent future writes from the same anonymous identity |
-| Purge content | Delete answer bodies/content rows after cycle completion and holds resolution |
+| Purge content | Delete answer bodies, individual votes and displayed aggregate values after cycle completion and holds resolution |
 
 ## 11. Row Level Security Requirements
 
@@ -630,6 +798,9 @@ Policies must enforce the following behavior:
 | Visible cycle projection | Read current published cycle only | None |
 | Current displayed-answer projection | Read active non-removed scheduled answer only | None |
 | Raw `weekly_submissions` | No direct reads | Insert own pending answer only |
+| Poll options projection | Read active poll options only while accepting a vote or publishing the graph | None |
+| Raw `weekly_poll_votes` | No direct reads | Insert own valid option vote only |
+| Public poll-result projection | Read only public post-close aggregate snapshot meeting threshold | None |
 | `weekly_reports` | No direct list reads | Insert report as current user only |
 | `weekly_display_slots` | No unrestricted reads | None |
 | Block table | No reads | None |
@@ -641,21 +812,27 @@ Backend-enforced submission validation must ensure:
 
 - `author_user_id` equals `auth.uid()`;
 - the JWT is an authenticated anonymous session permitted by the feature;
-- cycle is accepting submissions at server time;
+- cycle is accepting responses at server time;
 - user is not currently blocked;
-- the unique one-submission-per-cycle constraint is satisfied;
-- text is within configured length constraints;
-- initial status is `pending`;
-- students cannot set review, scheduling, removal or hold fields.
+- one response of the cycle's applicable mode exists at most once for the anonymous identity;
+- for text mode, text is within configured length constraints, initial status is `pending`, and students cannot set review, scheduling, removal or hold fields;
+- for poll mode, the selected option belongs to the same cycle and no free-text value is accepted.
 
 ### 11.4 Secure Public Read Projection
 
-The app should read displayed answers through a narrowly scoped view or remote procedure call that returns only:
+The app should read displayed open-text answers through a narrowly scoped view or remote procedure call that returns only:
 
 - question prompt;
 - active slot's `visible_from` and `visible_until`;
 - active approved answer text;
 - reporting identifier required by the report operation.
+
+The app should read a displayed poll result through a separate narrowly scoped view or remote procedure call that returns only:
+
+- question prompt and option labels;
+- server-computed aggregate `display_percentage` values and total response count;
+- aggregate visibility timestamps;
+- cycle identifier required by the report operation.
 
 The implementation must verify that any database view used for public access obeys RLS or is otherwise safely defined. Supabase documents that view security behavior requires attention; the engineer must not create a public view that accidentally bypasses table restrictions.
 
@@ -663,18 +840,20 @@ The implementation must verify that any database view used for public access obe
 
 ### 12.1 Retention Principle
 
-The product collects student answer content only for:
+For open-text cycles, the product collects student answer content only for:
 
 1. moderation;
 2. temporary selection;
 3. temporary scheduled public display;
 4. handling safety reports related to that display.
 
-The product does not need a permanent archive of answer content. Deleting response text after the weekly display completes is aligned with data minimization.
+For poll cycles, the product collects a private selected option only for counting and temporary aggregate graph display. It does not require a permanent record of any individual's selection.
+
+The product does not need a permanent archive of answer content, individual votes or public result graphs. Deleting response text, votes and aggregate-result rows after the weekly display completes is aligned with data minimization.
 
 ### 12.2 Important Storage Correction
 
-Deleting submissions is appropriate for privacy and allows freed database space to be reused. It must not be described as an immediate free-tier quota reset.
+Deleting text submissions and poll vote/result rows is appropriate for privacy and allows freed database space to be reused. It must not be described as an immediate free-tier quota reset.
 
 Supabase documents:
 
@@ -683,14 +862,15 @@ Supabase documents:
 - Supabase projects have automatic vacuuming enabled.
 - Manual vacuum operations may be used where appropriate; `VACUUM FULL` locks the affected table and is not a routine per-cycle task.
 
-For text-only weekly answers, the storage footprint should be small. The strongest reason to purge is privacy and minimizing retained UGC, not expected weekly storage pressure.
+For short text answers and choice-only poll votes, the storage footprint should be small. The strongest reason to purge is privacy and minimizing retained responses, not expected weekly storage pressure.
 
 ### 12.3 Purge Schedule
 
 The purge eligibility rule is:
 
-- A cycle becomes purge-eligible after its twelfth and final display slot has ended.
-- Run purge processing after the final slot, recommended at least fifteen minutes later to avoid timing/race issues.
+- An open-text cycle becomes purge-eligible after its twelfth and final display slot has ended.
+- A poll cycle becomes purge-eligible after the six-day public graph display period has ended.
+- Run purge processing after the final display period, recommended at least fifteen minutes later to avoid timing/race issues.
 - For a normal six-day schedule ending at 4:59:59 PM Asia/Manila, a purge check may run after 5:15 PM Asia/Manila.
 - Implement purge using a database-side function invoked manually during pilot testing and, once validated, by Supabase Cron.
 
@@ -698,20 +878,22 @@ The scheduled job must determine eligibility from UTC timestamps and state, not 
 
 ### 12.4 Content To Delete At Cycle Close
 
-When there are no unresolved reports or safety holds, delete:
+For open-text rows that are not subject to an unresolved report or safety hold, and for all completed poll rows regardless of poll prompt/graph reports, delete:
 
 - every answer text submission row for the completed cycle, whether rejected, approved, selected or unselected;
 - answer-to-slot content references as required to eliminate displayed text;
+- every individual poll vote for the completed cycle;
+- every public poll-result count and percentage row after its graph display period ends;
 - resolved report free-text notes, if any were permitted;
 - policy acceptance records that include an answer/submission relationship, unless needed only in aggregate.
 
-After deletion, the app must not display past weekly answers.
+After deletion, the app must not display past weekly answers or past poll graphs.
 
 ### 12.5 Limited Data To Retain
 
 Retain only non-content operational records required to operate and demonstrate deletion:
 
-- question text and cycle schedule, unless the administrator also chooses to delete completed questions later;
+- question text, fixed poll option labels and cycle schedule, unless the administrator also chooses to delete completed questions later;
 - aggregate cycle metrics with no student identifiers;
 - timestamps confirming purge completion;
 - an active block record for a repeatedly abusive anonymous identity, without its deleted response text;
@@ -731,9 +913,11 @@ Hold workflow:
 
 This is the only content-retention exception to the requested last-day deletion policy.
 
+Poll votes are not retained under a content-report hold because the student did not author the public prompt or option labels. If a poll graph or prompt is reported, the administrator may remove the graph immediately; its individual vote records remain scheduled for deletion at cycle close.
+
 ### 12.7 Anonymous Auth User Cleanup
 
-Deleting `weekly_submissions` does not delete Supabase anonymous Auth users.
+Deleting `weekly_submissions` or `weekly_poll_votes` does not delete Supabase anonymous Auth users.
 
 Supabase documentation states that automatic cleanup of anonymous users is currently unavailable and gives an example of deleting anonymous users older than 30 days. Therefore:
 
@@ -748,9 +932,10 @@ Supabase documentation states that automatic cleanup of anonymous users is curre
 Introduce an isolated domain for this feature, conceptually under:
 
 - a new route screen for Weekly Question;
-- new UI components for prompt, submission, display, report and online-state handling;
+- new UI components for prompt, text submission, option voting, answer display, poll-result chart, report and online-state handling;
+- a non-blocking Home dashboard poll-results card for an active eligible poll cycle;
 - a new service module for Supabase operations;
-- new types and validation for cycle/display states;
+- new types and validation for question modes, response payloads and cycle/display states;
 - small local cache support only for non-sensitive currently published display data if offline fallback is adopted.
 
 The implementation must follow existing app architecture conventions after inspecting comparable route and service modules during execution.
@@ -764,16 +949,20 @@ The Weekly Question screen must support these states:
 | Offline with no cached public item | Explain that Weekly Question requires internet; offer retry |
 | Loading | Loading indicator without assuming a question exists |
 | No active cycle | Friendly empty state |
-| Submissions open, not submitted | Show prompt, policy notice and answer form |
-| Submissions open, already submitted | Show anonymous submission receipt; do not reveal/edit stored body |
-| Review period | Explain that answers are being reviewed |
-| Display active within a filled slot | Show prompt, anonymous answer and Report control |
+| Open-text responses open, not submitted | Show prompt, policy notice and text answer form |
+| Poll responses open, not submitted | Show prompt, policy notice and fixed single-choice controls; do not show results |
+| Responses open, already responded | Show anonymous participation receipt; do not reveal/edit stored text or selected choice |
+| Open-text review period | Explain that answers are being reviewed |
+| Poll counting period | Explain that poll results will be available after processing if enough students responded |
+| Text display active within a filled slot | Show prompt, anonymous answer and Report control |
 | Display active within an empty slot | Show that no response is scheduled for this time |
+| Poll display active, threshold reached | Show percentage graph, total response count and Report control |
+| Poll display active, threshold not reached | Show insufficient-responses message without counts or percentages |
 | Outside display slot during display days | Show next answer availability time |
-| Removed answer | Show that the response is unavailable |
+| Removed text answer or suppressed poll graph | Show that the response or result is unavailable |
 | Network/server failure | Preserve the rest of Haki; offer retry for only this feature |
 
-### 13.3 Submission Form
+### 13.3 Open-Text Submission Form
 
 Submission screen requirements:
 
@@ -786,7 +975,19 @@ Submission screen requirements:
 - Submit button is disabled after successful submission.
 - The screen does not solicit a name, alias, avatar, program, year level or contact information.
 
-### 13.4 Display Card
+### 13.4 Multiple-Choice Voting Form
+
+Poll voting requirements:
+
+- Prompt and all administrator-defined options are shown prominently.
+- The student can select exactly one option.
+- If `Other` exists, it is a selectable fixed option without a text field.
+- The student must affirm the participation/privacy notice before submitting the vote.
+- Results and vote counts are not shown while responses remain open.
+- After a successful vote, the form is replaced with a receipt state and cannot be changed in v1.
+- The screen does not solicit any identity or explanatory text.
+
+### 13.5 Open-Text Display Card
 
 A public answer card must display:
 
@@ -805,15 +1006,39 @@ Do not show:
 - moderation decision notes;
 - total vote counts, ranking or popularity indicators.
 
-### 13.5 Offline Handling
+### 13.6 Home Poll Results Graph
+
+When an eligible `multiple_choice_poll` result is active, the Haki Home screen must show a visually distinct dashboard card:
+
+| Card Element | Requirement |
+| --- | --- |
+| Label | `Weekly Question Results` and `Anonymous poll` |
+| Prompt | Display the administrator-created question |
+| Chart | Horizontal bar for each option, ordered by configured `display_order` |
+| Values | Show server-generated whole-number percentage for every option and total number of responses |
+| Navigation | Card opens the dedicated Weekly Question screen for context and reporting |
+| Report action | Available on the detail screen; may also appear directly on the card if layout remains usable |
+
+Implementation guidance:
+
+- Build the chart using standard React Native `View` bars and `Text`; a charting dependency is unnecessary for a small categorical bar graph.
+- Use percentage values generated by the backend; do not derive percentages in the Home screen.
+- Supply accessible labels such as `Cat, 45 percent of 40 responses` for each bar.
+- Do not use color alone to communicate the option or value.
+- Animate card entrance consistently with existing Home dashboard cards, but respect the app's reduced-motion setting.
+- Fetch the public aggregate without blocking existing Home content; a network failure must not make the offline-first Home screen unusable.
+- During an active open-text cycle, Home may link to Weekly Question but must not preview unmoderated or non-current answer content.
+
+### 13.7 Offline Handling
 
 This feature is explicitly online-first while Haki remains offline-first overall.
 
 Version one default:
 
-- Do not cache submitted answer text locally after successful upload.
-- Do not queue offline submissions.
-- If offline, disable submission and display an internet-required message.
+- Do not cache submitted answer text or a student's selected poll option locally after successful upload.
+- Do not queue offline text submissions or poll votes.
+- If offline, disable participation and display an internet-required message within the Weekly Question screen.
+- If Home cannot fetch an active poll graph, omit its result bars or show a non-blocking online-only placeholder; do not interrupt existing Home content.
 - Existing app capabilities must remain usable when Weekly Question cannot connect.
 
 Optional later enhancement:
@@ -829,30 +1054,35 @@ The optional cache is not part of v1 because the feature is time-slot-sensitive 
 Administrator actions:
 
 1. Create a new cycle in the Supabase Dashboard.
-2. Enter a prompt that complies with prompt safety rules.
-3. Set submission opening and closing timestamps.
-4. Set the first of six display dates.
-5. Select `manual` or `random_approved` mode.
-6. Verify the publication and privacy notice version.
-7. Publish the cycle for student submission.
+2. Select `open_text` or `multiple_choice_poll`.
+3. Enter a prompt that complies with prompt safety rules.
+4. For a poll, enter and review two to six fixed options, including `Other` only as a non-typed choice when appropriate.
+5. Set response opening and closing timestamps.
+6. Set the first of six display dates.
+7. For an open-text cycle, select `manual` or `random_approved` mode.
+8. Verify the participation/privacy notice version.
+9. Publish the cycle for student response.
 
 ### 14.2 During Submission Day
 
 Administrator actions:
 
-- Observe submission count and system errors.
-- Do not expose pending content in the app.
+- Observe response count and system errors.
+- For open text, do not expose pending content in the app.
+- For polls, do not expose live totals or percentages in the app.
 - Close the cycle early only for a safety incident or system abuse; record the reason outside public content.
 
 ### 14.3 During Review
 
-For each submission:
+For each open-text submission:
 
 1. Reject content containing identifying details, even if otherwise kind.
 2. Reject content naming or describing another identifiable person.
 3. Reject harmful, offensive, spam, sexual, illegal, or policy-breaking content.
 4. Approve only responses suitable for anonymous public display.
 5. Block anonymous author IDs only when behavior warrants future prevention.
+
+For a poll cycle, there is no student-authored text to moderate. Confirm that the configured prompt/options remain appropriate and that the result threshold is met before exposing the aggregate graph.
 
 ### 14.4 Scheduling Display
 
@@ -867,6 +1097,12 @@ Random-approved mode:
 - Invoke random assignment for vacant slots only.
 - Inspect generated assignments before activating display.
 
+Poll mode:
+
+- After voting closes, invoke aggregate result generation.
+- Confirm that a result meeting the five-response threshold is scheduled for Home display across the six display days.
+- If the threshold is not met, confirm that only the insufficient-responses state is public.
+
 ### 14.5 During Display Days
 
 Administrator actions:
@@ -874,14 +1110,15 @@ Administrator actions:
 - Review reports within a stated operational response window.
 - Remove an answer immediately if it exposes personal information or presents an urgent safety concern.
 - Mark affected content under hold while resolving reports.
+- Remove a poll graph if its administrator-created prompt or choices are discovered to be inappropriate; individual student votes are never shown.
 
 ### 14.6 At Cycle Completion
 
 Administrator/system actions:
 
-1. Confirm final display slot has expired.
-2. Identify unresolved reports and apply moderation holds.
-3. Execute or verify content purge for all other submissions.
+1. Confirm the final text display slot or poll graph visibility period has expired.
+2. Identify unresolved open-text reports and apply moderation holds.
+3. Execute or verify content purge for all other text submissions and all completed poll vote/result records.
 4. Resolve held reports and purge held content once no longer required.
 5. Confirm aggregate counts and purge-completion timestamp.
 6. Periodically clean up anonymous authentication records under the separate maintenance policy.
@@ -890,13 +1127,16 @@ Administrator/system actions:
 
 | Failure Mode | Required Behavior |
 | --- | --- |
-| Student is offline | No submission attempt; explain online requirement |
-| Submission upload times out | Do not assume success; re-check submission status before allowing retry |
+| Student is offline | No response attempt; explain online requirement; Home remains functional without poll graph |
+| Text submission or poll vote times out | Do not assume success; re-check response status before allowing retry |
 | Anonymous auth session cannot be established | Disable submission and report temporary error |
-| Student submits twice | Database constraint rejects second write; UI shows already submitted |
+| Student responds twice | Database constraint rejects second write; UI shows already responded |
 | Spam wave or automated anonymous users | Close submissions, review rate controls, investigate CAPTCHA/endpoint controls |
 | Admin approves fewer than twelve responses | Empty slots display neutral no-response text |
 | Random scheduling has fewer than twelve approved candidates | Schedule each eligible answer at most once; leave remainder empty |
+| Poll has fewer than five valid votes | Do not publish percentages; show insufficient-responses state |
+| Poll graph fetch fails on Home | Do not block Home rendering; omit graph or show non-blocking unavailable state |
+| Percentages would not sum to 100 through naive rounding | Use server-side largest-remainder allocation and serve fixed display percentages |
 | Published answer is reported | Place under hold; allow admin removal; prevent content purge until resolved |
 | Purge job fails | Alert administrator through dashboard monitoring; retry safely |
 | Purge removes rows but storage metric does not immediately decline | Recognize expected PostgreSQL vacuum behavior; do not create emergency deletion logic |
@@ -910,9 +1150,12 @@ Administrator/system actions:
 Test:
 
 - question prompt validation;
+- question mode validation and poll-option constraints;
 - answer length and whitespace validation;
+- one-choice vote validation and no-text `Other` behavior;
 - date/slot generation for six days and two slots per day;
 - Manila-time to UTC conversion;
+- percentage allocation for zero responses, below-threshold responses, equal vote counts and rounding remainder cases;
 - cycle-state presentation logic;
 - report reason validation;
 - safe display state when a slot is empty, removed, expired or not yet active.
@@ -925,21 +1168,28 @@ Against a development Supabase project or local Supabase environment, verify:
 - one anonymous user can submit one answer in an open cycle;
 - the same identity cannot submit a second answer in that cycle;
 - a different anonymous identity can submit its own answer;
+- one anonymous user can cast exactly one vote in a poll cycle;
+- a poll vote cannot target an option from another cycle or contain typed `Other` content;
 - writes fail outside the submission window;
 - writes fail for blocked identities;
 - student clients cannot select raw submission rows;
+- student clients cannot select raw poll votes or pre-close aggregates;
 - student clients cannot update moderation status;
 - student clients cannot create or alter display slots;
 - a visible assigned slot returns only its active answer;
 - a future, expired or removed slot does not expose answer text;
 - a report creates a hold condition;
-- purge deletes non-held cycle content and preserves held reported content until resolution.
+- a qualifying closed poll returns only its public aggregate graph snapshot;
+- a below-threshold poll returns no percentages or counts;
+- purge deletes non-held text content, individual poll votes and expired public result snapshots while preserving held reported text content until resolution.
 
 ### 16.3 RLS Adversarial Tests
 
 Use direct client calls with the mobile publishable key to attempt:
 
 - fetching all raw submissions;
+- fetching individual poll votes;
+- fetching poll totals before closing time or below the minimum response threshold;
 - selecting approved-but-not-yet-visible answers;
 - approving the submitter's own content;
 - setting a submission author ID belonging to another user;
@@ -947,6 +1197,7 @@ Use direct client calls with the mobile publishable key to attempt:
 - reading block records;
 - invoking purge;
 - bypassing submission limits.
+- submitting more than one poll vote or an option not belonging to the active poll.
 
 All attempts must fail at the backend regardless of UI behavior.
 
@@ -957,6 +1208,7 @@ Verify:
 - a cycle can be drafted, opened, reviewed, scheduled, completed and purged;
 - manual assignment supports fewer than twelve responses;
 - random-approved assignment selects only approved records and does not duplicate answers unless explicitly allowed by later product change;
+- a poll computes percentages only after close, exposes the Home graph only at or above five votes, and removes it after the six-day display period;
 - removing a live answer immediately prevents future public reads;
 - cycles with unresolved reports are only partially purged.
 
@@ -965,8 +1217,11 @@ Verify:
 Test on representative mobile devices:
 
 - new anonymous participant submits once;
+- new anonymous participant votes once in a multiple-choice poll without seeing live results;
 - returning participant sees receipt state;
 - display card appears only during scheduled interval;
+- eligible poll graph appears on Home and displays accessible bars, labels, percentages and total response count;
+- an ineligible poll shows no result distribution;
 - report flow completes;
 - online failure does not block navigation to offline Haki capabilities;
 - no Tips & Tricks screen behavior changes;
@@ -978,7 +1233,9 @@ Before release, manually verify:
 
 - policy is shown before submission;
 - no requested input field solicits identity;
+- poll questions accept only fixed choices and never collect free-text `Other` detail;
 - screens clearly label responses as anonymous peer content;
+- the Home graph clearly identifies results as an anonymous student poll rather than an official university statistic;
 - all displayed content can be reported;
 - administrators can remove content and block identities;
 - deleted cycles cannot be retrieved publicly;
@@ -994,6 +1251,7 @@ Purpose: Validate the data lifecycle before student use.
 - Define tables, RLS, anonymous-auth configuration and dashboard workflow.
 - Use synthetic non-campus/non-personal test text only.
 - Verify slot scheduling and purge behavior.
+- Verify poll option, aggregation, threshold, Home graph projection and poll-vote purge behavior.
 - Validate anti-abuse option suitable for Expo.
 
 Exit criteria:
@@ -1006,22 +1264,24 @@ Exit criteria:
 
 Purpose: Verify online screen behavior without accepting live student UGC.
 
-- Add Weekly Question route and public display UI.
-- Load administrator-created safe sample responses from backend.
+- Add Weekly Question route, open-text display UI and Home poll-result graph card.
+- Load administrator-created safe sample responses and synthetic aggregate poll results from backend.
 - Test online failure and time-slot presentation.
 
 Exit criteria:
 
 - No regression to offline Haki behavior.
 - Scheduled display works in Asia/Manila slots.
+- Poll graph renders without blocking or changing existing Home functionality.
 
 ### Phase 2: Controlled Submission Pilot
 
 Purpose: Accept real student answers with close moderation.
 
-- Enable anonymous submissions for a limited participant group or controlled announcement.
+- Enable anonymous responses for a limited participant group or controlled announcement.
 - Operate manual selection only.
-- Monitor submissions, reports and purge results each cycle.
+- Introduce polls only with fixed low-risk options and minimum result threshold enabled.
+- Monitor responses, poll publication thresholds, reports and purge results each cycle.
 
 Exit criteria:
 
@@ -1045,18 +1305,21 @@ The feature is ready for initial production only when all of the following are t
 1. Weekly Question is visibly separate from Tips & Tricks and Haki official answers.
 2. Students can participate anonymously without a conventional account UI.
 3. The backend maintains an anonymous internal identity for rules and moderation.
-4. No student can read raw or non-current approved submissions.
-5. No unreviewed submission can be published or randomly selected.
-6. Up to twelve slots can be scheduled for six days at two slots per day.
-7. Manila-time scheduling is consistently converted and enforced using backend timestamps.
-8. Students see a policy/privacy notice before submitting.
-9. Students can report visible content in the app.
-10. Administrators can remove content and block an abusive anonymous identity.
-11. Remote admin operations cannot be authorized by the current local Haki admin PIN.
-12. Answer content is purged after the completed display cycle except while under unresolved-report hold.
-13. The team understands that deletion makes space reusable but may not instantly reduce Supabase database metrics.
-14. Existing offline functionality, Tips content and official campus-answer behavior are unchanged.
-15. Platform UGC requirements and Philippine privacy notice requirements have been reviewed before store release.
+4. Each cycle is fixed as either open-text or multiple-choice poll before responses begin.
+5. No student can read raw text submissions, individual poll votes or non-public aggregate results.
+6. No unreviewed text submission can be published or randomly selected.
+7. Up to twelve text slots can be scheduled for six days at two slots per day.
+8. A poll accepts only fixed administrator-defined choices, computes percentages after voting closes and publishes a Home graph only when at least five valid responses exist.
+9. Public poll percentage labels add to exactly 100% and the graph includes the total valid response count.
+10. Manila-time scheduling is consistently converted and enforced using backend timestamps.
+11. Students see a policy/privacy notice before responding.
+12. Students can report visible content in the app.
+13. Administrators can remove content and block an abusive anonymous identity.
+14. Remote admin operations cannot be authorized by the current local Haki admin PIN.
+15. Answer content, individual poll votes and expired poll-result graph data are purged after the completed display cycle except text content under unresolved-report hold.
+16. The team understands that deletion makes space reusable but may not instantly reduce Supabase database metrics.
+17. Existing offline functionality, Tips content and official campus-answer behavior are unchanged.
+18. Platform UGC requirements and Philippine privacy notice requirements have been reviewed before store release.
 
 ## 19. Open Product Decisions To Confirm Before Coding
 
@@ -1065,8 +1328,13 @@ The architecture above establishes safe defaults. The project owner must confirm
 | Decision | Recommended Default |
 | --- | --- |
 | Public feature name | `Weekly Question` |
-| Home access | New Home card leading to a separate screen |
+| Home access | New Home entry card; active qualifying polls additionally render an aggregate graph card on Home |
+| Question modes | `open_text` and `multiple_choice_poll` |
 | Answer character limit | 280 characters |
+| Poll option limit | Two to six fixed administrator-defined options, 40 characters each |
+| Poll `Other` behavior | Fixed option only; no student-entered explanatory text |
+| Poll result privacy threshold | Display graph only at five or more valid votes |
+| Poll percentage display | Whole-number percentages allocated server-side to total exactly 100% |
 | Default cycle calendar | Monday submissions, Tuesday-Sunday display |
 | Selection default | Manual selection; random-approved available only after pilot |
 | Missing approved answers | Leave slot empty with neutral message |
@@ -1107,6 +1375,6 @@ The following official sources informed the feasibility and implementation requi
 
 ## 21. Final Recommendation
 
-Build Weekly Question as a new, online-only, moderated community feature with Supabase as the version-one backend. Keep the student interaction anonymous in the interface while using anonymous authenticated backend sessions for control and moderation. Use manual dashboard moderation first; permit random display only from approved content. Display two answers per day across six days using Manila-time slots, and purge student answer content after the final display period except where an unresolved report requires temporary retention.
+Build Weekly Question as a new, online-only community feature with Supabase as the version-one backend and two supported modes. For open-text questions, keep student interaction anonymous in the interface while using anonymous authenticated backend sessions for control and moderation, use manual dashboard moderation first, permit random display only from approved content, and display two answers per day across six days using Manila-time slots. For multiple-choice polls, accept only administrator-defined options, keep individual votes private, calculate aggregate percentages after voting closes, and show eligible percentage results as a graph on the Haki Home screen during the six display days.
 
-This design preserves Haki's offline-first and official-answer boundaries while delivering the intended lightweight student-sharing experience with a defensible privacy, security and store-compliance foundation.
+Purge student answer content, individual poll votes and no-longer-displayed poll-result rows after the final display period except where an unresolved text report requires temporary retention. This design preserves Haki's offline-first and official-answer boundaries while delivering both anonymous thought sharing and privacy-conscious preference polls with a defensible security and store-compliance foundation.

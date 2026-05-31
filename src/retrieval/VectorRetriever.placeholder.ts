@@ -1,7 +1,9 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 
-import type { LocalAIProvider } from "@/ai/LocalAIProvider";
+import type { LocalAICapabilities, LocalAIProvider } from "@/ai/LocalAIProvider";
 import type { SearchOptions, SearchResult } from "@/types/search";
+import { sqliteVecReadyForDimension, sqliteVecTableName } from "@/db/sqliteVec";
+import { logger } from "@/utils/logger";
 
 import { safeStringArrayFromJson } from "./FTSRetriever";
 import type { Retriever } from "./Retriever";
@@ -43,6 +45,7 @@ interface VectorSearchRow {
 
 const MIN_VECTOR_SIMILARITY = 0.62;
 const MAX_VECTOR_CANDIDATES = 512;
+const SQLITE_VEC_CANDIDATE_MULTIPLIER = 12;
 
 function normalizeOffice(value: string | null | undefined): string {
   return (value ?? "")
@@ -66,6 +69,11 @@ function normalizeVector(vector: number[]): number[] {
   const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
   if (!Number.isFinite(norm) || norm <= 0) return [];
   return vector.map((value) => value / norm);
+}
+
+function floatsToBlob(values: number[]): Uint8Array {
+  const view = new Float32Array(values);
+  return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
 }
 
 function cosineSimilarity(left: number[], right: number[]): number {
@@ -120,8 +128,24 @@ function decodeEmbedding(value: unknown, expectedDimension: number): number[] | 
   return vector;
 }
 
-function providerModelNames(provider: LocalAIProvider, modelName: string | null | undefined): string[] {
-  return Array.from(new Set([provider.id, provider.name, modelName].filter((item): item is string => Boolean(item?.trim()))));
+function providerModelNames(provider: LocalAIProvider, capabilities: LocalAICapabilities): string[] {
+  const currentKey = [
+    capabilities.embeddingModelName?.trim() || capabilities.modelName?.trim() || provider.id,
+    capabilities.embeddingModelFileHash?.trim() || null,
+    capabilities.embeddingDimension ? `${capabilities.embeddingDimension}d` : null
+  ]
+    .filter(Boolean)
+    .join(":");
+
+  return Array.from(
+    new Set([
+      currentKey,
+      provider.id,
+      provider.name,
+      capabilities.embeddingModelName,
+      capabilities.modelName
+    ].filter((item): item is string => Boolean(item?.trim())))
+  );
 }
 
 export class VectorRetriever implements Retriever {
@@ -141,9 +165,10 @@ export class VectorRetriever implements Retriever {
     }
 
     const capabilities = await this.embeddingProvider.getCapabilities();
+    const modelNames = providerModelNames(this.embeddingProvider, capabilities);
     const rows = await this.loadCandidateRows(
-      providerModelNames(this.embeddingProvider, capabilities.modelName),
-      queryEmbedding.length,
+      modelNames,
+      queryEmbedding,
       options
     );
     const limit = options.limit ?? 8;
@@ -166,6 +191,100 @@ export class VectorRetriever implements Retriever {
   }
 
   private async loadCandidateRows(
+    modelNames: string[],
+    queryEmbedding: number[],
+    options: SearchOptions
+  ): Promise<VectorSearchRow[]> {
+    const sqliteVecRows = await this.loadSqliteVecRows(modelNames, queryEmbedding, options);
+    if (sqliteVecRows.length > 0) {
+      return sqliteVecRows;
+    }
+
+    return this.loadBlobCandidateRows(modelNames, queryEmbedding.length, options);
+  }
+
+  private async loadSqliteVecRows(
+    modelNames: string[],
+    queryEmbedding: number[],
+    options: SearchOptions
+  ): Promise<VectorSearchRow[]> {
+    const dimension = queryEmbedding.length;
+    if (!(await sqliteVecReadyForDimension(this.db, dimension))) {
+      return [];
+    }
+
+    let whereClause = "ce.embedding IS NOT NULL AND ce.dimension = ?";
+    const params: (string | number | Uint8Array)[] = [floatsToBlob(queryEmbedding), Math.max(64, (options.limit ?? 8) * SQLITE_VEC_CANDIDATE_MULTIPLIER), dimension];
+
+    if (modelNames.length > 0) {
+      whereClause += ` AND ce.model_name IN (${modelNames.map(() => "?").join(", ")})`;
+      params.push(...modelNames);
+    }
+    if (options.scope?.category) {
+      whereClause += " AND c.category = ?";
+      params.push(options.scope.category);
+    }
+    if (options.scope?.documentId) {
+      whereClause += " AND c.document_id = ?";
+      params.push(options.scope.documentId);
+    }
+
+    const tableName = sqliteVecTableName(dimension);
+    try {
+      const rows = await this.db.getAllAsync<VectorSearchRow>(
+        `
+      WITH vector_matches AS (
+        SELECT rowid, distance
+        FROM ${tableName}
+        WHERE embedding MATCH ? AND k = ?
+        ORDER BY distance
+      )
+      SELECT
+        c.id,
+        c.chunk_id,
+        c.document_id,
+        c.document_title,
+        d.document_type,
+        c.section_title,
+        c.process_name,
+        c.content,
+        c.answer,
+        c.citation,
+        c.page_number,
+        c.category,
+        c.office,
+        c.tags,
+        c.synonyms,
+        c.steps,
+        c.prerequisites,
+        c.office_location,
+        c.contact_info,
+        c.priority,
+        d.last_updated,
+        ce.model_name,
+        ce.embedding,
+        ce.dimension
+      FROM vector_matches vm
+      JOIN chunk_embedding_index cei ON cei.rowid = vm.rowid
+      JOIN chunk_embeddings ce ON ce.chunk_id = cei.chunk_id AND ce.model_name = cei.model_name
+      JOIN chunks c ON c.chunk_id = ce.chunk_id
+      JOIN documents d ON d.document_id = c.document_id
+      WHERE ${whereClause}
+      ORDER BY vm.distance ASC
+      `,
+        params
+      );
+
+      return options.scope?.office ? rows.filter((row) => officeMatches(row.office, options.scope?.office)) : rows;
+    } catch (error) {
+      logger.db.warn("sqlite-vec search failed; falling back to BLOB cosine search.", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return [];
+    }
+  }
+
+  private async loadBlobCandidateRows(
     modelNames: string[],
     dimension: number,
     options: SearchOptions

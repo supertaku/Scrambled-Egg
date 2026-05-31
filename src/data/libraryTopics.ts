@@ -126,7 +126,10 @@ const pendingServiceDeskTopics: LibraryTopic[] = [
 
 // Pending placeholders are shown in Service Desk only. Retrieval continues to
 // seed exclusively from seed-documents.json, which contains verified content.
-export const libraryTopics: LibraryTopic[] = [...verifiedLibraryTopics, ...pendingServiceDeskTopics];
+const includePendingServiceDeskTopics = typeof __DEV__ !== "undefined" && __DEV__;
+export const libraryTopics: LibraryTopic[] = includePendingServiceDeskTopics
+  ? [...verifiedLibraryTopics, ...pendingServiceDeskTopics]
+  : verifiedLibraryTopics;
 
 // O(1) lookup by chunkId
 const topicMap = new Map<string, LibraryTopic>(

@@ -1,6 +1,5 @@
 import type { DeviceAIMode } from "@/ai/DeviceAIMode";
 import type { DeviceCapabilityReport } from "@/ai/CapabilityDetector";
-import { ORGANIZATION_OFFICERS_MOCK_NOTICE, mockOrganizationOfficers } from "@/data/organizationOfficers";
 import { MEDIUM_CONFIDENCE_NOTE, SAFE_FALLBACK_MESSAGE } from "@/ai/prompts";
 import { normalizeQuery } from "@/retrieval/queryNormalizer";
 import type { SearchResponse, SearchResponseType, SearchResult } from "@/types/search";
@@ -305,15 +304,6 @@ function isOrganizationOfficerQuestion(question: string): boolean {
   );
 }
 
-function officerMatchesQuestion(question: string, organization: string): boolean {
-  const normalizedQuestion = normalizeQuery(question);
-  const normalizedOrg = normalizeQuery(organization);
-  return normalizedOrg
-    .split(" ")
-    .filter((token) => token.length > 3)
-    .some((token) => normalizedQuestion.includes(token));
-}
-
 const EMOTIONAL_DISTRESS_PATTERNS = [
   /\b(i am|i'm|im|feeling)?\s*(depressed|depression|hopeless|lonely|overwhelmed|burned out|burnout)\b/i,
   /\b(ayoko na|pagod na ako|gusto ko mawala|di ko na kaya|hindi ko na kaya|sobrang bigat)\b/i
@@ -321,6 +311,16 @@ const EMOTIONAL_DISTRESS_PATTERNS = [
 
 function isEmotionalDistressQuestion(question: string): boolean {
   return EMOTIONAL_DISTRESS_PATTERNS.some((pattern) => pattern.test(question));
+}
+
+const IMMEDIATE_PHYSICAL_EMERGENCY_PATTERNS = [
+  /\b(chest pain|difficulty breathing|cannot breathe|can't breathe|shortness of breath|severe bleeding|heavy bleeding)\b/i,
+  /\b(poisoning|overdose|passed out|unconscious|seizure|stroke|heart attack|severe allergic reaction|anaphylaxis)\b/i,
+  /\b(head injury|broken bone|serious burn|stabbed|shot|electric shock)\b/i
+];
+
+function isImmediatePhysicalEmergencyQuestion(question: string): boolean {
+  return IMMEDIATE_PHYSICAL_EMERGENCY_PATTERNS.some((pattern) => pattern.test(question));
 }
 
 function profileLine(profileContext: string | undefined, label: string): string | null {
@@ -467,20 +467,8 @@ export function buildOrganizationOfficersResponse(
     return null;
   }
 
-  const matchingOfficers = mockOrganizationOfficers.filter((officer) =>
-    officerMatchesQuestion(question, officer.organization)
-  );
-  const officers = matchingOfficers.length > 0 ? matchingOfficers : mockOrganizationOfficers.slice(0, 5);
-  const officerLines = officers.map(
-    (officer) => `${officer.role}: ${officer.name} (${officer.organization}, ${officer.yearLevel})`
-  );
-  const answerText = [
-    "Here is the current mock officer list Haki can use for testing:",
-    "",
-    ...officerLines,
-    "",
-    ORGANIZATION_OFFICERS_MOCK_NOTICE
-  ].join("\n");
+  const answerText =
+    "I do not have verified organization officer names in the saved campus guide yet. For current officers, check the official organization page, ask the organization adviser, or ask the Office of Student Affairs. Haki should not show mock officer names as official student information.";
 
   return {
     question,
@@ -489,11 +477,11 @@ export function buildOrganizationOfficersResponse(
     normalizedQuestion: normalizeQuery(question),
     responseType: "general_advice",
     results: [],
-    confidence: "medium",
-    reliable: true,
+    confidence: "low",
+    reliable: false,
     answerText,
     citationsUsed: [],
-    provenance: "Answered with safe student guidance",
+    provenance: "No reliable saved source found",
     activeMode: mode
   };
 }
@@ -503,16 +491,22 @@ export function buildWellbeingSupportResponse(
   intent: StudentQuestionIntent,
   mode: DeviceAIMode
 ): SearchResponse | null {
-  if (intent.type !== "safe_question" || intent.scenario !== "wellbeing_safety" || !isEmotionalDistressQuestion(question)) {
+  if (intent.type !== "safe_question" || intent.scenario !== "wellbeing_safety") {
+    return null;
+  }
+
+  const isImmediatePhysicalEmergency = isImmediatePhysicalEmergencyQuestion(question);
+  const isEmotionalDistress = isEmotionalDistressQuestion(question);
+  if (!isImmediatePhysicalEmergency && !isEmotionalDistress) {
     return null;
   }
 
   // English-only policy (AGENTS.md): always reply in English regardless of the
-  // detected language. Wellbeing safety messages especially must be clear and
-  // un-codeswitched so emergency numbers and resources aren't lost in
-  // translation.
-  const answerText =
-    "I hear you. That feels heavy, and you do not have to handle it alone. If you feel unsafe or might hurt yourself, contact emergency help, 911 in the Philippines, NCMH Crisis Hotline, or someone near you now. If you can, message a trusted friend or family member and consider reaching out to Guidance or counseling support.";
+  // detected language. Safety messages must be clear and un-codeswitched so
+  // emergency numbers and resources are not lost in translation.
+  const answerText = isImmediatePhysicalEmergency
+    ? "This sounds urgent. If someone has chest pain, trouble breathing, severe bleeding, poisoning, fainting, or another serious symptom, call emergency help now, 911 in the Philippines, and ask the nearest guard, faculty member, office staff, or class officer to stay with the person. Go to the Clinic only if it is safe to move them; do not delay emergency help for severe symptoms."
+    : "I hear you. That feels heavy, and you do not have to handle it alone. If you feel unsafe or might hurt yourself, contact emergency help, 911 in the Philippines, NCMH Crisis Hotline, or someone near you now. If you can, message a trusted friend or family member and consider reaching out to Guidance or counseling support.";
 
   return {
     question,

@@ -1,4 +1,5 @@
 import type { AnswerProvenance, DeviceAIMode } from "@/ai/DeviceAIMode";
+import type { LocalContextUsage } from "@/ai/LocalAIProvider";
 import type { StudentQuestionIntent } from "@/services/studentChatTypes";
 
 export type ConfidenceLevel = "high" | "medium" | "low";
@@ -134,6 +135,7 @@ export interface SearchResponse {
   activeMode: DeviceAIMode;
   factCheckNotice?: string;
   verificationNote?: string;
+  contextUsage?: LocalContextUsage;
   isIncomplete?: boolean;
   suggestedModeActions?: SuggestedModeAction[];
 }

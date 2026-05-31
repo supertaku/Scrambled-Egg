@@ -3,7 +3,7 @@ import { useIsFocused } from "@react-navigation/native";
 
 import { colors } from "@/theme/colors";
 import { AdminUnlockModal } from "./AdminUnlockModal";
-import { PixelHaki } from "./mascot/PixelHaki";
+import { PixelHaki, SpriteHaki } from "./mascot/PixelHaki";
 import { pixelStateForMascotStatus, type MascotStatus } from "./mascot/mascotConfig";
 import { useMascotInteraction } from "./mascot/useMascotInteraction";
 
@@ -15,6 +15,7 @@ interface MascotHeaderProps {
   onMascotPress?: () => void;
   subtitle?: string;
   status?: MascotStatus;
+  useSpriteSheet?: boolean;
 }
 
 export function MascotHeader({
@@ -22,7 +23,8 @@ export function MascotHeader({
   message,
   onMascotPress,
   subtitle,
-  status = "idle"
+  status = "idle",
+  useSpriteSheet = false
 }: MascotHeaderProps) {
   const interactionVisible = useIsFocused();
   const {
@@ -51,7 +53,11 @@ export function MascotHeader({
         style={styles.mascotWrap}
       >
         <Animated.View style={[styles.mascotImage, { transform: imageTransform }]}>
-          <PixelHaki height={178} state={pixelStateForMascotStatus(resolvedStatus)} width={114} />
+          {useSpriteSheet ? (
+            <SpriteHaki height={178} state={pixelStateForMascotStatus(resolvedStatus)} />
+          ) : (
+            <PixelHaki height={178} state={pixelStateForMascotStatus(resolvedStatus)} width={114} />
+          )}
         </Animated.View>
       </Pressable>
 

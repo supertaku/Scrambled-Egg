@@ -44,6 +44,10 @@ export interface LocalAICapabilities {
   minimumOS: string | null;
   modelAssetsAvailable: boolean | null;
   modelName?: string | null;
+  /** Stable identity for the embedding model, separate from the active chat model. */
+  embeddingModelName?: string | null;
+  embeddingModelFileHash?: string | null;
+  embeddingDimension?: number | null;
   modelParameterCountB?: number | null;
   modelQuantization?: string | null;
   modelTier?: LocalModelTier;
@@ -128,10 +132,24 @@ export interface SafeChatInput {
 
 export type SafeChatStatus = "input_too_large" | "ok" | "refused" | "incomplete";
 
+export interface LocalContextUsage {
+  contextFillRatio: number;
+  conversationTokens: number;
+  historyPruned: boolean;
+  inputBudgetTokens: number;
+  maxContextTokens: number;
+  modelTier?: LocalModelTier;
+  outputBudgetTokens: number;
+  sourceTokens: number;
+  sourcesPruned: boolean;
+  totalInputTokens: number;
+}
+
 export interface SafeChatResult {
   status: SafeChatStatus;
   text: string;
   citationIds?: string[];
+  contextUsage?: LocalContextUsage;
   providerId: LocalAIProviderId;
   providerName: string;
 }
@@ -169,6 +187,9 @@ export function unavailableCapabilities(notes: string[], minimumOS: string | nul
     modelManifestPath: null,
     modelImportStatus: "missing",
     modelFileHash: null,
+    embeddingModelName: null,
+    embeddingModelFileHash: null,
+    embeddingDimension: null,
     modelRejectionReasons: notes,
     modelLoadTimeMs: null,
     lastInferenceTimeMs: null,

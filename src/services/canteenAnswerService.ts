@@ -66,11 +66,11 @@ export function buildCanteenFoodResponse(
   const matches = matchingFoodLines(normalizedQuestion);
   const lines = matches.length > 0 ? matches : storeMenuLines();
   const answerText = [
-    "From Haki's canteen guide, you can check:",
+    "From Haki's local canteen guide, you can check these options. Treat prices and availability as convenience info, not official policy:",
     "",
     ...lines.map((line, index) => `${index + 1}. ${line}`),
     "",
-    "Prices and availability can change, so confirm at the stall before buying."
+    "Confirm the current price and availability at the stall before buying."
   ].join("\n");
 
   return {
@@ -80,11 +80,11 @@ export function buildCanteenFoodResponse(
     normalizedQuestion,
     responseType: "general_advice",
     results: [],
-    confidence: "medium",
-    reliable: true,
+    confidence: "low",
+    reliable: false,
     answerText,
     citationsUsed: [],
-    provenance: "Answered with safe student guidance",
+    provenance: "No reliable saved source found",
     activeMode: mode
   };
 }

@@ -39,7 +39,7 @@ function messageForOperation(operation: ModelOperationState | null, activeModelN
     case "completed":
       return operation.error
         ? "The download was saved, but it cannot be used right now."
-        : "Ready. Your new chat option is set up.";
+        : "Ready. Your local AI option is set up.";
     case "canceled":
       return "The change was canceled. Your current setup was not changed.";
     case "failed":

@@ -17,12 +17,13 @@ import {
 import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
+import { RefreshCw } from "lucide-react-native";
 
 import { FeatherLoader } from "@/components/chat/FeatherLoader";
 import { ChatMessageBubble } from "@/components/chat/ChatMessageBubble";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { ChatRoleSelector } from "@/components/chat/ChatRoleSelector";
-import { PixelHaki, PixelHakiPortrait } from "@/components/mascot/PixelHaki";
+import { PixelHakiPortrait, SpriteHaki } from "@/components/mascot/PixelHaki";
 import { SuggestedQuestions } from "@/components/SuggestedQuestions";
 import { getAppDatabase } from "@/data/appRepository";
 import { useChatMessages } from "@/hooks/useChatMessages";
@@ -64,6 +65,14 @@ function getChatRoleSessionNotice(chatRole: ChatRole): string {
   }
 
   return "Haki uses saved sources for campus information. Verify important details because Haki can make mistakes.";
+}
+
+function getMemoryIndicatorText(messages: ChatMessage[]): string | null {
+  const usage = [...messages].reverse().find((message) => message.response?.contextUsage)?.response?.contextUsage;
+  if (!usage) return null;
+  if (usage.historyPruned || usage.sourcesPruned) return "Older context trimmed";
+  if (usage.contextFillRatio >= 0.8) return "Memory getting full";
+  return "Fresh memory";
 }
 
 const HAKI_LOADING_LINES = [
@@ -145,6 +154,7 @@ export default function ChatScreen() {
     inFlightRef,
     mountedRef,
     sendMessage,
+    startFresh,
     stopResponse,
     submitFeedback,
     setInitializing,
@@ -253,6 +263,7 @@ export default function ChatScreen() {
     () => (streamingMessage ? [...messages, streamingMessage] : messages),
     [messages, streamingMessage]
   );
+  const memoryIndicatorText = useMemo(() => getMemoryIndicatorText(displayedMessages), [displayedMessages]);
   const loadingLine = HAKI_LOADING_LINES[loadingLineIndex % HAKI_LOADING_LINES.length] ?? HAKI_LOADING_LINES[0];
   const showHelpListeningHaki = loading && (
     chatRole === "friendly_buddy" || shouldShowHelpListeningHaki(pendingQuestion)
@@ -319,6 +330,12 @@ export default function ChatScreen() {
     setRoleMenuVisible(false);
     router.push("/models" as never);
   }, [router]);
+
+  const handleStartFresh = useCallback(() => {
+    if (loading || initializing) return;
+    startFresh();
+    setRoleMenuVisible(false);
+  }, [initializing, loading, startFresh]);
 
   const toggleRoleMenu = useCallback(() => {
     setRoleMenuVisible((current) => !current);
@@ -432,7 +449,24 @@ export default function ChatScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <View style={styles.headerArea}>
-        <Text style={styles.headerTitle}>Chat</Text>
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerGap} />
+          <Text style={styles.headerTitle}>Chat</Text>
+          <Pressable
+            accessibilityLabel="Start fresh chat"
+            accessibilityRole="button"
+            disabled={loading || initializing}
+            onPress={handleStartFresh}
+            style={({ pressed }) => [
+              styles.startFreshButton,
+              pressed ? styles.startFreshButtonPressed : undefined,
+              (loading || initializing) ? styles.startFreshButtonDisabled : undefined
+            ]}
+          >
+            <RefreshCw color={colors.white} size={15} />
+            <Text style={styles.startFreshText}>Fresh</Text>
+          </Pressable>
+        </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Manage chat options" onPress={() => router.push("/models" as never)} style={styles.modelIndicator}>
           <Text numberOfLines={1} style={styles.modelIndicatorText}>
             {getModelIndicator(aiMode, capabilityReport)}
@@ -461,13 +495,21 @@ export default function ChatScreen() {
                   {getChatRoleSessionNotice(chatRole)}
                 </Text>
               </View>
+              {memoryIndicatorText ? (
+                <View style={[
+                  styles.memoryIndicator,
+                  memoryIndicatorText === "Fresh memory" ? styles.memoryFresh : styles.memoryWarn
+                ]}>
+                  <Text style={styles.memoryIndicatorText}>{memoryIndicatorText}</Text>
+                </View>
+              ) : null}
               {showHelpListeningHaki ? (
                 <View style={styles.listeningPanel} pointerEvents="none">
                   <View style={styles.branchScene}>
                     <View style={styles.branchLine} />
                     <View style={styles.branchOffshoot} />
                     <View style={styles.branchLeaf} />
-                    <PixelHaki height={60} state="helping" style={styles.listeningMascot} width={40} />
+                    <SpriteHaki height={60} state="helping" style={styles.listeningMascot} />
                   </View>
                   <View style={styles.listeningBubble}>
                     <View style={styles.listeningBubbleTailBorder} />
@@ -567,7 +609,36 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12
   },
+  headerTopRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%"
+  },
   headerTitle: { color: colors.white, fontSize: 20, fontWeight: "900" },
+  headerGap: { width: 74 },
+  startFreshButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 34,
+    paddingHorizontal: 9
+  },
+  startFreshButtonPressed: {
+    opacity: 0.7
+  },
+  startFreshButtonDisabled: {
+    opacity: 0.45
+  },
+  startFreshText: {
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: "900"
+  },
   modelIndicator: {
     backgroundColor: "rgba(255, 255, 255, 0.15)",
     maxWidth: "92%",
@@ -752,6 +823,28 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     textAlign: "center"
+  },
+  memoryIndicator: {
+    alignSelf: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    marginBottom: 2,
+    marginTop: -2,
+    paddingHorizontal: 10,
+    paddingVertical: 5
+  },
+  memoryFresh: {
+    backgroundColor: colors.successSoft,
+    borderColor: "rgba(22, 163, 74, 0.22)"
+  },
+  memoryWarn: {
+    backgroundColor: colors.goldSoft,
+    borderColor: colors.gold
+  },
+  memoryIndicatorText: {
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "900"
   },
   hakiRow: { justifyContent: "flex-start", flexDirection: "row", alignItems: "flex-end", marginBottom: 16, gap: 8 },
   hakiAvatarContainer: {

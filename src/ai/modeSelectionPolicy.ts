@@ -65,6 +65,20 @@ function mergeCapabilities(
       embeddingProbe?.capabilities.modelAssetsAvailable ??
       fallbackCapabilities.modelAssetsAvailable,
     modelName: summaryProbe?.capabilities.modelName ?? embeddingProbe?.capabilities.modelName ?? fallbackCapabilities.modelName ?? null,
+    embeddingModelName:
+      embeddingProbe?.capabilities.embeddingModelName ??
+      embeddingProbe?.capabilities.modelName ??
+      fallbackCapabilities.embeddingModelName ??
+      null,
+    embeddingModelFileHash:
+      embeddingProbe?.capabilities.embeddingModelFileHash ??
+      embeddingProbe?.capabilities.modelFileHash ??
+      fallbackCapabilities.embeddingModelFileHash ??
+      null,
+    embeddingDimension:
+      embeddingProbe?.capabilities.embeddingDimension ??
+      fallbackCapabilities.embeddingDimension ??
+      null,
     modelParameterCountB:
       summaryProbe?.capabilities.modelParameterCountB ??
       embeddingProbe?.capabilities.modelParameterCountB ??

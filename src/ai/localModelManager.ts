@@ -12,6 +12,7 @@ import {
   canonicalModelFileName,
   deriveModelMetadata,
   getLlamaContextSettingsForTier,
+  isGgufFileName,
   manifestFileName,
   recommendedDeviceModelTier,
   validateImportedModel,
@@ -47,6 +48,8 @@ const STAGING_DIR = new Directory(CHAT_DIR, "staging");
 const LIBRARY_VERSION = 2;
 const TEMP_DOWNLOAD_SUFFIX = ".partial.gguf";
 const MAX_SAFE_INLINE_HASH_BYTES = 64 * 1024 * 1024;
+const MAX_IMPORTED_CHAT_MODEL_BYTES = 10 * 1024 * 1024 * 1024;
+const MAX_IMPORTED_EMBEDDING_MODEL_BYTES = 2 * 1024 * 1024 * 1024;
 const LEGACY_CHAT_FILE = new File(MODELS_DIR, canonicalModelFileName("chat"));
 const LEGACY_CHAT_MANIFEST_FILE = new File(MODELS_DIR, manifestFileName("chat"));
 
@@ -240,6 +243,66 @@ function safeFileHash(file: File): string | null {
   }
 }
 
+function maxImportedModelBytes(role: LocalModelRole): number {
+  return role === "embedding" ? MAX_IMPORTED_EMBEDDING_MODEL_BYTES : MAX_IMPORTED_CHAT_MODEL_BYTES;
+}
+
+function formatModelSizeLimit(bytes: number): string {
+  return `${Math.round(bytes / 1024 / 1024 / 1024)}GB`;
+}
+
+function assertSafeImportPreflight(input: {
+  assetName: string | null | undefined;
+  file: File;
+  role: LocalModelRole;
+  reportedSize?: number | null | undefined;
+}): void {
+  const displayName = input.assetName?.trim() || "";
+  if (!isGgufFileName(displayName)) {
+    throw new Error("Imported local models must use the .gguf file extension.");
+  }
+
+  const sizeBytes = typeof input.reportedSize === "number" && Number.isFinite(input.reportedSize)
+    ? input.reportedSize
+    : input.file.size;
+  const maxBytes = maxImportedModelBytes(input.role);
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    throw new Error("Imported model file is empty or unreadable.");
+  }
+  if (sizeBytes > maxBytes) {
+    throw new Error(`Imported ${input.role} model is too large for this app. Choose a file up to ${formatModelSizeLimit(maxBytes)}.`);
+  }
+}
+
+async function probeEmbeddingModel(file: File, manifest: LocalModelManifest): Promise<number> {
+  const llama = await loadLlamaRn();
+  const settings = getLlamaContextSettingsForTier(manifest.modelTier, true);
+  const context = await llama.initLlama({
+    model: file.uri,
+    embedding: true,
+    n_ctx: settings.nCtx,
+    n_batch: settings.nBatch,
+    n_threads: settings.nThreads,
+    use_mlock: false,
+    use_mmap: true
+  });
+
+  try {
+    const result = await context.embedding("Haki embedding import validation", { embd_normalize: 1 });
+    const vector = result.embedding;
+    if (!Array.isArray(vector) || vector.length === 0 || !vector.every((value) => Number.isFinite(value))) {
+      throw new Error("The selected GGUF did not produce a valid embedding vector.");
+    }
+    return vector.length;
+  } finally {
+    await context.release().catch((error: unknown) => {
+      logger.ai.warn("Embedding import probe context release failed.", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+  }
+}
+
 function clampProgress(bytesWritten: number, totalBytes: number): number {
   if (!Number.isFinite(bytesWritten) || bytesWritten <= 0) return 0;
   if (!Number.isFinite(totalBytes) || totalBytes <= 0) return 0;
@@ -279,7 +342,7 @@ function statusFromManifest(manifest: LocalModelManifest): ImportedModelStatus {
   return {
     role: manifest.role,
     state: manifest.rejectionReasons.length > 0 ? "rejected" : "available",
-    modelDirectory: CHAT_DIR.uri,
+    modelDirectory: manifest.role === "chat" ? CHAT_DIR.uri : MODELS_DIR.uri,
     manifestPath: manifest.manifestPath,
     manifest,
     rejectionReasons: manifest.rejectionReasons
@@ -557,6 +620,7 @@ async function buildManifestForFile(input: {
   file: File;
   originalName: string;
   modelId: string;
+  role?: LocalModelRole;
   source: LocalModelManifest["source"];
   sourceId?: string;
   downloadId?: string;
@@ -566,15 +630,16 @@ async function buildManifestForFile(input: {
   const metadata = deriveModelMetadata({ originalName: input.originalName, modelInfo });
   const hardware = await getDeviceHardwareProfile();
   const catalogModel = GGUF_MODELS.find((model) => model.id === input.downloadId || model.id === input.sourceId);
-  const modelTarget = installedModelFile(input.modelId);
-  const manifestTarget = installedManifestFile(input.modelId);
+  const role = input.role ?? "chat";
+  const modelTarget = role === "chat" ? installedModelFile(input.modelId) : embeddingFile(role);
+  const manifestTarget = role === "chat" ? installedManifestFile(input.modelId) : embeddingManifestFile(role);
   return buildLocalModelManifest({
-    role: "chat",
+    role,
     source: input.source,
     sourceId: input.sourceId,
     downloadId: input.downloadId,
     originalName: input.originalName,
-    storedName: "model.gguf",
+    storedName: role === "chat" ? "model.gguf" : canonicalModelFileName(role),
     uri: modelTarget.uri,
     manifestPath: manifestTarget.uri,
     sizeBytes: input.file.size,
@@ -1305,25 +1370,59 @@ export async function removeImportedModel(role: LocalModelRole): Promise<Importe
 export async function pickAndImportGgufModel(role: LocalModelRole): Promise<PickAndImportModelResult> {
   const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: false, multiple: false });
   if (result.canceled || result.assets.length === 0 || !result.assets[0]) return { canceled: true };
-  if (role !== "chat") throw new Error("Embedding model import is not available in this managed model screen.");
   assertNoBusyOperation();
   const asset = result.assets[0];
-  const modelId = `admin-${Date.now()}`;
+  const modelId = role === "chat" ? `admin-${Date.now()}` : "embedding";
   const operation = operationFor(modelId, asset.name ?? "Imported GGUF", null, "validating");
   emitOperation(operation);
   ensureLibraryDirectories();
+  const source = new File(asset.uri);
+  assertSafeImportPreflight({
+    assetName: asset.name,
+    file: source,
+    role,
+    reportedSize: asset.size
+  });
   const staged = stagingModelFile(operation.operationId);
-  new File(asset.uri).copy(staged);
+  source.copy(staged);
+  assertSafeImportPreflight({
+    assetName: asset.name,
+    file: staged,
+    role
+  });
   try {
-    const manifest = await buildManifestForFile({
+    let manifest = await buildManifestForFile({
       file: staged,
       originalName: asset.name ?? "imported-model.gguf",
       modelId,
+      role,
       source: "admin-imported"
     });
     if (manifest.rejectionReasons.length > 0 && !hasOnlyTemporarySafetyRejections(manifest.rejectionReasons)) {
       throw new Error(manifest.rejectionReasons[0] ?? "Imported GGUF failed validation.");
     }
+
+    if (role === "embedding") {
+      patchOperation({ phase: "validating", progress: null, modelName: manifest.modelName });
+      const embeddingDimension = await probeEmbeddingModel(staged, manifest);
+      manifest = {
+        ...manifest,
+        embeddingDimension,
+        validatedAt: now()
+      };
+      safeDelete(embeddingFile(role));
+      safeDelete(embeddingManifestFile(role));
+      staged.move(embeddingFile(role));
+      embeddingManifestFile(role).write(JSON.stringify(manifest, null, 2));
+      const status = statusFromManifest(manifest);
+      patchOperation({
+        phase: "completed",
+        progress: 1,
+        error: status.state === "available" ? null : status.rejectionReasons[0] ?? "The embedding model is installed but cannot be used right now."
+      });
+      return { canceled: false, status };
+    }
+
     const directory = installedModelDirectory(modelId);
     directory.create({ intermediates: true, idempotent: true });
     staged.move(installedModelFile(modelId));

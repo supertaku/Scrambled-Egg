@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import type {
   LocalAICapabilities,
   LocalAIProvider,
+  LocalContextUsage,
   LocalSummaryResult,
   SafeChatInput,
   SafeChatResult,
@@ -227,12 +228,13 @@ export class LlamaRnProvider implements LocalAIProvider {
   }
 
   async isAvailable(): Promise<boolean> {
-    const [runtimeAvailable, chatStatus] = await Promise.all([
+    const [runtimeAvailable, chatStatus, embeddingStatus] = await Promise.all([
       this.runtimeAvailable(),
-      getActiveChatModelStatus()
+      getActiveChatModelStatus(),
+      getImportedModelStatus("embedding")
     ]);
 
-    return runtimeAvailable && chatStatus.state === "available";
+    return runtimeAvailable && (chatStatus.state === "available" || embeddingStatus.state === "available");
   }
 
   async getCapabilities(): Promise<LocalAICapabilities> {
@@ -249,18 +251,21 @@ export class LlamaRnProvider implements LocalAIProvider {
       getDeviceHardwareProfile(backendDevices ?? [])
     ]);
     const runtimeAvailable = backendDevices !== null;
-    const manifest = chatStatus.manifest;
+    const chatManifest = chatStatus.manifest;
+    const embeddingManifest = embeddingStatus.manifest;
     const modelAssetsAvailable = chatStatus.state === "available";
-    const recommendedModelTier = manifest?.recommendedModelTier ?? recommendedDeviceModelTier(hardware);
-    const contextSettings = manifest ? getLlamaContextSettingsForTier(manifest.modelTier, false) : null;
+    const embeddingsAvailable = runtimeAvailable && embeddingStatus.state === "available";
+    const providerReady = runtimeAvailable && (modelAssetsAvailable || embeddingsAvailable);
+    const recommendedModelTier = chatManifest?.recommendedModelTier ?? embeddingManifest?.recommendedModelTier ?? recommendedDeviceModelTier(hardware);
+    const contextSettings = chatManifest ? getLlamaContextSettingsForTier(chatManifest.modelTier, false) : null;
     const maxOutputTokens = contextSettings ? safeOutputTokens(contextSettings.nCtx, "safe-chat") : null;
     const modelRejectionReasons = [
-      ...chatStatus.rejectionReasons,
+      ...(chatStatus.state === "rejected" ? chatStatus.rejectionReasons : []),
       ...(embeddingStatus.state === "rejected" ? embeddingStatus.rejectionReasons : [])
     ];
     const unavailableReasons = [
       ...(runtimeAvailable ? [] : ["llama.rn native runtime is unavailable. Rebuild the custom native app after adding the plugin."]),
-      ...(modelAssetsAvailable
+      ...(modelAssetsAvailable || embeddingsAvailable
         ? []
         : chatStatus.rejectionReasons.length > 0
           ? chatStatus.rejectionReasons
@@ -270,22 +275,25 @@ export class LlamaRnProvider implements LocalAIProvider {
     return {
       summary: runtimeAvailable && modelAssetsAvailable,
       safeChat: runtimeAvailable && modelAssetsAvailable,
-      embeddings: runtimeAvailable && embeddingStatus.state === "available",
+      embeddings: embeddingsAvailable,
       reranking: false,
-      providerReady: runtimeAvailable && modelAssetsAvailable,
+      providerReady,
       requiresCustomDevBuild: true,
       minimumOS,
       modelAssetsAvailable,
-      modelName: manifest?.modelName ?? null,
-      modelParameterCountB: manifest?.modelParameterCountB ?? null,
-      modelQuantization: manifest?.modelQuantization ?? null,
-      modelTier: manifest?.modelTier ?? "unknown",
+      modelName: chatManifest?.modelName ?? embeddingManifest?.modelName ?? null,
+      embeddingModelName: embeddingManifest?.modelName ?? null,
+      embeddingModelFileHash: embeddingManifest?.fileHash ?? null,
+      embeddingDimension: embeddingManifest?.embeddingDimension ?? null,
+      modelParameterCountB: chatManifest?.modelParameterCountB ?? embeddingManifest?.modelParameterCountB ?? null,
+      modelQuantization: chatManifest?.modelQuantization ?? embeddingManifest?.modelQuantization ?? null,
+      modelTier: chatManifest?.modelTier ?? embeddingManifest?.modelTier ?? "unknown",
       recommendedModelTier,
       bridgePresent: runtimeAvailable,
-      modelAssetPath: manifest?.uri ?? null,
-      modelManifestPath: manifest?.manifestPath ?? chatStatus.manifestPath ?? null,
-      modelImportStatus: runtimeAvailable ? chatStatus.state : "runtime_unavailable",
-      modelFileHash: manifest?.fileHash ?? null,
+      modelAssetPath: chatManifest?.uri ?? embeddingManifest?.uri ?? null,
+      modelManifestPath: chatManifest?.manifestPath ?? embeddingManifest?.manifestPath ?? chatStatus.manifestPath ?? null,
+      modelImportStatus: runtimeAvailable ? (modelAssetsAvailable ? chatStatus.state : embeddingStatus.state) : "runtime_unavailable",
+      modelFileHash: chatManifest?.fileHash ?? embeddingManifest?.fileHash ?? null,
       modelRejectionReasons,
       modelLoadTimeMs: this.modelLoadTimeMs,
       lastInferenceTimeMs: this.lastInferenceTimeMs,
@@ -293,13 +301,13 @@ export class LlamaRnProvider implements LocalAIProvider {
       safeInputBudgetTokens: contextSettings && maxOutputTokens ? safeInputBudgetTokens(contextSettings.nCtx, maxOutputTokens) : null,
       maxOutputTokens,
       streamingSupported:
-        runtimeAvailable && modelAssetsAvailable && (!manifest || !thinkingDisabledForManifest(manifest)),
-      executionBackend: manifest?.executionProfile?.executionBackend ?? "cpu",
+        runtimeAvailable && modelAssetsAvailable && (!chatManifest || !thinkingDisabledForManifest(chatManifest)),
+      executionBackend: chatManifest?.executionProfile?.executionBackend ?? "cpu",
       availableBackends: backendDevices ?? [],
-      accelerationStatus: manifest?.executionProfile?.accelerationStatus ?? "not_checked",
-      performanceProfile: manifest?.executionProfile ?? null,
+      accelerationStatus: chatManifest?.executionProfile?.accelerationStatus ?? "not_checked",
+      performanceProfile: chatManifest?.executionProfile ?? null,
       thermalState: hardware.thermalState ?? "unknown",
-      approximateDeviceCapability: modelAssetsAvailable ? deviceCapabilityClassForTier(manifest?.modelTier ?? "unknown") : "unknown",
+      approximateDeviceCapability: providerReady ? deviceCapabilityClassForTier((chatManifest ?? embeddingManifest)?.modelTier ?? "unknown") : "unknown",
       architecture: hardware.architecture,
       freeStorageGB: hardware.freeStorageGB,
       memoryGB: hardware.memoryGB,
@@ -470,12 +478,25 @@ export class LlamaRnProvider implements LocalAIProvider {
         (await tc(input.question)) +
         (await tc(input.sourceReliable === undefined ? "" : "Source reliability: reliable")) +
         96;
+      const baseContextUsage: LocalContextUsage = {
+        contextFillRatio: Math.min(1, (baseTokens + outputTokens) / settings.nCtx),
+        conversationTokens: 0,
+        historyPruned: Boolean(input.conversationContext?.length),
+        inputBudgetTokens: inputBudget,
+        maxContextTokens: settings.nCtx,
+        modelTier: manifest.modelTier,
+        outputBudgetTokens: outputTokens,
+        sourceTokens: 0,
+        sourcesPruned: Boolean(input.sourceContext?.length),
+        totalInputTokens: baseTokens
+      };
 
       if (baseTokens >= inputBudget) {
         return {
           status: "input_too_large",
           text: "That message is too long for this phone's current local model context. Please shorten it or split it into smaller questions.",
           citationIds: [],
+          contextUsage: baseContextUsage,
           providerId: this.id,
           providerName: this.name
         };
@@ -494,6 +515,22 @@ export class LlamaRnProvider implements LocalAIProvider {
       const sourceBudget = Math.max(0, Math.min(Math.floor(inputBudget * 0.4), inputBudget - baseTokens - contextTokens));
       const sourceContext = pruneSourcesForBudget(input.sourceContext, sourceBudget);
       const promptSources = sourceBlock(sourceContext);
+      const sourceTokens = await tc(promptSources);
+      const totalInputTokens = baseTokens + contextTokens + sourceTokens;
+      const contextUsage: LocalContextUsage = {
+        contextFillRatio: Math.min(1, (totalInputTokens + outputTokens) / settings.nCtx),
+        conversationTokens: contextTokens,
+        historyPruned: (input.conversationContext?.length ?? 0) > conversationContext.length,
+        inputBudgetTokens: inputBudget,
+        maxContextTokens: settings.nCtx,
+        modelTier: manifest.modelTier,
+        outputBudgetTokens: outputTokens,
+        sourceTokens,
+        sourcesPruned:
+          (input.sourceContext?.length ?? 0) > (sourceContext?.length ?? 0) ||
+          sourceBlock(input.sourceContext) !== promptSources,
+        totalInputTokens
+      };
       const userContent = [
         promptSources,
         sourceContext?.length
@@ -547,6 +584,7 @@ export class LlamaRnProvider implements LocalAIProvider {
           status: partial ? "ok" : "refused",
           text: cleanedText || partial || "Generation stopped.",
           citationIds,
+          contextUsage,
           providerId: this.id,
           providerName: this.name
         };
@@ -579,6 +617,7 @@ export class LlamaRnProvider implements LocalAIProvider {
         status: isIncomplete ? "incomplete" : cleanedText ? "ok" : "refused",
         text: cleanedText,
         citationIds,
+        contextUsage,
         providerId: this.id,
         providerName: this.name
       };

@@ -100,6 +100,7 @@ export interface UseChatMessagesResult {
   inFlightRef: MutableRefObject<boolean>;
   mountedRef: MutableRefObject<boolean>;
   sendMessage: (overrideQuestion?: string, requestOptions?: ChatSendOptions) => Promise<void>;
+  startFresh: () => void;
   stopResponse: () => void;
   submitFeedback: (messageId: string, rating: ChatFeedbackRating) => Promise<void>;
   setInitializing: Dispatch<SetStateAction<boolean>>;
@@ -435,6 +436,22 @@ export function useChatMessages(
     answerAbortRef.current?.abort();
   }, []);
 
+  const startFresh = useCallback(() => {
+    answerAbortRef.current?.abort();
+    requestRef.current += 1;
+    inFlightRef.current = false;
+    streamedTextRef.current = "";
+    clearPendingStreamFlush();
+    setLoading(false);
+    setStreaming(false);
+    setStreamingMessage(null);
+    setPendingQuestion(null);
+    setLastFailedQuestion(null);
+    setError(null);
+    setMessages([createOpeningMessage(chatRoleRef.current)]);
+    void clearPendingChatRequest().catch(() => undefined);
+  }, [clearPendingStreamFlush, setMessages]);
+
   const submitFeedback = useCallback(async (messageId: string, rating: ChatFeedbackRating) => {
     const snapshot = messagesRef.current;
     const index = snapshot.findIndex((message) => message.id === messageId);
@@ -468,6 +485,7 @@ export function useChatMessages(
     inFlightRef,
     mountedRef,
     sendMessage,
+    startFresh,
     stopResponse,
     submitFeedback,
     setInitializing,

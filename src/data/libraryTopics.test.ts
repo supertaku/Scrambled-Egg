@@ -9,13 +9,11 @@ describe("library topics", () => {
     }
   });
 
-  it("shows provisional policy cards only as pending Service Desk topics", () => {
+  it("hides provisional policy cards from production topic search", () => {
     const insurance = searchTopics("student insurance")[0];
     const parking = searchTopics("motor parking")[0];
-    expect(insurance?.verificationStatus).toBe("pending");
-    expect(insurance?.content).toContain("PHP 25");
-    expect(parking?.verificationStatus).toBe("pending");
-    expect(getTopicsByCategory("Offices")).toContain(insurance);
-    expect(getTopicsByCategory("Offices")).toContain(parking);
+    expect(insurance).toBeUndefined();
+    expect(parking).toBeUndefined();
+    expect(getTopicsByCategory("Offices").some((topic) => topic.verificationStatus === "pending")).toBe(false);
   });
 });

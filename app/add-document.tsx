@@ -11,6 +11,8 @@ import { importDocumentsFromJson, validateImportText } from "@/services/document
 import { colors } from "@/theme/colors";
 import type { ImportResult, ValidationResult } from "@/types/document";
 
+const MAX_IMPORT_JSON_BYTES = 5 * 1024 * 1024;
+
 const placeholderJson = `[
   {
     "document_id": "official_registrar_2026",
@@ -20,6 +22,8 @@ const placeholderJson = `[
     "office": "Registrar",
     "version": "2026",
     "last_updated": "2026-04-30",
+    "authored_by": "Official issuing office or approved staff member",
+    "source_url": "Official memo URL, source file name, or signed document package ID",
     "chunks": [
       {
         "chunk_id": "official_registrar_2026_001",
@@ -61,6 +65,15 @@ export default function AddDocumentScreen() {
 
       const file = result.assets[0];
       if (file) {
+        let sizeBytes: number | null = typeof file.size === "number" ? file.size : null;
+        if (sizeBytes === null) {
+          const info = await FileSystem.getInfoAsync(file.uri);
+          sizeBytes = info.exists && "size" in info && typeof info.size === "number" ? info.size : null;
+        }
+        if (sizeBytes !== null && sizeBytes > MAX_IMPORT_JSON_BYTES) {
+          setError("That JSON file is too large. Split campus document updates into smaller files.");
+          return;
+        }
         const content = await FileSystem.readAsStringAsync(file.uri);
         setJsonText(content);
         setImportResult(null);

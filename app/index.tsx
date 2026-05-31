@@ -318,6 +318,7 @@ export default function HomeScreen() {
           message={hakiLine.text}
           status="teaching"
           onMascotPress={() => setShowAdminModal(true)}
+          useSpriteSheet
         />
       </View>
 

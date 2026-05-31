@@ -83,6 +83,7 @@ function toSafeChatResponse(input: {
   isIncomplete?: boolean;
   requestedChatRole?: ChatRole | undefined;
   answerBasis?: AnswerBasis | undefined;
+  contextUsage?: SafeChatResult["contextUsage"] | undefined;
 }): SearchResponse {
   return {
     question: input.question,
@@ -98,6 +99,7 @@ function toSafeChatResponse(input: {
     citationsUsed: input.citationsUsed ?? [],
     provenance: input.provenance,
     activeMode: input.mode,
+    ...(input.contextUsage ? { contextUsage: input.contextUsage } : {}),
     ...(input.isIncomplete !== undefined ? { isIncomplete: input.isIncomplete } : {})
   };
 }
@@ -282,9 +284,10 @@ export async function answerSafeLocalChatWithContext(
       provenance: "Answered with local safe chat",
       reliable: false,
       results: sourceResults,
-        topResult: sourceDraft?.topResult,
-        requestedChatRole: options.chatRole,
-        answerBasis: options.chatRole === "friendly_buddy" ? "friendly_guidance" : options.chatRole === "researcher" ? "researcher_facts" : "haki_guidance"
+      contextUsage: localAnswer.result.contextUsage,
+      topResult: sourceDraft?.topResult,
+      requestedChatRole: options.chatRole,
+      answerBasis: options.chatRole === "friendly_buddy" ? "friendly_guidance" : options.chatRole === "researcher" ? "researcher_facts" : "haki_guidance"
     });
   }
 
@@ -300,6 +303,7 @@ export async function answerSafeLocalChatWithContext(
       results: sourceResults,
       topResult: sourceDraft?.topResult,
       isIncomplete: localAnswer.result.status === "incomplete",
+      contextUsage: localAnswer.result.contextUsage,
       requestedChatRole: options.chatRole,
       answerBasis: options.chatRole === "friendly_buddy" ? "friendly_guidance" : options.chatRole === "researcher" ? "researcher_facts" : "haki_guidance"
     });

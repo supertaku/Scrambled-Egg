@@ -561,7 +561,7 @@ export async function answerStudentQuestion(
 
   const canteenFoodResponse = chatRole === "haki" ? buildCanteenFoodResponse(question, intent, selectedMode.mode) : null;
   if (canteenFoodResponse && chatRole === "haki") {
-    return withRole(canteenFoodResponse, chatRole, "campus_sources");
+    return withRole(canteenFoodResponse, chatRole, "haki_guidance");
   }
 
   if (contractClarification && (chatRole === "haki" || chatRole === "information_officer")) {

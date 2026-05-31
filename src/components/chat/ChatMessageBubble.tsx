@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef } from "react";
 import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { RefreshCw, ThumbsDown, ThumbsUp, User as UserIcon } from "lucide-react-native";
+import { AlertCircle, Flag, RefreshCw, ThumbsDown, ThumbsUp, User as UserIcon } from "lucide-react-native";
 
 import { colors } from "@/theme/colors";
 import type { ChatFeedbackRating, ChatMessage } from "@/types/chat";
@@ -27,6 +27,7 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
   const canGiveFeedback = !fromUser && message.id !== "opening" && Boolean(onFeedback);
   const helpfulSelected = message.feedbackRating === "helpful";
   const wrongSelected = message.feedbackRating === "wrong";
+  const showMissingSourceReport = !fromUser && response?.answerBasis === "campus_sources_unavailable" && Boolean(onFeedback);
 
   // Entry animation per bubble
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -103,6 +104,18 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
           {response && !fromUser ? (
             <ChatSourceCard response={response} result={result} />
           ) : null}
+          {response && !fromUser ? <ResponseNoticeStack response={response} /> : null}
+          {showMissingSourceReport ? (
+            <Pressable
+              accessibilityLabel="Report missing campus source"
+              accessibilityRole="button"
+              onPress={() => onFeedback?.(message.id, "wrong")}
+              style={({ pressed }) => [styles.missingSourceButton, pressed ? styles.modeActionPressed : undefined]}
+            >
+              <Flag color={colors.maroon} size={13} />
+              <Text style={styles.missingSourceText}>Report missing source</Text>
+            </Pressable>
+          ) : null}
           {onContinue ? (
             <View style={styles.continueContainer}>
               <Text style={styles.continueText}>Response stopped. Continue?</Text>
@@ -167,6 +180,41 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
         </View>
       )}
     </Animated.View>
+  );
+}
+
+function memoryNoticeText(response: NonNullable<ChatMessage["response"]>): string | null {
+  const usage = response.contextUsage;
+  if (!usage) return null;
+  if (usage.historyPruned || usage.sourcesPruned) {
+    return "Older context was trimmed for this local model.";
+  }
+  if (usage.contextFillRatio >= 0.8) {
+    return "Memory is getting full. Start fresh for the clearest answer.";
+  }
+  return null;
+}
+
+function ResponseNoticeStack({ response }: { response: NonNullable<ChatMessage["response"]> }) {
+  const notices = [
+    response.verificationNote,
+    response.factCheckNotice,
+    memoryNoticeText(response)
+  ].filter((notice): notice is string => Boolean(notice?.trim()));
+
+  if (notices.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.noticeStack}>
+      {notices.map((notice) => (
+        <View key={notice} style={styles.noticePill}>
+          <AlertCircle color={colors.maroon} size={13} />
+          <Text selectable style={styles.noticeText}>{notice}</Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -447,6 +495,46 @@ const styles = StyleSheet.create({
     opacity: 0.72
   },
   modeActionText: {
+    color: colors.maroon,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  noticeStack: {
+    gap: 6,
+    marginTop: 10
+  },
+  noticePill: {
+    alignItems: "flex-start",
+    backgroundColor: colors.goldSoft,
+    borderColor: colors.gold,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  noticeText: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 16
+  },
+  missingSourceButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.maroonSoft,
+    borderColor: "#E8C7D0",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  missingSourceText: {
     color: colors.maroon,
     fontSize: 12,
     fontWeight: "800"

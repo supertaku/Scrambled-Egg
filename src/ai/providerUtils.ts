@@ -197,7 +197,7 @@ export function extractCitationFooter(text: string): { text: string; citationIds
 
   // Match the LAST occurrence of a CITATIONS: line so models that hallucinate
   // an earlier "CITATIONS:" mid-paragraph don't trip us up.
-  const FOOTER_RE = /(^|\n)\s*(?:CITATIONS?|SOURCE_IDS?|SOURCES?)\s*:\s*([^\n]*)\s*$/i;
+  const FOOTER_RE = /(^|\n)\s*(?:\uD83D\uDCCC\s*)?(?:CITATIONS?|SOURCE_IDS?|SOURCES?)\s*:\s*([^\n]*)\s*$/i;
   const match = text.match(FOOTER_RE);
   if (!match) {
     return { text, citationIds: [] };

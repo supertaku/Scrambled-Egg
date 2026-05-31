@@ -2,9 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, CheckCircle2, Cpu, Download, PauseCircle, PlayCircle, RefreshCw, Trash2 } from "lucide-react-native";
+import { ArrowLeft, CheckCircle2, Cpu, Download, PauseCircle, PlayCircle, RefreshCw, Trash2, Upload } from "lucide-react-native";
 
-import type { GgufDownloadConfig } from "@/ai/modelDownloadConfig";
 import {
   activateChatModel,
   cancelGgufDownload,
@@ -12,12 +11,16 @@ import {
   downloadCatalogModel,
   getChatModelLibrary,
   getCompatibleModelCatalog,
+  getImportedModelStatus,
+  pickAndImportGgufModel,
   recoverInterruptedModelOperation,
+  removeImportedModel,
   removeChatModel,
   resumePausedModelDownload,
   subscribeModelOperation,
   type ChatModelLibrary,
   type CompatibleModelCatalog,
+  type ImportedModelStatus,
   type InstalledChatModel,
   type ModelOperationState
 } from "@/ai/localModelManager";
@@ -62,6 +65,7 @@ export default function ModelsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [library, setLibrary] = useState<ChatModelLibrary | null>(null);
+  const [embeddingStatus, setEmbeddingStatus] = useState<ImportedModelStatus | null>(null);
   const [catalog, setCatalog] = useState<CompatibleModelCatalog | null>(null);
   const [operation, setOperation] = useState<ModelOperationState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,9 +76,14 @@ export default function ModelsScreen() {
     setError(null);
     try {
       if (refreshMode) await refreshDeviceCapabilities();
-      const [nextLibrary, nextCatalog] = await Promise.all([getChatModelLibrary(), getCompatibleModelCatalog()]);
+      const [nextLibrary, nextCatalog, nextEmbeddingStatus] = await Promise.all([
+        getChatModelLibrary(),
+        getCompatibleModelCatalog(),
+        getImportedModelStatus("embedding")
+      ]);
       setLibrary(nextLibrary);
       setCatalog(nextCatalog);
+      setEmbeddingStatus(nextEmbeddingStatus);
     } catch {
       setError("Could not load chat options. Please try again.");
     } finally {
@@ -112,6 +121,17 @@ export default function ModelsScreen() {
       [
         { text: "Cancel", style: "cancel" },
         { text: "Remove", style: "destructive", onPress: () => void runAction(() => removeChatModel(model.id)) }
+      ]
+    );
+  }, [runAction]);
+
+  const removeEmbeddingModel = useCallback(() => {
+    Alert.alert(
+      "Remove semantic search model",
+      "Remove the imported embedding model? Campus source search will still work, but semantic search will turn off until another embedding model is imported.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Remove", style: "destructive", onPress: () => void runAction(() => removeImportedModel("embedding")) }
       ]
     );
   }, [runAction]);
@@ -201,6 +221,46 @@ export default function ModelsScreen() {
               </View>
             ))
           )}
+
+          <Text style={styles.sectionTitle}>Semantic search model</Text>
+          <View style={styles.modelCard}>
+            <View style={styles.modelTitleRow}>
+              <Text selectable style={styles.modelName}>
+                {embeddingStatus?.state === "available"
+                  ? embeddingStatus.manifest?.modelName ?? "Imported embedding GGUF"
+                  : "No embedding model imported"}
+              </Text>
+              {embeddingStatus?.state === "available" ? (
+                <View style={styles.activeBadge}><Text style={styles.activeBadgeText}>READY</Text></View>
+              ) : null}
+            </View>
+            <Text selectable style={styles.body}>
+              Semantic search improves source matching for wording that does not exactly match the saved campus guide. It stays off until you import a verified GGUF embedding model.
+            </Text>
+            {embeddingStatus?.state === "rejected" ? (
+              <Text selectable style={styles.warning}>{embeddingStatus.rejectionReasons[0] ?? "This embedding model cannot be used on this phone."}</Text>
+            ) : null}
+            {embeddingStatus?.state === "available" && embeddingStatus.manifest ? (
+              <Text selectable style={styles.meta}>About {formatSize(embeddingStatus.manifest.sizeBytes)}</Text>
+            ) : null}
+            <View style={styles.rowActions}>
+              <ActionButton
+                disabled={busy}
+                icon={<Upload color={colors.white} size={16} />}
+                label={embeddingStatus?.state === "available" ? "Replace" : "Import"}
+                onPress={() => void runAction(() => pickAndImportGgufModel("embedding"))}
+              />
+              {embeddingStatus?.state !== "missing" ? (
+                <ActionButton
+                  disabled={busy}
+                  secondary
+                  icon={<Trash2 color={colors.maroon} size={16} />}
+                  label="Remove"
+                  onPress={removeEmbeddingModel}
+                />
+              ) : null}
+            </View>
+          </View>
 
           <Text style={styles.sectionTitle}>Models available for this phone</Text>
           {!catalog?.compatibleModels.length ? (

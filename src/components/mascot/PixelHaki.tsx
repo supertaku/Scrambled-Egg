@@ -19,6 +19,9 @@ const FRAME_IMAGES = {
 } satisfies Record<string, ImageSourcePropType>;
 
 const PORTRAIT_IMAGE = require("../../../assets/images/mascot/pixel/haki-pixel-portrait.png");
+const SPRITE_IMAGE = require("../../../assets/images/mascot/pixel/haki-pixel-sprite.png");
+const SPRITE_FRAME_COUNT = 4;
+const SPRITE_FRAME_ASPECT_RATIO = 384 / 512;
 
 const STATE_FRAMES: Record<PixelHakiState, ImageSourcePropType[]> = {
   idle: [FRAME_IMAGES.idle, FRAME_IMAGES.blink],
@@ -39,6 +42,26 @@ interface PixelHakiProps {
   style?: StyleProp<ViewStyle>;
   width?: number;
 }
+
+interface SpriteHakiProps {
+  animated?: boolean;
+  height?: number;
+  reducedMotion?: boolean;
+  state?: PixelHakiState;
+  style?: StyleProp<ViewStyle>;
+  width?: number;
+}
+
+const SPRITE_SEQUENCES: Record<PixelHakiState, number[]> = {
+  idle: [0, 1],
+  thinking: [0, 2, 0, 1],
+  helping: [0, 2],
+  success: [2, 3],
+  sleepy: [1],
+  detective: [2],
+  aha: [2, 3],
+  dizzy: [1, 0]
+};
 
 export function PixelHaki({
   animated = true,
@@ -103,6 +126,79 @@ export function PixelHaki({
   );
 }
 
+export function SpriteHaki({
+  animated = true,
+  height = 180,
+  reducedMotion,
+  state = "idle",
+  style,
+  width = Math.round(height * SPRITE_FRAME_ASPECT_RATIO)
+}: SpriteHakiProps) {
+  const systemReducedMotion = useReducedMotion();
+  const motionDisabled = reducedMotion ?? systemReducedMotion;
+  const sequence = SPRITE_SEQUENCES[state] ?? SPRITE_SEQUENCES.idle;
+  const [sequenceIndex, setSequenceIndex] = useState(0);
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    setSequenceIndex(0);
+    if (!animated || motionDisabled || sequence.length < 2) {
+      return undefined;
+    }
+
+    const timer = setInterval(() => setSequenceIndex((index) => (index + 1) % sequence.length), 760);
+    return () => clearInterval(timer);
+  }, [animated, motionDisabled, sequence, state]);
+
+  useEffect(() => {
+    translateY.stopAnimation();
+    translateY.setValue(0);
+    if (!animated || motionDisabled) {
+      return undefined;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(translateY, {
+          duration: state === "success" || state === "aha" ? 620 : 1300,
+          easing: Easing.inOut(Easing.ease),
+          toValue: state === "success" || state === "aha" ? -5 : -2,
+          useNativeDriver: true
+        }),
+        Animated.timing(translateY, {
+          duration: state === "success" || state === "aha" ? 620 : 1300,
+          easing: Easing.inOut(Easing.ease),
+          toValue: 0,
+          useNativeDriver: true
+        })
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [animated, motionDisabled, state, translateY]);
+
+  const frameIndex = sequence[Math.min(sequenceIndex, sequence.length - 1)] ?? 0;
+  const sheetWidth = width * SPRITE_FRAME_COUNT;
+
+  return (
+    <Animated.View style={[styles.spriteFrame, { height, width }, style, { transform: [{ translateY }] }]}>
+      <Image
+        accessibilityIgnoresInvertColors
+        resizeMode="stretch"
+        source={SPRITE_IMAGE}
+        style={[
+          styles.spriteImage,
+          {
+            height,
+            transform: [{ translateX: -frameIndex * width }],
+            width: sheetWidth
+          }
+        ]}
+      />
+    </Animated.View>
+  );
+}
+
 export function PixelHakiPortrait({
   size = 34,
   style
@@ -125,5 +221,13 @@ const styles = StyleSheet.create({
   image: {
     height: "100%",
     width: "100%"
+  },
+  spriteFrame: {
+    alignItems: "flex-start",
+    justifyContent: "center",
+    overflow: "hidden"
+  },
+  spriteImage: {
+    flexShrink: 0
   }
 });

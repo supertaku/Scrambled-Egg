@@ -231,6 +231,27 @@ async function upgradeToV4(db: SQLiteDatabase): Promise<void> {
   `);
 }
 
+async function upgradeToV5(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS chunk_embedding_index (
+      chunk_id TEXT NOT NULL,
+      model_name TEXT NOT NULL,
+      dimension INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (chunk_id, model_name),
+      FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE
+    );
+
+    INSERT OR IGNORE INTO chunk_embedding_index (chunk_id, model_name, dimension, updated_at)
+    SELECT chunk_id, model_name, dimension, CURRENT_TIMESTAMP
+    FROM chunk_embeddings
+    WHERE embedding IS NOT NULL AND dimension IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_chunk_embedding_index_model_name ON chunk_embedding_index(model_name);
+  `);
+}
+
 /**
  * List of all database migrations.
  * When adding a new migration, increment the version and add a new entry.
@@ -262,6 +283,13 @@ const migrations: Migration[] = [
     description: "Version embeddings and backfill status by active embedding model",
     up: async (db) => {
       await upgradeToV4(db);
+    }
+  },
+  {
+    version: 5,
+    description: "Add optional sqlite-vec embedding index mapping",
+    up: async (db) => {
+      await upgradeToV5(db);
     }
   }
 ];

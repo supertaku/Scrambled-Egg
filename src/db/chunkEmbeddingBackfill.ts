@@ -1,7 +1,9 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 
+import type { LocalAICapabilities } from "@/ai/LocalAIProvider";
 import { getSelectedAIMode } from "@/services/modeSelectionService";
 import { logger } from "@/utils/logger";
+import { upsertSqliteVecEmbedding } from "./sqliteVec";
 
 const MAX_CHUNK_EMBED_CHARS = 12_000;
 const BATCH_SIZE = 8;
@@ -17,8 +19,14 @@ interface ChunkRow {
   tags: string | null;
 }
 
-function storageModelName(modelName: string | null | undefined, providerId: string): string {
-  return modelName?.trim() || providerId;
+function storageModelName(capabilities: LocalAICapabilities, providerId: string): string {
+  const identity = [
+    capabilities.embeddingModelName?.trim() || capabilities.modelName?.trim() || providerId,
+    capabilities.embeddingModelFileHash?.trim() || null,
+    capabilities.embeddingDimension ? `${capabilities.embeddingDimension}d` : null
+  ].filter(Boolean);
+
+  return identity.join(":");
 }
 
 function buildEmbedText(row: ChunkRow): string {
@@ -51,7 +59,7 @@ export async function backfillChunkEmbeddingsIfNeeded(db: SQLiteDatabase): Promi
     }
 
     const capabilities = await embedProvider.getCapabilities();
-    const modelKey = storageModelName(capabilities.modelName, embedProvider.id);
+    const modelKey = storageModelName(capabilities, embedProvider.id);
 
     for (;;) {
       const pending = await db.getAllAsync<ChunkRow>(
@@ -95,6 +103,18 @@ export async function backfillChunkEmbeddingsIfNeeded(db: SQLiteDatabase): Promi
              ON CONFLICT(chunk_id, model_name) DO UPDATE SET embedding = excluded.embedding, dimension = excluded.dimension`,
             [row.chunk_id, modelKey, blob, vec.length]
           );
+          await upsertSqliteVecEmbedding({
+            chunkId: row.chunk_id,
+            db,
+            dimension: vec.length,
+            embedding: blob,
+            modelName: modelKey
+          }).catch((error) => {
+            logger.db.warn("sqlite-vec embedding index update skipped.", {
+              chunkId: row.chunk_id,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          });
           await db.runAsync(
             `INSERT INTO chunk_embedding_status (chunk_id, model_name, status, updated_at)
              VALUES (?, ?, 'generated', CURRENT_TIMESTAMP)

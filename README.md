@@ -4,7 +4,7 @@ Haki is an Expo React Native offline student assistant for school processes, off
 
 Haki is client-only. It does not use a backend, authentication, cloud database, online search API, or online LLM API. The local documents stored on the device are the source of truth.
 
-The bundled content in `src/data/seed-documents.json` is demo placeholder content. Replace it with official preprocessed documents before production use.
+The bundled content in `src/data/seed-documents.json` is the only source that Haki treats as verified campus-answer data. For production pilots, replace or approve this file with official preprocessed documents and keep provisional/mock content out of student-facing answer paths.
 
 ## Offline-First Design
 
@@ -47,7 +47,7 @@ Internal answer provenance is tracked as one of:
 
 Base FTS5 mode:
 
-- iOS 15+
+- iOS 18.1+ for the current Expo native build configuration
 - Android 9+
 
 Native GGUF (llama.rn) summary mode uses conservative mobile hardware tiers (RAM, storage, architecture). Users install compatible models from the public AI Models screen into app-private storage.
@@ -59,7 +59,7 @@ llama.rn / GGUF AI mode:
 - New installations start with no chat GGUF; FTS5 source search remains available until a student activates a compatible download.
 - Embedding model filenames checked by default: `haki-embed.gguf`, `haki-embedding.gguf`, `haki-minilm-embed.gguf`.
 - Uses the same adaptive tier policy as Android local AI: tiny 0.5B-1.5B, minimum 1B-3B, good 3B-4B, enhanced 4B-7B, flagship 7B-8B.
-- The AI Models screen supports curated compatible downloads, switching, removal, paused-download recovery, and Haki progress feedback. Manual import remains an admin diagnostic action.
+- The AI Models screen supports curated compatible downloads, switching, removal, paused-download recovery, public manual import for advanced offline use, and Haki progress feedback. Manual imports are preflighted for GGUF extension, size limits, device fit, and embedding runtime validation before activation.
 
 Apple Intelligence / Foundation Models mode:
 
