@@ -12,6 +12,7 @@ import { calculateConfidence, computeConfidenceScore } from "@/retrieval/confide
 import { normalizeQuery, tokenizeQuery } from "@/retrieval/queryNormalizer";
 import { calculateRankScore, rankSearchResults } from "@/retrieval/ranking";
 import { reciprocalRankFusion } from "@/retrieval/rrf";
+import { pixelStateForMascotStatus } from "@/components/mascot/mascotConfig";
 import { classifyStudentQuestionIntent } from "@/services/questionIntentService";
 import {
   detectReplyLanguage,
@@ -166,5 +167,11 @@ describe("home trivia", () => {
       expect(displayed).not.toMatch(/Did you know\?/i);
       expect(item.sourceUrl).toMatch(/^https:\/\//);
     });
+  });
+});
+
+describe("mascot state mapping", () => {
+  it("maps shake groggy state to the dizzy Haki artwork", () => {
+    expect(pixelStateForMascotStatus("groggy")).toBe("dizzy");
   });
 });

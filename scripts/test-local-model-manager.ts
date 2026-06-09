@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   buildLocalModelManifest,
+  catalogDownloadFitsHardwareForDownload,
   catalogDownloadFitsHardware,
   deriveModelMetadata,
   getLlamaContextSettingsForTier,
@@ -181,35 +182,141 @@ assert.match(
   }).join("\n"),
   /template mismatch/
 );
-assert.ok(GGUF_MODELS.every((model) => model.chatTemplateFamily === "llama" || model.chatTemplateFamily === "qwen"));
+assert.ok(GGUF_MODELS.every((model) =>
+  model.chatTemplateFamily === "llama" ||
+  model.chatTemplateFamily === "qwen" ||
+  model.chatTemplateFamily === "gemma" ||
+  model.chatTemplateFamily === "phi"
+));
 assert.ok(GGUF_MODELS.every((model) => model.lifecycleChannel === "supported" || model.lifecycleChannel === "evaluation"));
 assert.ok(GGUF_MODELS.every((model) => model.supportedPlatforms.includes("android") && model.supportedPlatforms.includes("ios")));
 assert.equal(GGUF_MODELS.find((model) => model.id === "qwen3-4b")?.generationPolicy?.thinkingMode, "disabled");
+
+const runtimeAwareCatalog = GGUF_MODELS as Array<(typeof GGUF_MODELS)[number] & {
+  activationPolicy?: string;
+  artifactKind?: string;
+  defaultContextTokens?: number;
+  evidenceLevel?: string;
+  estimatedWorkingSetGB?: number;
+  maxContextTokens?: number;
+  minimumFreeStorageGB?: number;
+  minimumRamGB?: number;
+  modelFamily?: string;
+  parameterCountB?: number;
+  recommendedRamGB?: number;
+  runtimeFormat?: string;
+}>;
+assert.ok(runtimeAwareCatalog.every((model) => model.runtimeFormat));
+assert.ok(runtimeAwareCatalog.every((model) => model.artifactKind));
+assert.ok(runtimeAwareCatalog.every((model) => model.evidenceLevel));
+assert.ok(runtimeAwareCatalog.every((model) => typeof model.minimumRamGB === "number"));
+assert.ok(runtimeAwareCatalog.every((model) => typeof model.recommendedRamGB === "number"));
+assert.ok(runtimeAwareCatalog.every((model) => typeof model.minimumFreeStorageGB === "number"));
+assert.ok(runtimeAwareCatalog.every((model) => typeof model.defaultContextTokens === "number"));
+assert.ok(runtimeAwareCatalog.every((model) => typeof model.maxContextTokens === "number"));
+assert.ok(runtimeAwareCatalog.every((model) => typeof model.estimatedWorkingSetGB === "number"));
+assert.ok(runtimeAwareCatalog.every((model) => typeof model.parameterCountB === "number"));
+assert.ok(runtimeAwareCatalog.every((model) => model.lifecycleChannel === "evaluation" || model.sha256Hex));
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "gemma-4-e2b-litert-lm")?.runtimeFormat, "litert-lm");
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "gemma-4-e2b-litert-lm")?.lifecycleChannel, "evaluation");
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "gemma-4-e2b-litert-lm")?.activationPolicy, "auto-after-smoke-test");
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "gemma-4-e2b-litert-lm")?.recommendationGroup, "recommended");
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "gemma-4-e2b-litert-lm")?.artifactFileName, "gemma-4-E2B-it.litertlm");
+assert.match(runtimeAwareCatalog.find((model) => model.id === "gemma-4-e2b-litert-lm")?.url ?? "", /gemma-4-E2B-it\.litertlm$/);
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "gemma-4-e4b-litert-lm")?.minimumRamGB, 8);
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "gemma-4-e4b-litert-lm")?.activationPolicy, "auto-after-smoke-test");
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "gemma-4-e4b-litert-lm")?.artifactFileName, "gemma-4-E4B-it.litertlm");
+assert.match(runtimeAwareCatalog.find((model) => model.id === "gemma-4-e4b-litert-lm")?.url ?? "", /gemma-4-E4B-it\.litertlm$/);
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "phi-4-mini-gguf")?.runtimeFormat, "gguf");
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "phi-4-mini-gguf")?.artifactKind, "single-file");
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "phi-4-mini-gguf")?.activationPolicy, "auto-after-smoke-test");
+assert.match(runtimeAwareCatalog.find((model) => model.id === "phi-4-mini-gguf")?.url ?? "", /Phi-4-mini-instruct-Q4_K_M\.gguf$/);
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "phi-4-mini-onnx-int4")?.runtimeFormat, "onnx-genai");
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "phi-4-mini-onnx-int4")?.activationPolicy, "manual");
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "qwen3-8b")?.generationPolicy?.thinkingMode, "disabled");
+assert.equal(runtimeAwareCatalog.find((model) => model.id === "qwen3-14b")?.lifecycleChannel, "evaluation");
+assert.ok(["qwen-2.5-0.5b", "qwen-2.5-3b", "qwen-2.5-7b", "qwen3-4b", "qwen3-8b", "qwen3-14b"].every((id) =>
+  runtimeAwareCatalog.some((model) => model.id === id && model.runtimeFormat === "gguf")
+));
+assert.ok(runtimeAwareCatalog.some((model) => model.id === "phi-4-mini-gguf" && model.runtimeFormat === "gguf"));
 
 function compatibleCatalogIds(hardware: DeviceHardwareProfile): string[] {
   return GGUF_MODELS.filter((model) => catalogDownloadFitsHardware(model, hardware)).map((model) => model.id);
 }
 
-assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 4 }), ["qwen-2.5-0.5b"]);
+function compatibleCatalogIdsWithRuntime(
+  hardware: DeviceHardwareProfile,
+  runtimeAvailability: Partial<Record<string, boolean>>
+): string[] {
+  return GGUF_MODELS
+    .filter((model) => catalogDownloadFitsHardware(model, hardware, runtimeAvailability))
+    .map((model) => model.id);
+}
+
+function downloadableCatalogIds(hardware: DeviceHardwareProfile): string[] {
+  return GGUF_MODELS
+    .filter((model) => catalogDownloadFitsHardwareForDownload(model, hardware))
+    .map((model) => model.id);
+}
+
+assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 4 }), ["qwen-2.5-0.5b", "llama-3.2-1b"]);
+assert.ok(downloadableCatalogIds({ ...capableAndroid, memoryGB: 4, freeStorageGB: 20 }).includes("gemma-4-e2b-litert-lm"));
+assert.ok(downloadableCatalogIds({ ...capableAndroid, memoryGB: 7.2, freeStorageGB: 20 }).includes("gemma-4-e4b-litert-lm"));
+assert.equal(downloadableCatalogIds({ ...capableAndroid, memoryGB: 6.9, freeStorageGB: 20 }).includes("gemma-4-e4b-litert-lm"), false);
+assert.deepEqual(
+  compatibleCatalogIdsWithRuntime({ ...capableAndroid, memoryGB: 4, freeStorageGB: 20 }, { "litert-lm": true }),
+  ["qwen-2.5-0.5b", "llama-3.2-1b", "gemma-4-e2b-litert-lm"]
+);
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 8 }), [
   "qwen-2.5-0.5b",
   "llama-3.2-1b",
-  "qwen-2.5-3b"
+  "llama-3.2-3b",
+  "qwen-2.5-3b",
+  "qwen3-4b",
+  "phi-4-mini-gguf"
+]);
+assert.deepEqual(compatibleCatalogIdsWithRuntime({ ...capableAndroid, memoryGB: 8 }, { "litert-lm": true, "onnx-genai": true }), [
+  "qwen-2.5-0.5b",
+  "llama-3.2-1b",
+  "gemma-4-e2b-litert-lm",
+  "llama-3.2-3b",
+  "qwen-2.5-3b",
+  "qwen3-4b",
+  "gemma-4-e4b-litert-lm",
+  "phi-4-mini-gguf",
+  "phi-4-mini-onnx-int4"
 ]);
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 12 }), [
   "qwen-2.5-0.5b",
   "llama-3.2-1b",
+  "llama-3.2-3b",
   "qwen-2.5-3b",
-  "qwen3-4b"
+  "qwen3-4b",
+  "phi-4-mini-gguf",
+  "qwen-2.5-7b",
+  "qwen3-8b"
 ]);
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 8, freeStorageGB: 8 }), [
   "qwen-2.5-0.5b",
-  "llama-3.2-1b"
+  "llama-3.2-1b",
+  "llama-3.2-3b",
+  "qwen-2.5-3b"
+]);
+assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 16, freeStorageGB: 40 }), [
+  "qwen-2.5-0.5b",
+  "llama-3.2-1b",
+  "llama-3.2-3b",
+  "qwen-2.5-3b",
+  "qwen3-4b",
+  "phi-4-mini-gguf",
+  "qwen-2.5-7b",
+  "qwen3-8b",
+  "qwen3-14b"
 ]);
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, lowMemory: true }), []);
 assert.deepEqual(
   compatibleCatalogIds({ ...capableAndroid, platform: "ios", supportedAbis: ["arm64"], architecture: "arm64", lowMemory: false }),
-  ["qwen-2.5-0.5b", "llama-3.2-1b", "qwen-2.5-3b"]
+  ["qwen-2.5-0.5b", "llama-3.2-1b", "llama-3.2-3b", "qwen-2.5-3b", "qwen3-4b", "phi-4-mini-gguf"]
 );
 
 const openClCandidates = executionCandidatesForHardware({
@@ -278,6 +385,21 @@ assert.match(
     hardware: { ...capableAndroid, memoryGB: 4, freeStorageGB: 5 }
   }).join("\n"),
   /requires at least/
+);
+
+assert.equal(
+  validateImportedModel({
+    fileName: "gemma-4-E4B-it.litertlm",
+    role: "chat",
+    metadata: deriveModelMetadata({ originalName: "gemma-4-E4B-it.litertlm" }),
+    sizeBytes: 2800 * 1024 ** 2,
+    hardware: { ...capableAndroid, memoryGB: 7.2, freeStorageGB: 20 },
+    runtimeFormat: "litert-lm",
+    activationPolicy: "auto-after-smoke-test",
+    minimumRamGB: 8,
+    minimumFreeStorageGB: 7
+  }).some((reason) => /requires at least 8GB RAM/.test(reason)),
+  false
 );
 
 assert.match(
@@ -367,17 +489,56 @@ assert.equal(teacherState.activeEntity, "teacher");
 assert.equal(teacherState.userGoal, "find contact information");
 assert.match(formatConversationState(teacherState), /Active actor\/entity: teacher/);
 
-const localModelManagerSource = readFileSync(new URL("../src/ai/localModelManager.ts", import.meta.url), "utf8");
+const localModelManagerFacadeSource = readFileSync(new URL("../src/ai/localModelManager.ts", import.meta.url), "utf8");
+assert.match(localModelManagerFacadeSource, /export \* from "\.\/local-models\/manager"/);
+assert.ok(localModelManagerFacadeSource.split(/\r?\n/).filter(Boolean).length <= 2);
+
+const localModelManagerSource = readFileSync(new URL("../src/ai/local-models/manager.ts", import.meta.url), "utf8");
 assert.equal(/FileSystem\.makeDirectoryAsync|FileSystem\.copyAsync|FileSystem\.deleteAsync|FileSystem\.getInfoAsync/.test(localModelManagerSource), false);
 assert.match(localModelManagerSource, /expo-file-system\/legacy/);
 assert.match(localModelManagerSource, /cleanupPartialGgufDownloads/);
-assert.match(localModelManagerSource, /library\.json/);
 assert.match(localModelManagerSource, /migrateLegacyChatModel/);
 assert.match(localModelManagerSource, /activateChatModel/);
 assert.match(localModelManagerSource, /recoverInterruptedModelOperation/);
 assert.match(localModelManagerSource, /phase: "verifying"/);
 assert.match(localModelManagerSource, /phase: "waiting_for_chat"/);
+assert.match(localModelManagerSource, /MANAGED_DOWNLOAD_RUNTIME_AVAILABILITY/);
+assert.match(localModelManagerSource, /getManagedDownloadRuntimeAvailability/);
+assert.match(localModelManagerSource, /getLiteRtLmNativeModule/);
+assert.match(localModelManagerSource, /probeLiteRtLmActivation/);
+assert.match(localModelManagerSource, /LiteRT-LM activation probe returned an empty response/);
+assert.match(localModelManagerSource, /artifactFileName/);
+assert.match(localModelManagerSource, /runtimeFormat === "litert-lm"/);
+assert.match(localModelManagerSource, /model\.runtimeFormat !== "litert-lm"/);
+assert.match(localModelManagerSource, /model\.runtimeFormat === "gguf"/);
+assert.match(localModelManagerSource, /manifest\.activationPolicy !== "manual"/);
 assert.doesNotMatch(localModelManagerSource, /ensureBundledDefaultChatModel/);
+
+const localModelPathsSource = readFileSync(new URL("../src/ai/local-models/paths.ts", import.meta.url), "utf8");
+assert.match(localModelPathsSource, /library\.json/);
+assert.match(localModelPathsSource, /TEMP_DOWNLOAD_MARKER/);
+assert.match(localModelPathsSource, /safeArtifactFileName/);
+
+const localModelManifestStoreSource = readFileSync(new URL("../src/ai/local-models/manifestStore.ts", import.meta.url), "utf8");
+assert.match(localModelManifestStoreSource, /parseManifest/);
+assert.match(localModelManifestStoreSource, /statusFromManifest/);
+assert.match(localModelManifestStoreSource, /filePathFromUri/);
+
+const localModelOperationStoreSource = readFileSync(new URL("../src/ai/local-models/operationStore.ts", import.meta.url), "utf8");
+assert.match(localModelOperationStoreSource, /emitOperation/);
+assert.match(localModelOperationStoreSource, /patchOperation/);
+assert.match(localModelOperationStoreSource, /subscribeModelOperation/);
+
+const modelCatalogSource = readFileSync(new URL("../src/ai/modelCatalog.ts", import.meta.url), "utf8");
+assert.match(modelCatalogSource, /catalogDownloadFitsHardware/);
+assert.match(modelCatalogSource, /catalogDownloadFitsHardwareForDownload/);
+assert.match(modelCatalogSource, /groupCatalogByRecommendation/);
+assert.doesNotMatch(modelCatalogSource, /react-native/);
+
+const localModelTierRulesSource = readFileSync(new URL("../src/ai/localModelTierRules.ts", import.meta.url), "utf8");
+assert.match(localModelTierRulesSource, /ANDROID_LOCAL_MODEL_TIERS/);
+assert.match(localModelTierRulesSource, /recommendedAndroidLocalModelTier/);
+assert.doesNotMatch(localModelTierRulesSource, /react-native/);
 
 const settingsSource = readFileSync(new URL("../src/components/settings/SettingsScreen.tsx", import.meta.url), "utf8");
 assert.doesNotMatch(settingsSource, /downloadGgufModel/);
@@ -387,15 +548,106 @@ assert.match(settingsSource, /loadSettings\(true\)/);
 assert.doesNotMatch(settingsSource, /ModelDownloader/);
 
 const modelsScreenSource = readFileSync(new URL("../app/models.tsx", import.meta.url), "utf8");
-assert.match(modelsScreenSource, /Models available for this phone/);
+assert.match(modelsScreenSource, /Recommended for this phone/);
+assert.match(modelsScreenSource, /Compatible alternatives/);
+assert.match(modelsScreenSource, /Experimental high-RAM/);
+assert.match(modelsScreenSource, /If Haki feels slow/);
+assert.doesNotMatch(modelsScreenSource, /Requires LiteRT-LM runtime before use/);
+assert.doesNotMatch(modelsScreenSource, /Use runs an on-device check first/);
+assert.doesNotMatch(modelsScreenSource, /catalogRuntimeNotices/);
+assert.match(modelsScreenSource, /groupCatalogByRecommendation/);
+assert.match(modelsScreenSource, /ModelCatalogSection/);
+assert.match(modelsScreenSource, /ModelActionButton/);
+assert.match(modelsScreenSource, /useModelManagerState/);
+assert.doesNotMatch(modelsScreenSource, /getChatModelLibrary/);
+assert.doesNotMatch(modelsScreenSource, /activateChatModel/);
+assert.doesNotMatch(modelsScreenSource, /removeChatModel/);
+assert.doesNotMatch(modelsScreenSource, /resumePausedModelDownload/);
 assert.match(modelsScreenSource, /Campus Haki/);
 assert.match(modelsScreenSource, /Friendly Haki/);
-assert.match(modelsScreenSource, /activateChatModel/);
-assert.match(modelsScreenSource, /removeChatModel/);
-assert.match(modelsScreenSource, /resumePausedModelDownload/);
-assert.match(modelsScreenSource, /catalogOperationLabel/);
-assert.match(modelsScreenSource, /Downloading\.\.\./);
-assert.match(modelsScreenSource, /inProgressButton/);
+
+const modelCatalogSectionSource = readFileSync(new URL("../src/components/models/ModelCatalogSection.tsx", import.meta.url), "utf8");
+assert.match(modelCatalogSectionSource, /activationPolicy === "manual"/);
+assert.match(modelCatalogSectionSource, /catalogOperationLabel/);
+assert.match(modelCatalogSectionSource, /Downloading\.\.\./);
+
+const modelActionButtonSource = readFileSync(new URL("../src/components/models/ModelActionButton.tsx", import.meta.url), "utf8");
+assert.match(modelActionButtonSource, /inProgressButton/);
+
+const modelManagerStateHookSource = readFileSync(new URL("../src/hooks/useModelManagerState.ts", import.meta.url), "utf8");
+assert.match(modelManagerStateHookSource, /subscribeModelOperation/);
+assert.match(modelManagerStateHookSource, /recoverInterruptedModelOperation/);
+assert.match(modelManagerStateHookSource, /refreshDeviceCapabilities/);
+assert.match(modelManagerStateHookSource, /activateChatModel/);
+assert.match(modelManagerStateHookSource, /removeChatModel/);
+assert.match(modelManagerStateHookSource, /resumePausedModelDownload/);
+assert.match(modelManagerStateHookSource, /downloadCatalogModel/);
+assert.match(modelManagerStateHookSource, /pickAndImportGgufModel/);
+
+const localProviderSource = readFileSync(new URL("../src/ai/LocalAIProvider.ts", import.meta.url), "utf8");
+assert.match(localProviderSource, /"litert-lm"/);
+assert.match(localProviderSource, /"onnx-genai"/);
+assert.match(localProviderSource, /runtimeFormat/);
+
+const nativeModulesSource = readFileSync(new URL("../src/ai/nativeModules.ts", import.meta.url), "utf8");
+assert.match(nativeModulesSource, /getLiteRtLmNativeModule/);
+assert.match(nativeModulesSource, /getOnnxGenAiNativeModule/);
+assert.match(nativeModulesSource, /isRuntimeAvailable/);
+assert.match(nativeModulesSource, /modelPath/);
+
+const nativeRuntimeAdaptersSource = readFileSync(new URL("../src/ai/nativeRuntimeAdapters.ts", import.meta.url), "utf8");
+assert.match(nativeRuntimeAdaptersSource, /liteRtLmRuntime/);
+assert.match(nativeRuntimeAdaptersSource, /onnxGenAiRuntime/);
+assert.match(nativeRuntimeAdaptersSource, /isRuntimeAvailable/);
+assert.match(nativeRuntimeAdaptersSource, /release/);
+
+const liteRtProviderSource = readFileSync(new URL("../src/ai/LiteRtLmProvider.ts", import.meta.url), "utf8");
+assert.match(liteRtProviderSource, /liteRtLmRuntime/);
+assert.doesNotMatch(liteRtProviderSource, /getLiteRtLmNativeModule/);
+
+const onnxProviderSource = readFileSync(new URL("../src/ai/OnnxGenAiProvider.ts", import.meta.url), "utf8");
+assert.match(onnxProviderSource, /onnxGenAiRuntime/);
+assert.doesNotMatch(onnxProviderSource, /getOnnxGenAiNativeModule/);
+
+const providerRegistrySource = readFileSync(new URL("../src/ai/providerRegistry.ts", import.meta.url), "utf8");
+assert.match(providerRegistrySource, /LiteRtLmProvider/);
+assert.match(providerRegistrySource, /OnnxGenAiProvider/);
+assert.match(providerRegistrySource, /liteRtLm/);
+assert.match(providerRegistrySource, /onnxGenAi/);
+
+const localModelEvaluationSource = readFileSync(new URL("../src/ai/localModelEvaluation.ts", import.meta.url), "utf8");
+assert.match(localModelEvaluationSource, /runLocalModelSmokeTest/);
+assert.match(localModelEvaluationSource, /thermalStateBefore/);
+assert.match(localModelEvaluationSource, /thermalStateAfter/);
+assert.match(localModelEvaluationSource, /grounded-summary-citation/);
+assert.match(localModelEvaluationSource, /unsupported-campus-facts/);
+assert.match(localModelEvaluationSource, /english-only/);
+assert.match(localModelEvaluationSource, /ambiguous-actor-clarification/);
+
+const androidBuildSource = readFileSync(new URL("../android/app/build.gradle", import.meta.url), "utf8");
+assert.match(androidBuildSource, /com\.google\.ai\.edge\.litertlm:litertlm-android:0\.10\.2/);
+assert.match(androidBuildSource, /runtimeOnly\("com\.google\.ai\.edge\.litertlm:litertlm-android:0\.10\.2"\)/);
+
+const androidManifestSource = readFileSync(new URL("../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+assert.match(androidManifestSource, /libvndksupport\.so/);
+assert.match(androidManifestSource, /libOpenCL\.so/);
+
+const liteRtModuleSource = readFileSync(new URL("../android/app/src/main/java/com/tupt/haki/HakiLiteRtLmModule.kt", import.meta.url), "utf8");
+assert.match(liteRtModuleSource, /class HakiLiteRtLmModule/);
+assert.match(liteRtModuleSource, /EngineConfig/);
+assert.match(liteRtModuleSource, /ConversationConfig/);
+assert.match(liteRtModuleSource, /sendMessage/);
+assert.match(liteRtModuleSource, /isRuntimeAvailable/);
+assert.match(liteRtModuleSource, /messageText/);
+assert.match(liteRtModuleSource, /getContents/);
+assert.doesNotMatch(liteRtModuleSource, /response\?\.toString\(\)\?\.trim\(\)/);
+
+const deviceInfoPackageSource = readFileSync(new URL("../android/app/src/main/java/com/tupt/haki/HakiDeviceInfoPackage.kt", import.meta.url), "utf8");
+assert.match(deviceInfoPackageSource, /HakiLiteRtLmModule/);
+
+const orgChartSource = readFileSync(new URL("../app/org-chart.tsx", import.meta.url), "utf8");
+assert.doesNotMatch(orgChartSource, /SHOW_UNVERIFIED_ORG_CHART/);
+assert.match(orgChartSource, /Preview seeded data for UI\/UX review/);
 
 const hakiStatusSource = readFileSync(new URL("../src/components/models/ModelOperationHaki.tsx", import.meta.url), "utf8");
 assert.match(hakiStatusSource, /The download is complete\. I'm checking the file before using it\./);

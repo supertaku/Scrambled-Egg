@@ -14,6 +14,8 @@ export type AnswerProvenance =
   | "Retrieved directly from source"
   | "Locally summarized with llama.rn"
   | "Locally summarized with Apple Intelligence"
+  | "Locally summarized with LiteRT-LM"
+  | "Locally summarized with ONNX GenAI"
   | "Answered with local safe chat"
   | "Answered with safe student guidance"
   | "General chat unavailable without local AI"
@@ -51,6 +53,14 @@ export function provenanceForSummaryProvider(providerId: LocalAIProviderId | nul
 
   if (providerId === "llama-rn") {
     return "Locally summarized with llama.rn";
+  }
+
+  if (providerId === "litert-lm") {
+    return "Locally summarized with LiteRT-LM";
+  }
+
+  if (providerId === "onnx-genai") {
+    return "Locally summarized with ONNX GenAI";
   }
 
   return "Retrieved directly from source";

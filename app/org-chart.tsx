@@ -23,7 +23,6 @@ import { orgChartColleges, type OrgNode } from "@/data/orgChart";
 import { colors } from "@/theme/colors";
 
 const PAN_MARGIN = 30;
-const SHOW_UNVERIFIED_ORG_CHART = typeof __DEV__ !== "undefined" && __DEV__;
 
 function clampOffset(position: number, contentSize: number, viewportSize: number): number {
   "worklet";
@@ -51,24 +50,6 @@ export default function OrgChartScreen() {
   const reducedMotion = useReducedMotion();
   const [selectedCollege, setSelectedCollege] = useState(0);
   const [viewport, setViewport] = useState({ height: 0, width: 0 });
-
-  if (!SHOW_UNVERIFIED_ORG_CHART) {
-    return (
-      <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Org Chart</Text>
-          <Text style={styles.headerSubtitle}>Official organization data is not installed yet</Text>
-        </View>
-        <View style={styles.unavailablePanel}>
-          <Text style={styles.unavailableTitle}>Verified org chart unavailable</Text>
-          <Text style={styles.unavailableText}>
-            Haki will not show sample names as official campus information. Ask the relevant college office, organization adviser, or OSA for the current structure.
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   const college = orgChartColleges[selectedCollege]!;
   const chart = useMemo(() => createOrgChartLayout(college.data), [college.data]);
@@ -185,6 +166,11 @@ export default function OrgChartScreen() {
         <Text style={styles.headerSubtitle}>Pinch, pan, and inspect each college structure</Text>
       </View>
       <View style={styles.sheet}>
+        <View style={styles.previewNotice}>
+          <Text selectable style={styles.previewNoticeText}>
+            Preview seeded data for UI/UX review. Verify before real campus deployment.
+          </Text>
+        </View>
         <View style={styles.tabs}>
           {orgChartColleges.map((item, index) => {
             const selected = index === selectedCollege;
@@ -291,6 +277,14 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: "hidden"
   },
+  previewNotice: {
+    backgroundColor: colors.goldSoft,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10
+  },
+  previewNoticeText: { color: colors.ink, fontSize: 12, fontWeight: "800", lineHeight: 17 },
   tabs: {
     flexDirection: "row",
     gap: 6,
@@ -334,15 +328,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 44
   },
-  unavailablePanel: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    flex: 1,
-    padding: 24
-  },
-  unavailableText: { color: colors.muted, fontSize: 14, fontWeight: "600", lineHeight: 21 },
-  unavailableTitle: { color: colors.ink, fontSize: 19, fontWeight: "900", marginBottom: 8 },
   viewport: { backgroundColor: colors.surface, flex: 1, overflow: "hidden" },
   chartCanvas: { position: "absolute" },
   node: {

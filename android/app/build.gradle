@@ -149,7 +149,8 @@ android {
 
 gradle.projectsEvaluated {
     def requestedRelease = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
-    if (requestedRelease && !hasHakiReleaseSigning) {
+    def isEasBuild = System.getenv("EAS_BUILD") == "true"
+    if (requestedRelease && !hasHakiReleaseSigning && !isEasBuild) {
         throw new GradleException("Release signing is not configured. Set HAKI_RELEASE_STORE_FILE, HAKI_RELEASE_STORE_PASSWORD, HAKI_RELEASE_KEY_ALIAS, and HAKI_RELEASE_KEY_PASSWORD before building a production release.")
     }
 }
@@ -177,6 +178,7 @@ gradle.projectsEvaluated {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    runtimeOnly("com.google.ai.edge.litertlm:litertlm-android:0.10.2")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";

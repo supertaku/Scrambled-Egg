@@ -4,6 +4,7 @@ import { calculateConfidence } from "../src/retrieval/confidence";
 import { InMemoryCorpusRetriever } from "../src/retrieval/InMemoryCorpusRetriever";
 import type { ConfidenceLevel } from "../src/types/search";
 import type { StructuredDocument } from "../src/types/document";
+import { readSource } from "./test-utils/sourceAssertions";
 
 interface GoldenQuestion {
   question: string;
@@ -36,6 +37,18 @@ function confidenceDoesNotExceed(actual: ConfidenceLevel, maximum: ConfidenceLev
 }
 
 async function main() {
+  const sourceAnswerServiceSource = readSource("src/services/sourceAnswerService.ts");
+  const sourceRetrievalPipelineSource = readSource("src/services/sourceRetrievalPipeline.ts");
+  if (!/retrieveRankedSources/.test(sourceAnswerServiceSource)) {
+    throw new Error("sourceAnswerService must call the source retrieval pipeline.");
+  }
+  if (/new FTSRetriever|new VectorRetriever|new HybridRetriever/.test(sourceAnswerServiceSource)) {
+    throw new Error("sourceAnswerService should not construct retrievers directly.");
+  }
+  if (!/new FTSRetriever/.test(sourceRetrievalPipelineSource) || !/new HybridRetriever/.test(sourceRetrievalPipelineSource)) {
+    throw new Error("sourceRetrievalPipeline must own FTS/vector/hybrid retriever orchestration.");
+  }
+
   const retriever = new InMemoryCorpusRetriever(seedDocuments as StructuredDocument[]);
   const cases = goldenQuestions as GoldenQuestion[];
   const failures: string[] = [];

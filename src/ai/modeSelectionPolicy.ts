@@ -353,7 +353,9 @@ function buildFtsOnlyMode(input: ModeSelectionInput): ModeSelectionResult {
 
 export function selectDeviceAIMode(input: ModeSelectionInput): ModeSelectionResult {
   const appleProbe = findProbe(input.reportProbes, "apple-foundation-models");
+  const liteRtProbe = findProbe(input.reportProbes, "litert-lm");
   const llamaProbe = findProbe(input.reportProbes, "llama-rn");
+  const onnxProbe = findProbe(input.reportProbes, "onnx-genai");
 
   if (input.platform === "ios") {
     if (appleProbe && isUsableSummaryProbe(appleProbe) && isUsableEmbeddingProbe(appleProbe)) {
@@ -361,6 +363,18 @@ export function selectDeviceAIMode(input: ModeSelectionInput): ModeSelectionResu
     }
     if (appleProbe && isUsableSummaryProbe(appleProbe)) {
       return buildLocalSummaryMode(input, appleProbe);
+    }
+    if (liteRtProbe && isUsableSummaryProbe(liteRtProbe) && isUsableEmbeddingProbe(liteRtProbe)) {
+      return buildHybridMode(input, liteRtProbe);
+    }
+    if (liteRtProbe && isUsableSummaryProbe(liteRtProbe)) {
+      return buildLocalSummaryMode(input, liteRtProbe);
+    }
+    if (onnxProbe && isUsableSummaryProbe(onnxProbe) && isUsableEmbeddingProbe(onnxProbe)) {
+      return buildHybridMode(input, onnxProbe);
+    }
+    if (onnxProbe && isUsableSummaryProbe(onnxProbe)) {
+      return buildLocalSummaryMode(input, onnxProbe);
     }
     if (llamaProbe && isUsableSummaryProbe(llamaProbe) && isUsableEmbeddingProbe(llamaProbe)) {
       return buildHybridMode(input, llamaProbe);
@@ -374,6 +388,18 @@ export function selectDeviceAIMode(input: ModeSelectionInput): ModeSelectionResu
   }
 
   if (input.platform === "android") {
+    if (liteRtProbe && isUsableSummaryProbe(liteRtProbe) && isUsableEmbeddingProbe(liteRtProbe)) {
+      return buildHybridMode(input, liteRtProbe);
+    }
+    if (liteRtProbe && isUsableSummaryProbe(liteRtProbe)) {
+      return buildLocalSummaryMode(input, liteRtProbe);
+    }
+    if (onnxProbe && isUsableSummaryProbe(onnxProbe) && isUsableEmbeddingProbe(onnxProbe)) {
+      return buildHybridMode(input, onnxProbe);
+    }
+    if (onnxProbe && isUsableSummaryProbe(onnxProbe)) {
+      return buildLocalSummaryMode(input, onnxProbe);
+    }
     if (llamaProbe && isUsableSummaryProbe(llamaProbe) && isUsableEmbeddingProbe(llamaProbe)) {
       return buildHybridMode(input, llamaProbe);
     }

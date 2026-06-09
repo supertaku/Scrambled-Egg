@@ -1,66 +1,39 @@
 import { Platform } from "react-native";
 
 import type { LocalModelTier } from "./LocalAIProvider";
+import {
+  ANDROID_LOCAL_MODEL_TIERS,
+  ANDROID_MODEL_TIER_ORDER,
+  ANDROID_MODEL_TIER_RANK,
+  getAndroidModelTierRequirements,
+  getModelTierForParameterCount,
+  hasArm64Abi,
+  isAndroidLocalModelTier,
+  isQuantizedModel,
+  parseSizeToGB,
+  recommendedAndroidLocalModelTier,
+  type AndroidLocalModelTier
+} from "./localModelTierRules";
+
+export {
+  ANDROID_LOCAL_MODEL_TIERS,
+  ANDROID_MODEL_TIER_ORDER,
+  ANDROID_MODEL_TIER_RANK,
+  getAndroidModelTierRequirements,
+  getModelTierForParameterCount,
+  hasArm64Abi,
+  isAndroidLocalModelTier,
+  isQuantizedModel,
+  parseSizeToGB,
+  recommendedAndroidLocalModelTier,
+  type AndroidLocalModelTier
+} from "./localModelTierRules";
 
 export const ANDROID_LOCAL_MODEL_REQUIREMENTS = {
   label: "Android GGUF local model",
   minimumAndroidApi: 33,
   requiredAbi: "arm64-v8a"
 } as const;
-
-export const ANDROID_LOCAL_MODEL_TIERS = {
-  tiny: {
-    label: "Tiny local AI",
-    minimumRamGB: 4,
-    minimumFreeStorageGB: 3,
-    minimumModelParametersB: 0.5,
-    maximumModelParametersB: 1.5,
-    summary: "quantized 0.5B-1.5B model"
-  },
-  minimum: {
-    label: "Minimum local AI",
-    minimumRamGB: 6,
-    minimumFreeStorageGB: 4,
-    minimumModelParametersB: 1,
-    maximumModelParametersB: 3,
-    summary: "quantized 1B-3B model"
-  },
-  good: {
-    label: "Good local AI",
-    minimumRamGB: 8,
-    minimumFreeStorageGB: 6,
-    minimumModelParametersB: 3,
-    maximumModelParametersB: 4,
-    summary: "quantized 3B-4B model"
-  },
-  enhanced: {
-    label: "Enhanced local AI",
-    minimumRamGB: 12,
-    minimumFreeStorageGB: 10,
-    minimumModelParametersB: 4,
-    maximumModelParametersB: 7,
-    summary: "quantized 4B-7B model"
-  },
-  flagship: {
-    label: "Flagship local AI",
-    minimumRamGB: 16,
-    minimumFreeStorageGB: 12,
-    minimumModelParametersB: 7,
-    maximumModelParametersB: 8,
-    summary: "quantized 7B-8B model"
-  }
-} as const;
-
-export const ANDROID_MODEL_TIER_ORDER = ["tiny", "minimum", "good", "enhanced", "flagship"] as const;
-type AndroidLocalModelTier = (typeof ANDROID_MODEL_TIER_ORDER)[number];
-
-export const ANDROID_MODEL_TIER_RANK: Record<AndroidLocalModelTier, number> = {
-  tiny: 1,
-  minimum: 2,
-  good: 3,
-  enhanced: 4,
-  flagship: 5
-};
 
 export const APPLE_INTELLIGENCE_REQUIREMENTS = {
   label: "Apple Intelligence local model",
@@ -69,8 +42,6 @@ export const APPLE_INTELLIGENCE_REQUIREMENTS = {
     "iPhone 15 Pro models, iPhone 16 or later, iPad mini with A17 Pro, iPad models with M1 or later",
   minimumFreeStorageGB: 0
 } as const;
-
-const QUANTIZATION_KEYWORDS = ["int4", "q4", "4-bit", "4bit", "int8", "q8", "8-bit", "8bit", "quantized"];
 
 export interface LocalModelRuntimeMetadata {
   architecture: string | null;
@@ -81,158 +52,6 @@ export interface LocalModelRuntimeMetadata {
   modelQuantization: string | null;
   modelTier: LocalModelTier;
   recommendedModelTier: LocalModelTier;
-}
-
-export function parseSizeToGB(value: number | string | null | undefined): number | null {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (!value) {
-    return null;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  const match = normalized.match(/(\d+(?:\.\d+)?)\s*(gb|gib|mb|mib)?/);
-  if (!match?.[1]) {
-    return null;
-  }
-
-  const amount = Number.parseFloat(match[1]);
-  if (!Number.isFinite(amount)) {
-    return null;
-  }
-
-  const unit = match[2] ?? "gb";
-  return unit === "mb" || unit === "mib" ? amount / 1024 : amount;
-}
-
-export function hasArm64Abi(architecture: string | string[] | null | undefined): boolean {
-  const values = Array.isArray(architecture) ? architecture : architecture ? [architecture] : [];
-  return values.some((value) => {
-    const normalized = value.toLowerCase();
-    return normalized.includes("arm64") || normalized.includes("aarch64");
-  });
-}
-
-export function isQuantizedModel(quantization: string | null | undefined): boolean {
-  if (!quantization) {
-    return false;
-  }
-
-  const normalized = quantization.toLowerCase();
-  return QUANTIZATION_KEYWORDS.some((keyword) => normalized.includes(keyword));
-}
-
-export function getModelTierForParameterCount(parameterCountB: number | null | undefined): LocalModelTier {
-  if (parameterCountB === null || parameterCountB === undefined || !Number.isFinite(parameterCountB)) {
-    return "unknown";
-  }
-
-  if (
-    parameterCountB >= ANDROID_LOCAL_MODEL_TIERS.flagship.minimumModelParametersB &&
-    parameterCountB <= ANDROID_LOCAL_MODEL_TIERS.flagship.maximumModelParametersB
-  ) {
-    return "flagship";
-  }
-
-  if (
-    parameterCountB >= ANDROID_LOCAL_MODEL_TIERS.enhanced.minimumModelParametersB &&
-    parameterCountB <= ANDROID_LOCAL_MODEL_TIERS.enhanced.maximumModelParametersB
-  ) {
-    return "enhanced";
-  }
-
-  if (
-    parameterCountB >= ANDROID_LOCAL_MODEL_TIERS.good.minimumModelParametersB &&
-    parameterCountB <= ANDROID_LOCAL_MODEL_TIERS.good.maximumModelParametersB
-  ) {
-    return "good";
-  }
-
-  if (
-    parameterCountB >= ANDROID_LOCAL_MODEL_TIERS.minimum.minimumModelParametersB &&
-    parameterCountB <= ANDROID_LOCAL_MODEL_TIERS.minimum.maximumModelParametersB
-  ) {
-    return "minimum";
-  }
-
-  if (
-    parameterCountB >= ANDROID_LOCAL_MODEL_TIERS.tiny.minimumModelParametersB &&
-    parameterCountB <= ANDROID_LOCAL_MODEL_TIERS.tiny.maximumModelParametersB
-  ) {
-    return "tiny";
-  }
-
-  return "unknown";
-}
-
-export function recommendedAndroidLocalModelTier(input: {
-  freeStorageGB: number | null;
-  memoryGB: number | null;
-}): LocalModelTier {
-  if (
-    input.memoryGB !== null &&
-    input.memoryGB >= ANDROID_LOCAL_MODEL_TIERS.flagship.minimumRamGB &&
-    input.freeStorageGB !== null &&
-    input.freeStorageGB >= ANDROID_LOCAL_MODEL_TIERS.flagship.minimumFreeStorageGB
-  ) {
-    return "flagship";
-  }
-
-  if (
-    input.memoryGB !== null &&
-    input.memoryGB >= ANDROID_LOCAL_MODEL_TIERS.enhanced.minimumRamGB &&
-    input.freeStorageGB !== null &&
-    input.freeStorageGB >= ANDROID_LOCAL_MODEL_TIERS.enhanced.minimumFreeStorageGB
-  ) {
-    return "enhanced";
-  }
-
-  if (
-    input.memoryGB !== null &&
-    input.memoryGB >= ANDROID_LOCAL_MODEL_TIERS.good.minimumRamGB &&
-    input.freeStorageGB !== null &&
-    input.freeStorageGB >= ANDROID_LOCAL_MODEL_TIERS.good.minimumFreeStorageGB
-  ) {
-    return "good";
-  }
-
-  if (
-    input.memoryGB !== null &&
-    input.memoryGB >= ANDROID_LOCAL_MODEL_TIERS.minimum.minimumRamGB &&
-    input.freeStorageGB !== null &&
-    input.freeStorageGB >= ANDROID_LOCAL_MODEL_TIERS.minimum.minimumFreeStorageGB
-  ) {
-    return "minimum";
-  }
-
-  if (
-    input.memoryGB !== null &&
-    input.memoryGB >= ANDROID_LOCAL_MODEL_TIERS.tiny.minimumRamGB &&
-    input.freeStorageGB !== null &&
-    input.freeStorageGB >= ANDROID_LOCAL_MODEL_TIERS.tiny.minimumFreeStorageGB
-  ) {
-    return "tiny";
-  }
-
-  return "unknown";
-}
-
-function getTierRequirements(tier: LocalModelTier) {
-  if (ANDROID_MODEL_TIER_ORDER.includes(tier as AndroidLocalModelTier)) {
-    return ANDROID_LOCAL_MODEL_TIERS[tier as AndroidLocalModelTier];
-  }
-
-  return null;
-}
-
-export function getAndroidModelTierRequirements(tier: LocalModelTier) {
-  return getTierRequirements(tier);
-}
-
-export function isAndroidLocalModelTier(tier: LocalModelTier): tier is AndroidLocalModelTier {
-  return ANDROID_MODEL_TIER_ORDER.includes(tier as AndroidLocalModelTier);
 }
 
 function summarizeSupportedAndroidTiers(): string {
@@ -282,7 +101,7 @@ export function validateAndroidLocalModelRuntime(input: {
   const notes: string[] = [];
   const modelTier = getModelTierForParameterCount(input.modelParameterCountB);
   const recommendedModelTier = recommendedAndroidLocalModelTier({ freeStorageGB, memoryGB });
-  const selectedTierRequirements = getTierRequirements(modelTier);
+  const selectedTierRequirements = getAndroidModelTierRequirements(modelTier);
 
   if (Platform.OS === "android") {
     if (!hasArm64Abi(input.architecture)) {

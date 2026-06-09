@@ -1,13 +1,6 @@
-import type { SQLiteDatabase } from "expo-sqlite";
-
 import { provenanceForSummaryProvider } from "@/ai/DeviceAIMode";
 import type { AnswerProvenance, DeviceAIMode } from "@/ai/DeviceAIMode";
 import { MEDIUM_CONFIDENCE_NOTE, SAFE_FALLBACK_MESSAGE, STRICT_LOCAL_SUMMARIZATION_INSTRUCTION } from "@/ai/prompts";
-import { getDatabase } from "@/db/database";
-import { FTSRetriever } from "@/retrieval/FTSRetriever";
-import { HybridRetriever } from "@/retrieval/HybridRetriever";
-import type { Retriever } from "@/retrieval/Retriever";
-import { VectorRetriever } from "@/retrieval/VectorRetriever";
 import { calculateConfidence } from "@/retrieval/confidence";
 import { normalizeQuery, tokenizeQuery } from "@/retrieval/queryNormalizer";
 import type { SearchOptions, SearchResponse, SearchResult } from "@/types/search";
@@ -23,6 +16,7 @@ import {
 import { LOST_ID_PATTERNS, matchesAny } from "./questionScenarioService";
 import { getDirectAnswer } from "./searchResultText";
 import { sourceChunksForSafeChat } from "./sourceChunkAdapter";
+import { retrieveRankedSources } from "./sourceRetrievalPipeline";
 
 export interface SourceAnswerAmbiguity {
   clarificationQuestion: string;
@@ -54,14 +48,6 @@ export interface SourceAnswerDraft {
   results: SearchResult[];
   selectedMode: SelectedAIMode;
   topResult?: SearchResult;
-}
-
-class StaticRetriever implements Retriever {
-  constructor(private readonly results: SearchResult[]) {}
-
-  async search(_query: string, _options?: SearchOptions): Promise<SearchResult[]> {
-    return this.results;
-  }
 }
 
 // getPreferredModelTier is imported from @/utils/aiUtils (shared with safeLocalChatService)
@@ -344,80 +330,6 @@ function responseForNoReliableAnswer(
   };
 }
 
-function modeWithVectorFallback(mode: DeviceAIMode, reason: string): DeviceAIMode {
-  return {
-    ...mode,
-    provenance: "Retrieved directly from source",
-    retrieverStrategy: "fts5",
-    embeddingProviderId: null,
-    embeddingProviderName: null,
-    capabilities: {
-      ...mode.capabilities,
-      embeddings: false,
-      reranking: false,
-      unavailableReasons: [...mode.capabilities.unavailableReasons, reason],
-      notes: [...mode.capabilities.notes, reason]
-    },
-    fallbackReason: reason
-  };
-}
-
-async function runRetrieval(
-  db: SQLiteDatabase,
-  question: string,
-  options: SearchOptions,
-  selectedMode: SelectedAIMode,
-  attempt = 0
-): Promise<{ results: SearchResult[]; selectedMode: SelectedAIMode; provenance: AnswerProvenance }> {
-  const { mode, embeddingProvider } = selectedMode;
-  const ftsRetriever = new FTSRetriever(db);
-  const ftsResults = await ftsRetriever.search(question, options);
-
-  if (!embeddingProvider || !mode.capabilities.embeddings) {
-    return {
-      results: ftsResults,
-      selectedMode,
-      provenance: "Retrieved directly from source"
-    };
-  }
-
-  try {
-    const vectorRetriever = new VectorRetriever(db, embeddingProvider);
-    const vectorResults = await vectorRetriever.search(question, options);
-
-    if (vectorResults.length === 0) {
-      return {
-        results: ftsResults,
-        selectedMode,
-        provenance: ftsResults.length > 0 ? "Retrieved directly from source" : mode.provenance
-      };
-    }
-
-    const hybridRetriever = new HybridRetriever([
-      new StaticRetriever(ftsResults),
-      new StaticRetriever(vectorResults)
-    ]);
-
-    const results = await hybridRetriever.search(question, options);
-    return {
-      results,
-      selectedMode,
-      provenance: ftsResults.length > 0 ? "Retrieved with hybrid search" : "Retrieved with semantic search"
-    };
-  } catch {
-    const reason = "Vector retrieval failed; using FTS5 for this answer.";
-    return {
-      results: ftsResults,
-      selectedMode: {
-        mode: modeWithVectorFallback(mode, reason),
-        summaryProvider: selectedMode.summaryProvider,
-        embeddingProvider: null
-      },
-      provenance: "Retrieved directly from source"
-    };
-  }
-}
-
 async function maybeSummarizeFromSources(
   question: string,
   selectedMode: SelectedAIMode,
@@ -496,10 +408,8 @@ export async function retrieveSourceAnswerDraft(
   selectedModeOverride?: SelectedAIMode
 ): Promise<SourceAnswerDraft> {
   const normalizedQuestion = normalizeQuery(question);
-  const db = await getDatabase();
   const selectedMode = selectedModeOverride ?? await getSelectedAIMode();
-  const retrieval = await runRetrieval(
-    db,
+  const retrieval = await retrieveRankedSources(
     normalizedQuestion,
     { limit: DEFAULT_RETRIEVAL_LIMIT, ...options },
     selectedMode

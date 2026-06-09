@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { BookOpen, ChevronRight, ClipboardList, Info, Search, Shield, X, Zap } from "lucide-react-native";
+import { BookOpen, Building2, ChevronRight, Info, Map as MapIcon, Search, Shield, X } from "lucide-react-native";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getCategories, libraryTopics, searchTopics, topicMatchesCategory, type LibraryTopic } from "@/data/libraryTopics";
+import {
+  getOfficeFilters,
+  getServiceDeskCounters,
+  libraryTopics,
+  searchTopics,
+  serviceDeskCounterForTopic,
+  topicMatchesCategory,
+  topicMatchesOfficeFilter,
+  type LibraryTopic,
+  type ServiceDeskCounter
+} from "@/data/libraryTopics";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { colors } from "@/theme/colors";
 
@@ -14,15 +24,14 @@ interface CounterConfig {
   tint: string;
 }
 
-const COUNTERS: Record<string, CounterConfig> = {
-  "Student Services": { accent: "#2E7D32", icon: ClipboardList, tint: "#E8F5E9" },
-  "Campus Safety": { accent: "#E65100", icon: Zap, tint: "#FFF3E0" },
-  "Student Welfare": { accent: "#1565C0", icon: Shield, tint: "#E3F2FD" },
+const COUNTERS: Record<ServiceDeskCounter, CounterConfig> = {
+  Offices: { accent: "#2E7D32", icon: Building2, tint: "#E8F5E9" },
+  Safety: { accent: "#E65100", icon: Shield, tint: "#FFF3E0" },
   "Campus Guidelines": { accent: colors.maroon, icon: Info, tint: colors.maroonSoft },
-  Offices: { accent: "#6B5FB5", icon: BookOpen, tint: "#EFEAFB" }
+  "Map Directory": { accent: "#1565C0", icon: MapIcon, tint: "#E3F2FD" }
 };
 
-function counterFor(category: string): CounterConfig {
+function counterFor(category: ServiceDeskCounter): CounterConfig {
   return COUNTERS[category] ?? { accent: colors.maroon, icon: BookOpen, tint: colors.maroonSoft };
 }
 
@@ -32,36 +41,57 @@ export default function LibraryScreen() {
   const routedQuery = Array.isArray(queryParam) ? queryParam[0] ?? "" : queryParam ?? "";
   const reducedMotion = useReducedMotion();
   const [query, setQuery] = useState(routedQuery);
-  const [category, setCategory] = useState<string | null>(null);
-  const categories = useMemo(() => getCategories(), []);
+  const [selectedCounter, setSelectedCounter] = useState<ServiceDeskCounter | null>(null);
+  const [officeFilter, setOfficeFilter] = useState("All");
+  const counters = useMemo(() => getServiceDeskCounters(), []);
 
   useEffect(() => {
     if (routedQuery.trim()) {
       setQuery(routedQuery);
-      setCategory(null);
+      setSelectedCounter(null);
+      setOfficeFilter("All");
     }
   }, [routedQuery]);
 
-  const results = useMemo(() => {
+  const searchResults = useMemo(() => {
+    return searchTopics(query);
+  }, [query]);
+
+  const counterResults = useMemo(() => {
     const matches = searchTopics(query);
-    return category ? matches.filter((topic) => topicMatchesCategory(topic, category)) : matches;
-  }, [category, query]);
+    return selectedCounter ? matches.filter((topic) => topicMatchesCategory(topic, selectedCounter)) : matches;
+  }, [query, selectedCounter]);
+
+  const officeFilters = useMemo(() => {
+    return selectedCounter === "Offices" ? getOfficeFilters(counterResults) : [];
+  }, [counterResults, selectedCounter]);
+
+  useEffect(() => {
+    if (selectedCounter !== "Offices") {
+      if (officeFilter !== "All") setOfficeFilter("All");
+      return;
+    }
+    if (!officeFilters.some((filter) => filter.key === officeFilter)) {
+      setOfficeFilter("All");
+    }
+  }, [officeFilter, officeFilters, selectedCounter]);
+
+  const results = useMemo(() => {
+    if (selectedCounter === "Offices") {
+      return counterResults.filter((topic) => topicMatchesOfficeFilter(topic, officeFilter));
+    }
+    return counterResults;
+  }, [counterResults, officeFilter, selectedCounter]);
 
   const sections = useMemo(() => {
-    if (category === "Offices") {
-      return [{ category: "Offices", topics: results }];
+    if (selectedCounter) {
+      return [{ category: selectedCounter, topics: results }];
     }
 
-    const standardSections = categories
-      .filter((item) => item !== "Offices")
-      .map((item) => ({ category: item, topics: results.filter((topic) => topic.category === item) }))
+    return counters
+      .map((item) => ({ category: item, topics: searchResults.filter((topic) => topicMatchesCategory(topic, item)) }))
       .filter((section) => section.topics.length > 0);
-    const provisionalOfficeTopics = results.filter((topic) => topic.category === "Offices");
-
-    return provisionalOfficeTopics.length > 0
-      ? [...standardSections, { category: "Offices", topics: provisionalOfficeTopics }]
-      : standardSections;
-  }, [categories, category, results]);
+  }, [counters, results, searchResults, selectedCounter]);
 
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
@@ -94,8 +124,16 @@ export default function LibraryScreen() {
                 style={styles.searchInput}
                 value={query}
               />
-              {query || category ? (
-                <Pressable accessibilityLabel="Clear filters" onPress={() => { setQuery(""); setCategory(null); }} style={styles.clear}>
+              {query || selectedCounter || officeFilter !== "All" ? (
+                <Pressable
+                  accessibilityLabel="Clear filters"
+                  onPress={() => {
+                    setQuery("");
+                    setSelectedCounter(null);
+                    setOfficeFilter("All");
+                  }}
+                  style={styles.clear}
+                >
                   <X color={colors.muted} size={16} />
                 </Pressable>
               ) : null}
@@ -107,16 +145,38 @@ export default function LibraryScreen() {
             <Text style={styles.resultText}>{results.length} available</Text>
           </View>
           <View style={styles.counterGrid}>
-            {categories.map((item) => (
+            {counters.map((item) => (
               <CounterTile
-                active={category === item}
+                active={selectedCounter === item}
                 category={item}
                 count={libraryTopics.filter((topic) => topicMatchesCategory(topic, item)).length}
                 key={item}
-                onPress={() => setCategory(category === item ? null : item)}
+                onPress={() => {
+                  setSelectedCounter(selectedCounter === item ? null : item);
+                  setOfficeFilter("All");
+                }}
               />
             ))}
           </View>
+
+          {selectedCounter === "Offices" ? (
+            <View style={styles.officeChipRow}>
+              {officeFilters.map((filter) => {
+                const active = officeFilter === filter.key;
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    key={filter.key}
+                    onPress={() => setOfficeFilter(filter.key)}
+                    style={[styles.officeChip, active ? styles.officeChipActive : undefined]}
+                  >
+                    <Text style={[styles.officeChipText, active ? styles.officeChipTextActive : undefined]}>{filter.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
 
           {sections.map((section) => (
             <View key={section.category} style={styles.ticketSection}>
@@ -147,7 +207,14 @@ export default function LibraryScreen() {
               <BookOpen color={colors.mutedLight} size={34} />
               <Text style={styles.emptyTitle}>No matching help topic found</Text>
               <Text style={styles.emptyText}>Try searching for an office, ID, clinic, complaint, or clearance task.</Text>
-              <Pressable onPress={() => { setQuery(""); setCategory(null); }} style={styles.emptyAction}>
+              <Pressable
+                onPress={() => {
+                  setQuery("");
+                  setSelectedCounter(null);
+                  setOfficeFilter("All");
+                }}
+                style={styles.emptyAction}
+              >
                 <Text style={styles.emptyActionText}>Return to all counters</Text>
               </Pressable>
             </View>
@@ -165,7 +232,7 @@ function CounterTile({
   onPress
 }: {
   active: boolean;
-  category: string;
+  category: ServiceDeskCounter;
   count: number;
   onPress: () => void;
 }) {
@@ -201,7 +268,7 @@ function ProcedureTicket({
 }) {
   const opacity = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
   const translateY = useRef(new Animated.Value(reducedMotion ? 0 : 12)).current;
-  const config = counterFor(topic.category);
+  const config = counterFor(serviceDeskCounterForTopic(topic));
 
   useEffect(() => {
     if (reducedMotion) {
@@ -265,6 +332,11 @@ const styles = StyleSheet.create({
   counterIcon: { alignItems: "center", borderRadius: 11, height: 37, justifyContent: "center", width: 37 },
   counterTileTitle: { color: colors.ink, fontSize: 13, fontWeight: "900", lineHeight: 17 },
   counterTileCount: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+  officeChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  officeChip: { backgroundColor: colors.white, borderColor: colors.border, borderRadius: 999, borderWidth: 1, minHeight: 36, paddingHorizontal: 12, paddingVertical: 9 },
+  officeChipActive: { backgroundColor: colors.maroon, borderColor: colors.maroon },
+  officeChipText: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+  officeChipTextActive: { color: colors.white },
   activeText: { color: colors.white },
   activeSubtext: { color: "rgba(255,255,255,0.78)" },
   ticketSection: { gap: 10 },

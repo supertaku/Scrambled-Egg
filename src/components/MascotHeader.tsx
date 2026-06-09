@@ -40,6 +40,8 @@ export function MascotHeader({
   } = useMascotInteraction({ interactionVisible, message, onAdminRequest: onMascotPress, status });
   const showTriviaLabel = isTrivia && resolvedMessage === message;
   const compactDialogue = resolvedStatus === "sleepy" && Boolean(resolvedMessage);
+  const pixelState = pixelStateForMascotStatus(resolvedStatus);
+  const renderSpriteSheet = useSpriteSheet && pixelState !== "dizzy";
   return (
     <View style={styles.container}>
       <AdminUnlockModal onClose={closeAdminModal} visible={showAdminModal} />
@@ -53,10 +55,10 @@ export function MascotHeader({
         style={styles.mascotWrap}
       >
         <Animated.View style={[styles.mascotImage, { transform: imageTransform }]}>
-          {useSpriteSheet ? (
-            <SpriteHaki height={178} state={pixelStateForMascotStatus(resolvedStatus)} />
+          {renderSpriteSheet ? (
+            <SpriteHaki height={178} state={pixelState} />
           ) : (
-            <PixelHaki height={178} state={pixelStateForMascotStatus(resolvedStatus)} width={114} />
+            <PixelHaki height={178} state={pixelState} width={114} />
           )}
         </Animated.View>
       </Pressable>

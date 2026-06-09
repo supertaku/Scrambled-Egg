@@ -111,12 +111,16 @@ class HakiDeviceInfoModule(
   }
 
   @ReactMethod
-  fun startBackgroundDownload(url: String, operationId: String, promise: Promise) {
+  fun startBackgroundDownload(url: String, operationId: String, artifactFileName: String, promise: Promise) {
     try {
       val directory = reactContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
         ?: throw IllegalStateException("External model staging directory is unavailable.")
       if (!directory.exists()) directory.mkdirs()
-      val target = File(directory, "$operationId.partial.gguf")
+      val extension = artifactFileName
+        .substringAfterLast('.', "model")
+        .replace(Regex("[^a-zA-Z0-9_-]"), "")
+        .ifBlank { "model" }
+      val target = File(directory, "$operationId.partial.$extension")
       if (target.exists()) target.delete()
 
       val request = DownloadManager.Request(Uri.parse(url))

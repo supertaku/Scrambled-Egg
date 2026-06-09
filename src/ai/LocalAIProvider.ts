@@ -1,10 +1,11 @@
 import type { ChatContextTurn, ChatRole, ConfidenceLevel } from "@/types/search";
+import type { ModelRuntimeFormat } from "./modelDownloadConfig";
 
-export type LocalAIProviderId = "fallback" | "llama-rn" | "apple-foundation-models";
+export type LocalAIProviderId = "fallback" | "llama-rn" | "apple-foundation-models" | "litert-lm" | "onnx-genai";
 
 export type DeviceCapabilityClass = "unknown" | "low" | "standard" | "high";
 
-export type LocalExecutionBackend = "cpu" | "metal" | "opencl" | "htp" | "apple-foundation-models" | "unknown";
+export type LocalExecutionBackend = "cpu" | "metal" | "opencl" | "htp" | "apple-foundation-models" | "litert-lm" | "onnx-genai" | "unknown";
 
 export type AccelerationStatus = "not_checked" | "benchmarking" | "selected" | "fallback" | "unavailable";
 
@@ -50,6 +51,7 @@ export interface LocalAICapabilities {
   embeddingDimension?: number | null;
   modelParameterCountB?: number | null;
   modelQuantization?: string | null;
+  runtimeFormat?: ModelRuntimeFormat | null;
   modelTier?: LocalModelTier;
   recommendedModelTier?: LocalModelTier;
   bridgePresent?: boolean;

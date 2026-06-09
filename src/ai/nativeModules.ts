@@ -10,6 +10,7 @@ import type {
 } from "./LocalAIProvider";
 
 export interface HakiLocalAIModule {
+  isRuntimeAvailable?: () => Promise<boolean> | boolean;
   isAvailable?: () => Promise<boolean> | boolean;
   getCapabilities?: () => Promise<Partial<{
     summary: boolean;
@@ -33,10 +34,10 @@ export interface HakiLocalAIModule {
     memoryClass: string;
     unavailableReasons: string[];
   }>>;
-  summarizeFromSources?: (input: SummarizeFromSourcesInput) => Promise<Partial<LocalSummaryResult> | string>;
-  answerSafeChat?: (input: SafeChatInput) => Promise<Partial<SafeChatResult> | string>;
+  summarizeFromSources?: (input: SummarizeFromSourcesInput & { modelPath?: string }) => Promise<Partial<LocalSummaryResult> | string>;
+  answerSafeChat?: (input: SafeChatInput & { modelPath?: string }) => Promise<Partial<SafeChatResult> | string>;
   streamSafeChat?: (
-    input: SafeChatInput,
+    input: SafeChatInput & { modelPath?: string },
     streamIdOrTokenCallback: string | ((token: string) => void)
   ) => Promise<Partial<SafeChatResult> | string>;
   embedText?: (text: string) => Promise<number[]>;
@@ -50,5 +51,23 @@ export function getAppleFoundationModelsNativeModule(): HakiLocalAIModule | null
     return requireNativeModule("HakiAppleFoundationModels") as HakiLocalAIModule;
   } catch (error) {
     return (NativeModules.HakiAppleFoundationModels as HakiLocalAIModule | undefined) ?? null;
+  }
+}
+
+export function getLiteRtLmNativeModule(): HakiLocalAIModule | null {
+  try {
+    const { requireNativeModule } = require("expo-modules-core");
+    return requireNativeModule("HakiLiteRtLm") as HakiLocalAIModule;
+  } catch (error) {
+    return (NativeModules.HakiLiteRtLm as HakiLocalAIModule | undefined) ?? null;
+  }
+}
+
+export function getOnnxGenAiNativeModule(): HakiLocalAIModule | null {
+  try {
+    const { requireNativeModule } = require("expo-modules-core");
+    return requireNativeModule("HakiOnnxGenAi") as HakiLocalAIModule;
+  } catch (error) {
+    return (NativeModules.HakiOnnxGenAi as HakiLocalAIModule | undefined) ?? null;
   }
 }

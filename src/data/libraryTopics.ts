@@ -25,6 +25,13 @@ export interface LibraryTopic {
   verificationStatus: "pending" | "verified";
 }
 
+export type ServiceDeskCounter = "Offices" | "Safety" | "Campus Guidelines" | "Map Directory";
+
+export interface OfficeFilter {
+  key: string;
+  label: string;
+}
+
 interface RawChunk {
   chunk_id: string;
   section_title: string;
@@ -49,6 +56,17 @@ interface RawDocument {
 }
 
 const documents = rawDocuments as RawDocument[];
+const SERVICE_DESK_COUNTERS: ServiceDeskCounter[] = ["Offices", "Safety", "Campus Guidelines", "Map Directory"];
+const BASE_OFFICE_FILTERS = [
+  "All",
+  "OSA",
+  "Registrar",
+  "Medical Clinic",
+  "Dental Clinic",
+  "Guidance",
+  "Public Assistance / QA",
+  "Security / Admin"
+] as const;
 
 // Build flat topic list once at module load
 const verifiedLibraryTopics: LibraryTopic[] = documents.flatMap((doc) =>
@@ -142,7 +160,11 @@ export function getTopicById(chunkId: string): LibraryTopic | undefined {
 
 // Grouping helpers
 export function getCategories(): string[] {
-  return [...new Set([...libraryTopics.map((t) => t.category), "Offices"])];
+  return getServiceDeskCounters();
+}
+
+export function getServiceDeskCounters(): ServiceDeskCounter[] {
+  return [...SERVICE_DESK_COUNTERS];
 }
 
 export function getTopicsByCategory(category: string): LibraryTopic[] {
@@ -150,10 +172,86 @@ export function getTopicsByCategory(category: string): LibraryTopic[] {
 }
 
 export function topicMatchesCategory(topic: LibraryTopic, category: string): boolean {
-  if (category === "Offices") {
-    return Boolean(topic.office || topic.officeLocation || topic.category === "Offices");
+  if ((SERVICE_DESK_COUNTERS as readonly string[]).includes(category)) {
+    return serviceDeskCounterForTopic(topic) === category;
   }
   return topic.category === category;
+}
+
+export function serviceDeskCounterForTopic(topic: LibraryTopic): ServiceDeskCounter {
+  switch (topic.category) {
+    case "Campus Safety":
+      return "Safety";
+    case "Campus Guidelines":
+      return "Campus Guidelines";
+    case "Campus Locations":
+      return "Map Directory";
+    case "Student Services":
+    case "Student Welfare":
+    case "Offices":
+    default:
+      return "Offices";
+  }
+}
+
+function searchableOfficeText(topic: LibraryTopic): string {
+  return [
+    topic.sectionTitle,
+    topic.processName,
+    topic.documentTitle,
+    topic.office,
+    topic.officeLocation,
+    topic.content,
+    topic.answer,
+    ...topic.tags
+  ].join(" ").toLowerCase();
+}
+
+function normalizedOfficeLabel(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+export function officeLabelsForTopic(topic: LibraryTopic): string[] {
+  const haystack = searchableOfficeText(topic);
+  const labels = new Set<string>();
+
+  const dentalMatch = /\bdental\b|campus dental clinic/.test(haystack);
+  if (dentalMatch) labels.add("Dental Clinic");
+  if (/\bmedical\b|health services|health assessment|first aid|teleconsult/.test(haystack) || (!dentalMatch && /\bclinic\b/.test(haystack))) {
+    labels.add("Medical Clinic");
+  }
+  if (/guidance|counselling|counseling/.test(haystack)) labels.add("Guidance");
+  if (/office of (the )?student affairs|\bosa\b|student affairs/.test(haystack)) labels.add("OSA");
+  if (/registrar/.test(haystack)) labels.add("Registrar");
+  if (/quality assurance|public assistance|customer feedback|complaints desk|complaint/.test(haystack)) {
+    labels.add("Public Assistance / QA");
+  }
+  if (/security|admin building|administrative|admin\b/.test(haystack)) labels.add("Security / Admin");
+
+  if (labels.size === 0) {
+    const fallback = normalizedOfficeLabel(topic.office || topic.officeLocation);
+    if (fallback) labels.add(fallback);
+  }
+
+  return [...labels];
+}
+
+export function getOfficeFilters(topics: LibraryTopic[] = getTopicsByCategory("Offices")): OfficeFilter[] {
+  const derived = new Set<string>();
+  for (const topic of topics) {
+    for (const label of officeLabelsForTopic(topic)) {
+      derived.add(label);
+    }
+  }
+  const ordered = [
+    ...BASE_OFFICE_FILTERS,
+    ...[...derived].filter((label) => !BASE_OFFICE_FILTERS.includes(label as (typeof BASE_OFFICE_FILTERS)[number])).sort()
+  ];
+  return ordered.map((label) => ({ key: label, label }));
+}
+
+export function topicMatchesOfficeFilter(topic: LibraryTopic, filter: string): boolean {
+  return filter === "All" || officeLabelsForTopic(topic).includes(filter);
 }
 
 // Search across all text fields

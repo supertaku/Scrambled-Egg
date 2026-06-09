@@ -1,123 +1,25 @@
 import type { DeviceThermalState, LocalModelPerformanceProfile, LocalModelTier } from "./LocalAIProvider";
+import {
+  ANDROID_LOCAL_MODEL_TIERS,
+  ANDROID_MODEL_TIER_ORDER,
+  ANDROID_MODEL_TIER_RANK,
+  getAndroidModelTierRequirements,
+  getModelTierForParameterCount,
+  hasArm64Abi,
+  isAndroidLocalModelTier,
+  isQuantizedModel,
+  parseSizeToGB
+} from "./localModelTierRules";
+import type { ModelRuntimeFormat } from "./modelDownloadConfig";
 import type { NormalizedPlatform } from "./providerUtils";
 
-const ANDROID_MODEL_TIER_ORDER = ["tiny", "minimum", "good", "enhanced", "flagship"] as const;
-type AndroidLocalModelTier = (typeof ANDROID_MODEL_TIER_ORDER)[number];
-
-const ANDROID_MODEL_TIER_RANK: Record<AndroidLocalModelTier, number> = {
-  tiny: 1,
-  minimum: 2,
-  good: 3,
-  enhanced: 4,
-  flagship: 5
-};
-
-const ANDROID_MODEL_TIERS = {
-  tiny: {
-    label: "Tiny local AI",
-    minimumRamGB: 4,
-    minimumFreeStorageGB: 3,
-    minimumModelParametersB: 0.5,
-    maximumModelParametersB: 1.5
-  },
-  minimum: {
-    label: "Minimum local AI",
-    minimumRamGB: 6,
-    minimumFreeStorageGB: 4,
-    minimumModelParametersB: 1,
-    maximumModelParametersB: 3
-  },
-  good: {
-    label: "Good local AI",
-    minimumRamGB: 8,
-    minimumFreeStorageGB: 6,
-    minimumModelParametersB: 3,
-    maximumModelParametersB: 4
-  },
-  enhanced: {
-    label: "Enhanced local AI",
-    minimumRamGB: 12,
-    minimumFreeStorageGB: 10,
-    minimumModelParametersB: 4,
-    maximumModelParametersB: 7
-  },
-  flagship: {
-    label: "Flagship local AI",
-    minimumRamGB: 16,
-    minimumFreeStorageGB: 12,
-    minimumModelParametersB: 7,
-    maximumModelParametersB: 8
-  }
-} as const;
-
-const QUANTIZATION_KEYWORDS = ["int4", "q4", "4-bit", "4bit", "int8", "q8", "8-bit", "8bit", "quantized"];
-
-function parseSizeToGB(value: number | string | null | undefined): number | null {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (!value) {
-    return null;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  const match = normalized.match(/(\d+(?:\.\d+)?)\s*(gb|gib|mb|mib)?/);
-  if (!match?.[1]) {
-    return null;
-  }
-
-  const amount = Number.parseFloat(match[1]);
-  if (!Number.isFinite(amount)) {
-    return null;
-  }
-
-  const unit = match[2] ?? "gb";
-  return unit === "mb" || unit === "mib" ? amount / 1024 : amount;
-}
-
-function hasArm64Abi(architecture: string | string[] | null | undefined): boolean {
-  const values = Array.isArray(architecture) ? architecture : architecture ? [architecture] : [];
-  return values.some((value) => {
-    const normalized = value.toLowerCase();
-    return normalized.includes("arm64") || normalized.includes("aarch64");
-  });
-}
-
-function isQuantizedModel(quantization: string | null | undefined): boolean {
-  if (!quantization) {
-    return false;
-  }
-
-  const normalized = quantization.toLowerCase();
-  return QUANTIZATION_KEYWORDS.some((keyword) => normalized.includes(keyword));
-}
-
-function isAndroidLocalModelTier(tier: LocalModelTier): tier is AndroidLocalModelTier {
-  return ANDROID_MODEL_TIER_ORDER.includes(tier as AndroidLocalModelTier);
-}
-
-function getAndroidModelTierRequirements(tier: LocalModelTier) {
-  return isAndroidLocalModelTier(tier) ? ANDROID_MODEL_TIERS[tier] : null;
-}
-
-function getModelTierForParameterCount(parameterCountB: number | null | undefined): LocalModelTier {
-  if (parameterCountB === null || parameterCountB === undefined || !Number.isFinite(parameterCountB)) {
-    return "unknown";
-  }
-
-  for (const tier of [...ANDROID_MODEL_TIER_ORDER].reverse()) {
-    const requirement = ANDROID_MODEL_TIERS[tier];
-    if (
-      parameterCountB >= requirement.minimumModelParametersB &&
-      parameterCountB <= requirement.maximumModelParametersB
-    ) {
-      return tier;
-    }
-  }
-
-  return "unknown";
-}
+export {
+  catalogDownloadFitsHardware,
+  catalogDownloadFitsHardwareForDownload,
+  groupCatalogByRecommendation,
+  type CatalogDownloadModel,
+  type GroupedModelCatalog
+} from "./modelCatalog";
 
 export type LocalModelRole = "chat" | "embedding";
 
@@ -150,26 +52,17 @@ export interface LocalModelGenerationPolicy {
   thinkingMode?: "disabled";
 }
 
-export function catalogDownloadFitsHardware(
-  model: { tier: LocalModelTier; sizeMB: number; supportedPlatforms?: Array<"android" | "ios"> },
-  hardware: DeviceHardwareProfile
-): boolean {
-  const requirements = ANDROID_MODEL_TIERS[model.tier as AndroidLocalModelTier];
-  const supportsPlatform = model.supportedPlatforms?.includes(hardware.platform as "android" | "ios") ??
-    (hardware.platform === "android");
-  if (
-    !requirements ||
-    !supportsPlatform ||
-    (hardware.platform !== "android" && hardware.platform !== "ios") ||
-    !hardware.supportedAbis.some((abi) => abi.toLowerCase().includes("arm64"))
-  ) {
-    return false;
-  }
-  if (hardware.memoryGB === null || hardware.freeStorageGB === null || hardware.lowMemory === true) {
-    return false;
-  }
-  const requiredBeforeDownload = requirements.minimumFreeStorageGB + model.sizeMB / 1024;
-  return hardware.memoryGB >= requirements.minimumRamGB && hardware.freeStorageGB >= requiredBeforeDownload;
+export type LocalModelRuntimeFormat = ModelRuntimeFormat;
+export type LocalModelArtifactKind = "single-file" | "directory";
+export type LocalModelEvaluationStatus = "not_required" | "pending" | "passed" | "failed";
+export type LocalModelActivationPolicy = "auto-after-smoke-test" | "manual";
+
+export interface LocalModelEvaluationSummary {
+  evaluatedAt: string;
+  passed: boolean;
+  metricsPassed: number;
+  metricsTotal: number;
+  failureReason: string | null;
 }
 
 export interface LocalModelMetadata {
@@ -182,7 +75,7 @@ export interface LocalModelMetadata {
 }
 
 export interface LocalModelManifest {
-  version: 1;
+  version: 1 | 2;
   role: LocalModelRole;
   source?: "bundled" | "downloaded" | "imported" | "legacy-bundled" | "admin-imported" | undefined;
   sourceId?: string | undefined;
@@ -190,6 +83,10 @@ export interface LocalModelManifest {
   originalName: string;
   storedName: string;
   uri: string;
+  runtimeFormat?: LocalModelRuntimeFormat;
+  artifactKind?: LocalModelArtifactKind;
+  artifactEntrypointUri?: string;
+  artifactFiles?: string[];
   sizeBytes: number;
   fileHash: string | null;
   fileHashAlgorithm: "md5" | null;
@@ -206,6 +103,9 @@ export interface LocalModelManifest {
   rejectionReasons: string[];
   generationPolicy?: LocalModelGenerationPolicy;
   executionProfile?: LocalModelPerformanceProfile;
+  evaluationStatus?: LocalModelEvaluationStatus;
+  lastEvaluation?: LocalModelEvaluationSummary | null;
+  activationPolicy?: LocalModelActivationPolicy;
   artifactSource?: string;
   artifactLicense?: string;
   rawInfo?: Record<string, unknown>;
@@ -242,9 +142,15 @@ export interface BuildManifestInput {
   metadata: LocalModelMetadata;
   hardware: DeviceHardwareProfile;
   now: string;
+  runtimeFormat?: LocalModelRuntimeFormat | undefined;
+  artifactKind?: LocalModelArtifactKind | undefined;
   generationPolicy?: LocalModelGenerationPolicy | undefined;
+  evaluationStatus?: LocalModelEvaluationStatus | undefined;
+  activationPolicy?: LocalModelActivationPolicy | undefined;
   artifactSource?: string | undefined;
   artifactLicense?: string | undefined;
+  minimumRamGB?: number | undefined;
+  minimumFreeStorageGB?: number | undefined;
 }
 
 export function canonicalModelFileName(role: LocalModelRole): string {
@@ -545,7 +451,7 @@ export function deriveModelMetadata(input: {
 
 export function recommendedDeviceModelTier(hardware: Pick<DeviceHardwareProfile, "freeStorageGB" | "memoryGB">): LocalModelTier {
   for (const tier of [...ANDROID_MODEL_TIER_ORDER].reverse()) {
-    const requirement = ANDROID_MODEL_TIERS[tier];
+    const requirement = ANDROID_LOCAL_MODEL_TIERS[tier];
     if (
       hardware.memoryGB !== null &&
       hardware.memoryGB >= requirement.minimumRamGB &&
@@ -565,12 +471,21 @@ export function validateImportedModel(input: {
   metadata: LocalModelMetadata;
   sizeBytes: number | null;
   hardware: DeviceHardwareProfile;
+  runtimeFormat?: LocalModelRuntimeFormat | undefined;
+  activationPolicy?: LocalModelActivationPolicy | undefined;
+  minimumRamGB?: number | undefined;
+  minimumFreeStorageGB?: number | undefined;
 }): string[] {
   const reasons: string[] = [];
   const { hardware, metadata } = input;
+  const runtimeFormat = input.runtimeFormat ?? "gguf";
 
-  if (!isGgufFileName(input.fileName)) {
+  if (runtimeFormat === "gguf" && !isGgufFileName(input.fileName)) {
     reasons.push("Imported local models must use the .gguf file extension.");
+  } else if (runtimeFormat === "litert-lm" && !input.fileName.trim().toLowerCase().endsWith(".litertlm")) {
+    reasons.push("LiteRT-LM chat models must use the .litertlm file extension.");
+  } else if (runtimeFormat === "onnx-genai") {
+    reasons.push("ONNX GenAI directory artifacts are not supported by the installer yet.");
   }
 
   if (input.sizeBytes !== null && input.sizeBytes <= 0) {
@@ -582,7 +497,7 @@ export function validateImportedModel(input: {
       reasons.push("Chat model filename or metadata must report a supported parameter tier such as 0.6B, 1.5B, 3B, 4B, or 7B.");
     }
 
-    if (!isQuantizedModel(metadata.modelQuantization)) {
+    if (runtimeFormat === "gguf" && !isQuantizedModel(metadata.modelQuantization)) {
       reasons.push("Chat model must be a quantized GGUF build such as q4, q5, q8, int4, or int8.");
     }
 
@@ -597,16 +512,19 @@ export function validateImportedModel(input: {
 
   const tierRequirements = getAndroidModelTierRequirements(metadata.modelTier);
   if (input.role === "chat" && tierRequirements) {
+    const minimumRamGB = input.minimumRamGB ?? tierRequirements.minimumRamGB;
+    const minimumFreeStorageGB = input.minimumFreeStorageGB ?? tierRequirements.minimumFreeStorageGB;
+    const liteRtRamToleranceGB = runtimeFormat === "litert-lm" && minimumRamGB >= 8 ? 1 : 0;
     if (hardware.memoryGB === null) {
       reasons.push("Device RAM could not be detected, so Haki cannot safely activate this model.");
-    } else if (hardware.memoryGB < tierRequirements.minimumRamGB) {
-      reasons.push(`${tierRequirements.label} requires at least ${tierRequirements.minimumRamGB}GB RAM.`);
+    } else if (hardware.memoryGB + liteRtRamToleranceGB < minimumRamGB) {
+      reasons.push(`${tierRequirements.label} requires at least ${minimumRamGB}GB RAM.`);
     }
 
     if (hardware.freeStorageGB === null) {
       reasons.push("Free storage could not be detected, so Haki cannot safely activate this model.");
-    } else if (hardware.freeStorageGB < tierRequirements.minimumFreeStorageGB) {
-      reasons.push(`${tierRequirements.label} requires at least ${tierRequirements.minimumFreeStorageGB}GB free storage.`);
+    } else if (hardware.freeStorageGB < minimumFreeStorageGB) {
+      reasons.push(`${tierRequirements.label} requires at least ${minimumFreeStorageGB}GB free storage.`);
     }
   }
 
@@ -624,11 +542,15 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
     role: input.role,
     metadata: input.metadata,
     sizeBytes: input.sizeBytes,
-    hardware: input.hardware
+    hardware: input.hardware,
+    runtimeFormat: input.runtimeFormat,
+    activationPolicy: input.activationPolicy,
+    minimumRamGB: input.minimumRamGB,
+    minimumFreeStorageGB: input.minimumFreeStorageGB
   });
 
   return {
-    version: 1,
+    version: 2,
     role: input.role,
     ...(input.source ? { source: input.source } : {}),
     ...(input.sourceId ? { sourceId: input.sourceId } : {}),
@@ -636,6 +558,10 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
     originalName: input.originalName,
     storedName: input.storedName,
     uri: input.uri,
+    runtimeFormat: input.runtimeFormat ?? "gguf",
+    artifactKind: input.artifactKind ?? "single-file",
+    artifactEntrypointUri: input.uri,
+    artifactFiles: [input.uri],
     sizeBytes: input.sizeBytes,
     fileHash: input.fileHash,
     fileHashAlgorithm: input.fileHash ? "md5" : null,
@@ -650,6 +576,9 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
     manifestPath: input.manifestPath,
     rejectionReasons,
     ...(input.generationPolicy ? { generationPolicy: input.generationPolicy } : {}),
+    evaluationStatus: input.evaluationStatus ?? "pending",
+    lastEvaluation: null,
+    activationPolicy: input.activationPolicy ?? "auto-after-smoke-test",
     ...(input.artifactSource ? { artifactSource: input.artifactSource } : {}),
     ...(input.artifactLicense ? { artifactLicense: input.artifactLicense } : {}),
     ...(input.metadata.rawInfo ? { rawInfo: input.metadata.rawInfo } : {})

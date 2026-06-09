@@ -17,6 +17,7 @@ import { buildAnswerMessage } from "../src/services/searchResultText";
 import type { SourceAnswerDraft } from "../src/services/sourceAnswerService";
 import type { StructuredDocument } from "../src/types/document";
 import type { SearchResult } from "../src/types/search";
+import { readSource } from "./test-utils/sourceAssertions";
 
 const testMode: DeviceAIMode = {
   id: "fallback-fts5-only",
@@ -207,6 +208,13 @@ function topProcessOptions(results: SearchResult[], chunkIds: string[]): string[
 
 async function runScenarioEval() {
   let failed = 0;
+
+  console.log("Testing answer pipeline boundaries...");
+  const answerServiceSource = readSource("src/services/answerService.ts");
+  const answerPipelineSource = readSource("src/services/answerPipeline.ts");
+  failed += assertCase(/createAnswerPipelineContext/.test(answerServiceSource), "answer service initializes pipeline context");
+  failed += assertCase(/resolveContextualSourceRequest/.test(answerPipelineSource), "answer pipeline owns contextual source routing");
+  failed += assertCase(/friendSupportTaskContext/.test(answerPipelineSource), "answer pipeline owns role task contexts");
 
   console.log("Testing scenario classification...");
 

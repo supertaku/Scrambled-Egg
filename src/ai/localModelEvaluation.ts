@@ -1,8 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import type { SafeChatInput, SourceChunkForSummary } from "./LocalAIProvider";
+import type {
+  DeviceThermalState,
+  LocalAICapabilities,
+  LocalAIProvider,
+  SafeChatInput,
+  SourceChunkForSummary
+} from "./LocalAIProvider";
 import { validateCampusGroundingQuality } from "./outputQuality";
 import { safeChatInstructionForTier, STRICT_LOCAL_SUMMARIZATION_INSTRUCTION } from "./prompts";
+import { getDeviceHardwareProfile } from "./deviceHardwareProfile";
 import seedDocuments from "@/data/seed-documents.json";
 import { getSelectedAIMode } from "@/services/modeSelectionService";
 import { detectReplyLanguage, isTagalogLike } from "@/services/replyLanguageService";
@@ -24,6 +31,19 @@ export interface LocalModelEvaluationReport {
   total: number;
   metrics: LocalModelEvaluationMetric[];
   unavailableReason: string | null;
+}
+
+export interface LocalModelSmokeTestInput {
+  provider: LocalAIProvider;
+  capabilities: LocalAICapabilities;
+  modelName: string | null;
+}
+
+export interface LocalModelSmokeTestReport extends LocalModelEvaluationReport {
+  loadTimeMs: number | null;
+  generationTimeMs: number | null;
+  thermalStateBefore: DeviceThermalState;
+  thermalStateAfter: DeviceThermalState;
 }
 
 function representativeSource(): SourceChunkForSummary {
@@ -72,6 +92,101 @@ export async function getLastLocalModelEvaluation(): Promise<LocalModelEvaluatio
   }
 }
 
+export async function runLocalModelSmokeTest(input: LocalModelSmokeTestInput): Promise<LocalModelSmokeTestReport> {
+  const startedAt = Date.now();
+  const hardwareBefore = await getDeviceHardwareProfile(input.capabilities.availableBackends ?? []);
+  const answerSafeChat = input.provider.answerSafeChat;
+  const unavailable = !input.capabilities.safeChat || !answerSafeChat;
+
+  if (unavailable) {
+    const hardwareAfter = await getDeviceHardwareProfile(input.capabilities.availableBackends ?? []);
+    return {
+      evaluatedAt: new Date().toISOString(),
+      modelName: input.modelName,
+      providerName: input.provider.name,
+      passed: 0,
+      total: 0,
+      metrics: [],
+      unavailableReason: "No active generated-chat provider is available for smoke testing.",
+      loadTimeMs: input.capabilities.modelLoadTimeMs ?? null,
+      generationTimeMs: Date.now() - startedAt,
+      thermalStateBefore: hardwareBefore.thermalState ?? "unknown",
+      thermalStateAfter: hardwareAfter.thermalState ?? "unknown"
+    };
+  }
+
+  const source = representativeSource();
+  const summary = await input.provider.summarizeFromSources({
+    question: "What are the steps for the pre-enrollment student health assessment?",
+    instruction: STRICT_LOCAL_SUMMARIZATION_INSTRUCTION,
+    sources: [source]
+  });
+  const unsourced = await answerSafeChat(
+    safeInput("What is the official TUPT enrollment fee and deadline?", input.capabilities.modelTier)
+  );
+  const language = await answerSafeChat(
+    safeInput("Saan ko makikita ang opisina at ano ang deadline?", input.capabilities.modelTier)
+  );
+  const ambiguous = await answerSafeChat(
+    safeInput("My teacher told my classmate that they need it. What should I submit?", input.capabilities.modelTier)
+  );
+  const grounding = validateCampusGroundingQuality({
+    answerText: unsourced.text,
+    question: "What is the official TUPT enrollment fee and deadline?",
+    sourceEvidence: []
+  });
+  const concreteUnsourcedFact = /\b(?:php|peso|piso)\s*\d|\u20b1\s*\d|\bdeadline\s+(?:is|on)\s+/i.test(unsourced.text);
+  const thermalStateAfter = (await getDeviceHardwareProfile(input.capabilities.availableBackends ?? [])).thermalState ?? "unknown";
+
+  const metrics: LocalModelEvaluationMetric[] = [
+    {
+      id: "grounded-summary-citation",
+      label: "Grounded summary cites supplied source",
+      passed: summary.status === "ok" && summary.citationIds.includes(source.citationId),
+      detail: summary.status === "ok" ? summary.text : "Provider returned no reliable source summary."
+    },
+    {
+      id: "unsupported-campus-facts",
+      label: "No unsupported official campus claims",
+      passed: grounding.ok && !concreteUnsourcedFact,
+      detail: grounding.ok && !concreteUnsourcedFact ? unsourced.text : [...grounding.flags, "concrete unsourced fee/deadline"].join(", ")
+    },
+    {
+      id: "english-only",
+      label: "Tagalog/Taglish request receives English output",
+      passed: !isTagalogLike(detectReplyLanguage(language.text)),
+      detail: language.text
+    },
+    {
+      id: "ambiguous-actor-clarification",
+      label: "Ambiguous actor reference asks clarification",
+      passed: ambiguous.text.includes("?"),
+      detail: ambiguous.text
+    },
+    {
+      id: "thermal-state",
+      label: "Thermal state stays below serious",
+      passed: thermalStateAfter !== "serious" && thermalStateAfter !== "critical",
+      detail: `Thermal state before=${hardwareBefore.thermalState ?? "unknown"} after=${thermalStateAfter}`
+    }
+  ];
+  const passed = metrics.filter((metric) => metric.passed).length;
+
+  return {
+    evaluatedAt: new Date().toISOString(),
+    modelName: input.modelName,
+    providerName: input.provider.name,
+    passed,
+    total: metrics.length,
+    metrics,
+    unavailableReason: null,
+    loadTimeMs: input.capabilities.modelLoadTimeMs ?? null,
+    generationTimeMs: Date.now() - startedAt,
+    thermalStateBefore: hardwareBefore.thermalState ?? "unknown",
+    thermalStateAfter
+  };
+}
+
 export async function runActiveLocalModelEvaluation(): Promise<LocalModelEvaluationReport> {
   const selected = await getSelectedAIMode();
   const provider = selected.summaryProvider;
@@ -108,7 +223,7 @@ export async function runActiveLocalModelEvaluation(): Promise<LocalModelEvaluat
     question: "What is the official TUPT enrollment fee and deadline?",
     sourceEvidence: []
   });
-  const concreteUnsourcedFact = /\b(?:php|peso|₱)\s*\d|\bdeadline\s+(?:is|on)\s+/i.test(unsourced.text);
+  const concreteUnsourcedFact = /\b(?:php|peso|piso)\s*\d|\u20b1\s*\d|\bdeadline\s+(?:is|on)\s+/i.test(unsourced.text);
 
   const metrics: LocalModelEvaluationMetric[] = [
     {
@@ -130,7 +245,7 @@ export async function runActiveLocalModelEvaluation(): Promise<LocalModelEvaluat
       detail: language.text
     },
     {
-      id: "ambiguity-question",
+      id: "ambiguous-actor-clarification",
       label: "Ambiguous actor reference asks clarification",
       passed: ambiguous.text.includes("?"),
       detail: ambiguous.text

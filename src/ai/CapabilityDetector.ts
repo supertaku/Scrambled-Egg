@@ -106,7 +106,12 @@ export class DefaultCapabilityDetector implements CapabilityDetector {
 
   async getCapabilityReport(): Promise<DeviceCapabilityReport> {
     const fallbackCapabilities = await this.registry.fallback.getCapabilities();
-    const reportOrder = [this.registry.appleFoundationModels, this.registry.llamaRn];
+    const reportOrder = [
+      this.registry.appleFoundationModels,
+      this.registry.liteRtLm,
+      this.registry.onnxGenAi,
+      this.registry.llamaRn
+    ];
     const device = getDeviceCapabilitySnapshot();
     const hardware = await getDeviceHardwareProfile();
 
