@@ -23,7 +23,8 @@ import { FeatherLoader } from "@/components/chat/FeatherLoader";
 import { ChatMessageBubble } from "@/components/chat/ChatMessageBubble";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { ChatRoleSelector } from "@/components/chat/ChatRoleSelector";
-import { PixelHakiPortrait, SpriteHaki } from "@/components/mascot/PixelHaki";
+import { HakiMascot, HakiPortrait } from "@/components/mascot/HakiMascot";
+import { useHakiBond } from "@/components/mascot/useHakiBond";
 import { SuggestedQuestions } from "@/components/SuggestedQuestions";
 import { getAppDatabase } from "@/data/appRepository";
 import { useChatMessages } from "@/hooks/useChatMessages";
@@ -42,7 +43,7 @@ import { classifyStudentQuestionIntent } from "@/services/questionIntentService"
 import { getStudentAvatarUri, getStudentProfile, studentProfileToChatContext } from "@/services/studentProfileService";
 import { colors } from "@/theme/colors";
 import { metrics } from "@/theme/metrics";
-import type { ChatMessage } from "@/types/chat";
+import type { ChatFeedbackRating, ChatMessage } from "@/types/chat";
 import type { ChatRole, SuggestedModeAction } from "@/types/search";
 import { logger } from "@/utils/logger";
 
@@ -140,7 +141,9 @@ export default function ChatScreen() {
   const [composerHeight, setComposerHeight] = useState(0);
   const [loadingLineIndex, setLoadingLineIndex] = useState(0);
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
+  const recordedHakiMessageIdRef = useRef<string | null>(null);
   const shouldAutoScrollRef = useRef(true);
+  const { bondState, recordBondEvent } = useHakiBond();
 
   const {
     messages,
@@ -362,6 +365,21 @@ export default function ChatScreen() {
     });
   }, [sendMessage]);
 
+  const handleFeedback = useCallback((messageId: string, rating: ChatFeedbackRating) => {
+    recordBondEvent(rating === "helpful" ? "positive_feedback" : "negative_feedback");
+    void submitFeedback(messageId, rating);
+  }, [recordBondEvent, submitFeedback]);
+
+  useEffect(() => {
+    const latestHakiMessage = [...messages].reverse().find((message) => message.sender === "haki" && message.id !== "opening");
+    if (!latestHakiMessage || latestHakiMessage.id === recordedHakiMessageIdRef.current) {
+      return;
+    }
+
+    recordedHakiMessageIdRef.current = latestHakiMessage.id;
+    recordBondEvent(latestHakiMessage.response?.answerBasis === "campus_sources_unavailable" ? "answer_error" : "answer_success");
+  }, [messages, recordBondEvent]);
+
   const handleVoice = useCallback(() => {
     void handleVoicePress(
       draft,
@@ -421,7 +439,7 @@ export default function ChatScreen() {
           userAvatarUri={userAvatarUri}
           {...(showContinue ? { onContinue: () => handleContinue(item) } : {})}
           {...(item.sender === "haki" && !isStreamingMessage ? { onHakiAvatarPress: toggleRoleMenu } : {})}
-          {...(item.sender === "haki" && !isStreamingMessage ? { onFeedback: submitFeedback } : {})}
+          {...(item.sender === "haki" && !isStreamingMessage ? { onFeedback: handleFeedback } : {})}
           {...(item.sender === "haki" && item.question && item.response?.suggestedModeActions?.length
             ? { onSuggestedModeAction: (action: SuggestedModeAction) => handleSuggestedModeAction(action, item.question!) }
             : {})}
@@ -429,7 +447,7 @@ export default function ChatScreen() {
         />
       );
     },
-    [userAvatarUri, displayedMessages.length, loading, streamingMessage, handleContinue, handleRetry, submitFeedback, toggleRoleMenu, handleSuggestedModeAction]
+    [userAvatarUri, displayedMessages.length, loading, streamingMessage, handleContinue, handleRetry, handleFeedback, toggleRoleMenu, handleSuggestedModeAction]
   );
 
   // Entry animation
@@ -509,7 +527,14 @@ export default function ChatScreen() {
                     <View style={styles.branchLine} />
                     <View style={styles.branchOffshoot} />
                     <View style={styles.branchLeaf} />
-                    <SpriteHaki height={60} state="helping" style={styles.listeningMascot} />
+                    <HakiMascot
+                      activity="listening"
+                      familiarity={bondState.familiarity}
+                      mood={bondState.mood}
+                      placement="chatListening"
+                      size={68}
+                      style={styles.listeningMascot}
+                    />
                   </View>
                   <View style={styles.listeningBubble}>
                     <View style={styles.listeningBubbleTailBorder} />
@@ -542,7 +567,7 @@ export default function ChatScreen() {
                     {loading && !streaming ? (
                       <View style={styles.hakiRow}>
                         <View style={styles.hakiAvatarContainer}>
-                          <PixelHakiPortrait size={34} style={styles.hakiAvatar} />
+                          <HakiPortrait size={34} style={styles.hakiAvatar} />
                         </View>
                         <View style={[styles.bubble, styles.hakiBubble, styles.typingBubble]}>
                           <View pointerEvents="none" style={styles.hakiBubbleTailBorder} />

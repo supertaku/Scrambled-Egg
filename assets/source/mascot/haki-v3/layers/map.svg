@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="250" viewBox="0 0 300 250">
+  <defs>
+    <linearGradient id="feather" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a7aaad"/><stop offset="1" stop-color="#30343b"/></linearGradient>
+    <linearGradient id="darkFeather" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#70757c"/><stop offset="1" stop-color="#1d2026"/></linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffc331"/><stop offset="1" stop-color="#b96300"/></linearGradient>
+    <linearGradient id="shirt" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#ddd9cf"/></linearGradient>
+  </defs><path d="M17 35L101 10L197 38L283 14V219L197 241L101 214L17 239Z" fill="#e8c985" stroke="#6f5128" stroke-width="10"/>
+    <path d="M101 10v204M197 38v203M49 76q56 45 92 16q50-40 108 52M61 176q78-33 151 8" fill="none" stroke="#9c7040" stroke-width="8"/></svg>

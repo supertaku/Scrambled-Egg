@@ -162,6 +162,7 @@ function TabsFrame({
         <Tabs.Screen name="documents" options={{ href: null, title: "Docs" }} />
         <Tabs.Screen name="add-document" options={{ href: null, title: "Add" }} />
         <Tabs.Screen name="settings" options={{ href: null, title: "Settings" }} />
+        <Tabs.Screen name="haki-lab" options={{ href: null, title: "Haki Lab" }} />
       </Tabs>
       {!immersiveRouteVisible ? <ModelOperationBadge /> : null}
     </View>

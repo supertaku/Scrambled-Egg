@@ -1,10 +1,12 @@
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 
 import { colors } from "@/theme/colors";
 import { AdminUnlockModal } from "./AdminUnlockModal";
-import { PixelHaki, SpriteHaki } from "./mascot/PixelHaki";
-import { pixelStateForMascotStatus, type MascotStatus } from "./mascot/mascotConfig";
+import { HakiMascot } from "./mascot/HakiMascot";
+import { activityForMascotStatus } from "./mascot/hakiMascotState";
+import { type MascotStatus } from "./mascot/mascotConfig";
+import { useHakiBond } from "./mascot/useHakiBond";
 import { useMascotInteraction } from "./mascot/useMascotInteraction";
 
 export type { MascotStatus } from "./mascot/mascotConfig";
@@ -23,48 +25,47 @@ export function MascotHeader({
   message,
   onMascotPress,
   subtitle,
-  status = "idle",
-  useSpriteSheet = false
+  status = "idle"
 }: MascotHeaderProps) {
   const interactionVisible = useIsFocused();
+  const { bondState, recordBondEvent } = useHakiBond();
   const {
-    bubbleScale,
     closeAdminModal,
     handleMascotLongPress,
-    handleMascotPress,
-    imageTransform,
+    handleMascotInteraction,
     isGroggy,
+    mascotEvent,
+    mascotEventKey,
     resolvedMessage,
     resolvedStatus,
     showAdminModal
-  } = useMascotInteraction({ interactionVisible, message, onAdminRequest: onMascotPress, status });
+  } = useMascotInteraction({ interactionVisible, message, onAdminRequest: onMascotPress, onBondEvent: recordBondEvent, status });
   const showTriviaLabel = isTrivia && resolvedMessage === message;
   const compactDialogue = resolvedStatus === "sleepy" && Boolean(resolvedMessage);
-  const pixelState = pixelStateForMascotStatus(resolvedStatus);
-  const renderSpriteSheet = useSpriteSheet && pixelState !== "dizzy";
+  const mascotActivity = activityForMascotStatus(resolvedStatus);
   return (
     <View style={styles.container}>
       <AdminUnlockModal onClose={closeAdminModal} visible={showAdminModal} />
-      <Pressable
-        accessibilityLabel={`Haki mascot (${resolvedStatus})`}
-        accessibilityRole="button"
-        disabled={isGroggy}
-        onLongPress={handleMascotLongPress}
-        onPress={handleMascotPress}
-        delayLongPress={450}
-        style={styles.mascotWrap}
-      >
-        <Animated.View style={[styles.mascotImage, { transform: imageTransform }]}>
-          {renderSpriteSheet ? (
-            <SpriteHaki height={178} state={pixelState} />
-          ) : (
-            <PixelHaki height={178} state={pixelState} width={114} />
-          )}
-        </Animated.View>
-      </Pressable>
+      <View pointerEvents={isGroggy ? "none" : "auto"} style={styles.mascotWrap}>
+        <HakiMascot
+          active={interactionVisible}
+          activity={mascotActivity}
+          event={mascotEvent}
+          eventKey={mascotEventKey}
+          familiarity={bondState.familiarity}
+          interactionMode="full"
+          mood={bondState.mood}
+          onInteraction={handleMascotInteraction}
+          onLongPress={handleMascotLongPress}
+          placement="header"
+          showMoodBadge
+          size={164}
+          style={styles.mascotImage}
+        />
+      </View>
 
       {resolvedMessage ? (
-        <Animated.View style={[styles.speechBubbleWrap, compactDialogue ? styles.compactBubbleWrap : undefined, { transform: [{ scale: bubbleScale }] }]}>
+        <View style={[styles.speechBubbleWrap, compactDialogue ? styles.compactBubbleWrap : undefined]}>
           <View style={[styles.speechBubble, compactDialogue ? styles.compactBubble : undefined]}>
             <View pointerEvents="none" style={[styles.speechBubbleTailBorder, compactDialogue ? styles.compactTailBorder : undefined]} />
             <View pointerEvents="none" style={[styles.speechBubbleTail, compactDialogue ? styles.compactTail : undefined]} />
@@ -80,7 +81,7 @@ export function MascotHeader({
               <Text selectable style={styles.speechText}>{resolvedMessage}</Text>
             </ScrollView>
           </View>
-        </Animated.View>
+        </View>
       ) : null}
     </View>
   );
@@ -105,7 +106,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     left: 10,
     position: "absolute",
-    width: 160,
+    width: 168,
     zIndex: 4,
     elevation: 4
   },

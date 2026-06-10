@@ -1,69 +1,38 @@
-import { useEffect, useRef } from "react";
-import { Animated, Easing, Image, StyleSheet, View } from "react-native";
+import { useEffect } from "react";
+import { Canvas, Group, Image as SkiaImage, useImage } from "@shopify/react-native-skia";
+import { Easing, useDerivedValue, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 
 import { useReducedMotion } from "@/hooks/useReducedMotion";
-
-const FEATHER_IMAGE = require("../../../assets/images/mascot/pixel/haki-feather.png");
+import { HAKI_ASSETS } from "../mascot/hakiAssets";
 
 export function FeatherLoader() {
   const reducedMotion = useReducedMotion();
-  const motion = useRef(new Animated.Value(0)).current;
+  const feather = useImage(HAKI_ASSETS.feather);
+  const motion = useSharedValue(0);
 
   useEffect(() => {
-    motion.stopAnimation();
-    motion.setValue(0);
-
-    if (reducedMotion) {
-      return undefined;
-    }
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(motion, {
-          duration: 650,
-          easing: Easing.inOut(Easing.ease),
-          toValue: 1,
-          useNativeDriver: true
-        }),
-        Animated.timing(motion, {
-          duration: 650,
-          easing: Easing.inOut(Easing.ease),
-          toValue: 0,
-          useNativeDriver: true
-        })
-      ])
+    motion.value = 0;
+    if (reducedMotion) return;
+    motion.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 650, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 650, easing: Easing.inOut(Easing.sin) })
+      ),
+      -1
     );
-    loop.start();
-    return () => loop.stop();
   }, [motion, reducedMotion]);
 
+  const transform = useDerivedValue(() => [
+    { translateY: 3 - motion.value * 7 },
+    { rotate: -0.2 + motion.value * 0.4 },
+    { scale: 0.94 + motion.value * 0.11 }
+  ]);
+
   return (
-    <View style={styles.container}>
-      <Animated.View
-        style={{
-          opacity: motion.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }),
-          transform: [
-            { translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [3, -4] }) },
-            { rotate: motion.interpolate({ inputRange: [0, 1], outputRange: ["-13deg", "13deg"] }) },
-            { scale: motion.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.05] }) }
-          ]
-        }}
-      >
-        <Image accessibilityIgnoresInvertColors resizeMode="contain" source={FEATHER_IMAGE} style={styles.feather} />
-      </Animated.View>
-    </View>
+    <Canvas style={{ height: 32, width: 32 }}>
+      <Group transform={transform} origin={{ x: 16, y: 16 }}>
+        <SkiaImage image={feather} x={8} y={1} width={16} height={30} />
+      </Group>
+    </Canvas>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: "center",
-    height: 32,
-    justifyContent: "center",
-    width: 32
-  },
-  feather: {
-    height: 30,
-    width: 30
-  }
-});

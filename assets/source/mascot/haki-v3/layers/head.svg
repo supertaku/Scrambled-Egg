@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="540" viewBox="0 0 600 540">
+  <defs>
+    <linearGradient id="feather" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a7aaad"/><stop offset="1" stop-color="#30343b"/></linearGradient>
+    <linearGradient id="darkFeather" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#70757c"/><stop offset="1" stop-color="#1d2026"/></linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffc331"/><stop offset="1" stop-color="#b96300"/></linearGradient>
+    <linearGradient id="shirt" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#ddd9cf"/></linearGradient>
+  </defs><ellipse cx="300" cy="270" rx="278" ry="247" fill="url(#feather)" stroke="#1d2026" stroke-width="18"/>
+    <path d="M50 329Q105 278 166 302Q118 342 67 362Q130 350 188 368Q126 404 76 404" fill="#d7d6d0" opacity=".94"/>
+    <path d="M550 329Q495 278 434 302Q482 342 533 362Q470 350 412 368Q474 404 524 404" fill="#d7d6d0" opacity=".94"/>
+    <ellipse cx="300" cy="397" rx="126" ry="72" fill="#d7d6d0" opacity=".7"/></svg>

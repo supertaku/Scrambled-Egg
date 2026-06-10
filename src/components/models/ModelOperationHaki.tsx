@@ -3,7 +3,9 @@ import { StyleSheet, Text, View } from "react-native";
 
 import type { ModelOperationState } from "@/ai/localModelManager";
 import { colors } from "@/theme/colors";
-import { PixelHaki, type PixelHakiState } from "../mascot/PixelHaki";
+import { HakiMascot } from "../mascot/HakiMascot";
+import { useHakiBond } from "../mascot/useHakiBond";
+import type { HakiActivity } from "../mascot/hakiMascotState";
 
 function formatPercent(progress: number | null): string {
   return `${Math.round((progress ?? 0) * 100)}%`;
@@ -47,19 +49,19 @@ function messageForOperation(operation: ModelOperationState | null, activeModelN
   }
 }
 
-function stateForOperation(operation: ModelOperationState | null): PixelHakiState {
+function activityForOperation(operation: ModelOperationState | null): HakiActivity {
   const phase = operation?.phase;
   if (phase === "queued" || phase === "downloading" || phase === "paused") {
     return "thinking";
   }
   if (phase === "verifying" || phase === "validating" || phase === "optimizing") {
-    return "helping";
+    return "modelOperation";
   }
   if (phase === "activating" || phase === "waiting_for_chat" || phase === "removing") {
     return "thinking";
   }
-  if (phase === "completed") return operation?.error ? "sleepy" : "success";
-  return phase === "failed" ? "sleepy" : "idle";
+  if (phase === "completed") return operation?.error ? "error" : "success";
+  return phase === "failed" ? "error" : "idle";
 }
 
 export function ModelOperationHaki({
@@ -70,6 +72,7 @@ export function ModelOperationHaki({
   operation: ModelOperationState | null;
 }) {
   const [, setClockTick] = useState(0);
+  const { bondState } = useHakiBond();
 
   useEffect(() => {
     if (!operation || ["completed", "failed", "canceled"].includes(operation.phase)) return undefined;
@@ -79,7 +82,15 @@ export function ModelOperationHaki({
 
   return (
     <View style={styles.container}>
-      <PixelHaki height={158} state={stateForOperation(operation)} style={styles.mascot} width={100} />
+      <HakiMascot
+        activity={activityForOperation(operation)}
+        familiarity={bondState.familiarity}
+        mood={bondState.mood}
+        placement="modelStatus"
+        showMoodBadge
+        size={136}
+        style={styles.mascot}
+      />
       <View style={styles.bubble}>
         <View pointerEvents="none" style={styles.tailBorder} />
         <View pointerEvents="none" style={styles.tail} />

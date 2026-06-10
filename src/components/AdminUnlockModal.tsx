@@ -4,7 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 
 import { disableAdminMode, getAdminMode, subscribeAdminMode, tryUnlockAdminMode } from "@/services/adminService";
 import { colors } from "@/theme/colors";
-import { PixelHaki } from "./mascot/PixelHaki";
+import { HakiMascot } from "./mascot/HakiMascot";
 
 interface AdminUnlockModalProps {
   onClose: () => void;
@@ -74,7 +74,7 @@ export function AdminUnlockModal({ onClose, visible }: AdminUnlockModalProps) {
       <View style={styles.modalBackdrop}>
         <View style={styles.adminModal}>
           <View style={styles.interrogationFrame}>
-            <PixelHaki animated={false} height={100} state="detective" style={styles.interrogationMascot} width={68} />
+            <HakiMascot activity="admin" placement="admin" reducedMotion size={100} style={styles.interrogationMascot} />
             <View style={styles.questionBubble}>
               <Text style={styles.questionBubbleText}>?</Text>
             </View>

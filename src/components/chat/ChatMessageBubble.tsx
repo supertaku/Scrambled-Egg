@@ -5,7 +5,7 @@ import { AlertCircle, Flag, RefreshCw, ThumbsDown, ThumbsUp, User as UserIcon } 
 import { colors } from "@/theme/colors";
 import type { ChatFeedbackRating, ChatMessage } from "@/types/chat";
 import type { SuggestedModeAction } from "@/types/search";
-import { PixelHakiPortrait } from "../mascot/PixelHaki";
+import { HakiPortrait } from "../mascot/HakiMascot";
 import { ChatSourceCard } from "./ChatSourceCard";
 
 interface ChatMessageBubbleProps {
@@ -33,8 +33,6 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.94)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
-  const avatarScale = useRef(new Animated.Value(1)).current;
-  const avatarTurn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -43,22 +41,6 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
       Animated.spring(slideAnim, { toValue: 0, friction: 9, tension: 100, useNativeDriver: true })
     ]).start();
   }, [fadeAnim, scaleAnim, slideAnim]);
-
-  const handleHakiAvatarPress = () => {
-    Animated.parallel([
-      Animated.sequence([
-        Animated.spring(avatarScale, { toValue: 0.88, friction: 7, tension: 200, useNativeDriver: true }),
-        Animated.spring(avatarScale, { toValue: 1.08, friction: 6, tension: 180, useNativeDriver: true }),
-        Animated.spring(avatarScale, { toValue: 1, friction: 6, tension: 150, useNativeDriver: true })
-      ]),
-      Animated.sequence([
-        Animated.timing(avatarTurn, { duration: 90, toValue: 1, useNativeDriver: true }),
-        Animated.timing(avatarTurn, { duration: 150, toValue: -1, useNativeDriver: true }),
-        Animated.timing(avatarTurn, { duration: 100, toValue: 0, useNativeDriver: true })
-      ])
-    ]).start();
-    onHakiAvatarPress?.();
-  };
 
   return (
     <Animated.View
@@ -73,19 +55,10 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
           accessibilityHint="Opens Haki answer mode choices."
           accessibilityLabel="Choose Haki answer mode"
           accessibilityRole="button"
-          onPress={handleHakiAvatarPress}
+          onPress={onHakiAvatarPress}
           style={styles.hakiAvatarContainer}
         >
-          <Animated.View
-            style={{
-              transform: [
-                { scale: avatarScale },
-                { rotate: avatarTurn.interpolate({ inputRange: [-1, 0, 1], outputRange: ["-7deg", "0deg", "7deg"] }) }
-              ]
-            }}
-          >
-            <PixelHakiPortrait size={34} style={styles.hakiAvatar} />
-          </Animated.View>
+          <HakiPortrait size={34} style={styles.hakiAvatar} />
         </Pressable>
       )}
 

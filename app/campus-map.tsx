@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { PixelHaki } from "@/components/mascot/PixelHaki";
+import { HakiMascot } from "@/components/mascot/HakiMascot";
 import {
   CAMPUS_MAP_CANVAS,
   getCampusMapDestination,
@@ -37,6 +37,7 @@ import {
 } from "@/data/campusMapGameplay";
 import { useDebouncedQuery } from "@/hooks/useDebouncedQuery";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { useHakiBond } from "@/components/mascot/useHakiBond";
 import { colors } from "@/theme/colors";
 
 interface MapFrame {
@@ -48,13 +49,6 @@ interface MapFrame {
 
 const SPRITE_WIDTH = 36;
 const SPRITE_HEIGHT = 36;
-const DIRECTION_IMAGE = {
-  down: require("../assets/images/map/haki-map-down.png"),
-  left: require("../assets/images/map/haki-map-left.png"),
-  right: require("../assets/images/map/haki-map-right.png"),
-  up: require("../assets/images/map/haki-map-up.png")
-} satisfies Record<CampusMapDirection, number>;
-
 function pct(value: number): `${number}%` {
   return `${value}%`;
 }
@@ -99,6 +93,7 @@ function fitMapFrame(width: number, height: number): MapFrame {
 export default function CampusMapScreen() {
   const router = useRouter();
   const reducedMotion = useReducedMotion();
+  const { recordBondEvent } = useHakiBond();
   const { clearQuery, debouncedQuery, query, setQuery } = useDebouncedQuery(100);
   const [frame, setFrame] = useState<MapFrame>({ height: 0, left: 0, top: 0, width: 0 });
   const [direction, setDirection] = useState<CampusMapDirection>(CAMPUS_PLAYER_SPAWN.direction);
@@ -152,7 +147,8 @@ export default function CampusMapScreen() {
   const openDialogue = useCallback((destination: CampusMapDestination) => {
     stopMovement();
     setDialogDestinationId(destination.id);
-  }, [stopMovement]);
+    recordBondEvent("mapDiscovery");
+  }, [recordBondEvent, stopMovement]);
 
   const selectSearchResult = useCallback((destination: CampusMapDestination) => {
     showRemotePrompt(destination);
@@ -328,6 +324,7 @@ function PlayerSprite({
   direction: CampusMapDirection;
   position: CampusMapPoint;
 }) {
+  const hakiDirection = direction === "down" ? "front" : direction === "up" ? "back" : direction;
   return (
     <View
       pointerEvents="none"
@@ -340,13 +337,7 @@ function PlayerSprite({
         }
       ]}
     >
-      <Image
-        accessibilityIgnoresInvertColors
-        fadeDuration={0}
-        resizeMode="contain"
-        source={DIRECTION_IMAGE[direction]}
-        style={styles.spriteImage}
-      />
+      <HakiMascot activity="walking" direction={hakiDirection} placement="mapPlayer" size={44} />
     </View>
   );
 }
@@ -490,7 +481,7 @@ function DialogueBox({
     >
       <View style={styles.dialogueInner}>
         <View pointerEvents="none" style={styles.dialogueMascot}>
-          <PixelHaki animated={!reducedMotion} height={94} state="aha" width={68} />
+          <HakiMascot activity="exploring" placement="mapDialogue" reducedMotion={reducedMotion} size={94} />
         </View>
         <View style={styles.dialogueHeader}>
           <View style={styles.dialogueTitleArea}>

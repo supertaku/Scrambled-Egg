@@ -628,6 +628,10 @@ const androidBuildSource = readFileSync(new URL("../android/app/build.gradle", i
 assert.match(androidBuildSource, /com\.google\.ai\.edge\.litertlm:litertlm-android:0\.10\.2/);
 assert.match(androidBuildSource, /runtimeOnly\("com\.google\.ai\.edge\.litertlm:litertlm-android:0\.10\.2"\)/);
 
+const androidProguardSource = readFileSync(new URL("../android/app/proguard-rules.pro", import.meta.url), "utf8");
+assert.match(androidProguardSource, /-keep class com\.google\.ai\.edge\.litertlm\.\*\* \{ \*; \}/);
+assert.match(androidProguardSource, /-keepclassmembers class com\.google\.ai\.edge\.litertlm\.\*\* \{ \*; \}/);
+
 const androidManifestSource = readFileSync(new URL("../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
 assert.match(androidManifestSource, /libvndksupport\.so/);
 assert.match(androidManifestSource, /libOpenCL\.so/);
@@ -653,7 +657,7 @@ const hakiStatusSource = readFileSync(new URL("../src/components/models/ModelOpe
 assert.match(hakiStatusSource, /The download is complete\. I'm checking the file before using it\./);
 assert.match(hakiStatusSource, /Campus Haki is still available\./);
 assert.match(hakiStatusSource, /interrupted download cannot be resumed/);
-assert.match(hakiStatusSource, /PixelHaki/);
+assert.match(hakiStatusSource, /HakiMascot/);
 
 const apkInspectionSource = readFileSync(new URL("../scripts/inspect-apk-assets.ps1", import.meta.url), "utf8");
 assert.match(apkInspectionSource, /Production builds must let users download compatible models into app-private storage/);

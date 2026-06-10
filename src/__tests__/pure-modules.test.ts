@@ -12,7 +12,7 @@ import { calculateConfidence, computeConfidenceScore } from "@/retrieval/confide
 import { normalizeQuery, tokenizeQuery } from "@/retrieval/queryNormalizer";
 import { calculateRankScore, rankSearchResults } from "@/retrieval/ranking";
 import { reciprocalRankFusion } from "@/retrieval/rrf";
-import { pixelStateForMascotStatus } from "@/components/mascot/mascotConfig";
+import { activityForMascotStatus } from "@/components/mascot/hakiMascotState";
 import { classifyStudentQuestionIntent } from "@/services/questionIntentService";
 import {
   detectReplyLanguage,
@@ -171,7 +171,7 @@ describe("home trivia", () => {
 });
 
 describe("mascot state mapping", () => {
-  it("maps shake groggy state to the dizzy Haki artwork", () => {
-    expect(pixelStateForMascotStatus("groggy")).toBe("dizzy");
+  it("maps shake groggy state to the groggy Skia activity", () => {
+    expect(activityForMascotStatus("groggy")).toBe("groggy");
   });
 });
