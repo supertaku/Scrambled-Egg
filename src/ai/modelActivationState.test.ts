@@ -74,6 +74,18 @@ describe("model activation truth", () => {
     })).toEqual({ ready: false, reason: "Install an updated Android build." });
   });
 
+  it("does not apply LiteRT smoke-test state to GGUF activation", () => {
+    expect(evaluateModelActivation({
+      ...base,
+      modelId: "llama-3.2-1b",
+      activeModelId: "llama-3.2-1b",
+      runtimeFormat: "gguf",
+      selectedProviderId: "llama-rn",
+      smokeTestStatus: "failed",
+      smokeTestFailureReason: "A legacy performance benchmark failed."
+    })).toEqual({ ready: true, reason: null });
+  });
+
   it("requires runtime, active model, smoke test, and selected provider agreement", () => {
     expect(evaluateModelActivation(base)).toEqual({ ready: true, reason: null });
     expect(evaluateModelActivation({ ...base, selectedProviderId: "llama-rn" })).toMatchObject({ ready: false });

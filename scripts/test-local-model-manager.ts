@@ -467,9 +467,11 @@ assert.match(localModelManagerSource, /runtimeAvailability/);
 assert.match(localModelManagerSource, /catalogModel \? \{ modelTier: catalogModel\.tier \} : \{\}/);
 const liteRtActivationProbeSource = localModelManagerSource.slice(
   localModelManagerSource.indexOf("async function probeLiteRtLmActivation"),
-  localModelManagerSource.indexOf("async function probeGgufActivation")
+  localModelManagerSource.indexOf("async function activateInstalledModelInternal")
 );
 assert.match(liteRtActivationProbeSource, /cleanupLiteRtActivationProbe/);
+assert.match(localModelManagerSource, /prepareManifestForActivation/);
+assert.doesNotMatch(localModelManagerSource, /probeGgufActivation|benchmarkCandidate/);
 const modelActivationProbeSource = readFileSync(new URL("../src/ai/modelActivationProbe.ts", import.meta.url), "utf8");
 assert.match(modelActivationProbeSource, /cancelGeneration/);
 assert.match(modelActivationProbeSource, /release/);

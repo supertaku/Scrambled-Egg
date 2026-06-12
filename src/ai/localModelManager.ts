@@ -53,6 +53,7 @@ import {
   stagingModelFile,
   stagingRecordFile
 } from "./modelStoragePaths";
+import { normalizeGgufActivationManifest, prepareManifestForActivation } from "./modelActivationPolicy";
 import {
   buildLiteRtActivationProbeInput, cleanupLiteRtActivationProbe, evaluatedManifest,
   localFilePathFromUri, nativeSafeChatText, withActivationTimeout
@@ -60,13 +61,6 @@ import {
 import { catalogDownloadFitsHardwareForDownload } from "./modelCatalog";
 import { GGUF_MODELS, type GgufDownloadConfig, type RuntimeAvailability } from "./modelDownloadConfig";
 import { getLiteRtLmNativeModule } from "./nativeModules";
-import {
-  chooseExecutionProfile,
-  executionCandidatesForHardware,
-  LOCAL_MODEL_PROFILE_VERSION,
-  modelPerformanceKey,
-  type ExecutionCandidate
-} from "./localModelPerformance";
 import { loadLlamaRn } from "./llamaRnRuntime";
 import {
   assertNoBusyModelOperation,
@@ -377,7 +371,7 @@ async function refreshInstalledManifest(entry: InstalledChatModel): Promise<Loca
     ...(catalogModel?.minimumFreeStorageGB !== undefined ? { minimumFreeStorageGB: catalogModel.minimumFreeStorageGB } : {})
   });
   const requiresNonThinking = /qwen\s*3|qwen3/i.test(`${manifest.modelName} ${manifest.originalName}`);
-  const updated: LocalModelManifest = {
+  const updated = normalizeGgufActivationManifest({
     ...manifest,
     validatedAt: now(),
     recommendedModelTier: recommendedDeviceModelTier(hardware),
@@ -419,7 +413,7 @@ async function refreshInstalledManifest(entry: InstalledChatModel): Promise<Loca
       : {}),
     ...(catalogModel?.artifactSource ? { artifactSource: catalogModel.artifactSource } : {}),
     ...(catalogModel?.artifactLicense ? { artifactLicense: catalogModel.artifactLicense } : {})
-  };
+  });
   manifestFile.write(JSON.stringify(updated, null, 2));
   const library = updateInstalledEntry(readLibrary(), {
     ...entry,
@@ -428,111 +422,6 @@ async function refreshInstalledManifest(entry: InstalledChatModel): Promise<Loca
     modelName: updated.modelName
   });
   writeLibrary(library);
-  return updated;
-}
-
-async function benchmarkCandidate(
-  manifest: LocalModelManifest,
-  candidate: ExecutionCandidate,
-  availableBackends: string[]
-): Promise<NonNullable<LocalModelManifest["executionProfile"]>> {
-  const llama = await loadLlamaRn();
-  const hardwareBefore = await getDeviceHardwareProfile(availableBackends);
-  const settings = getLlamaContextSettingsForTier(manifest.modelTier, false, hardwareBefore.cpuCoreCount);
-  const loadStartedAt = Date.now();
-  const context = await llama.initLlama({
-    model: manifest.uri,
-    embedding: false,
-    n_ctx: settings.nCtx,
-    n_batch: settings.nBatch,
-    n_threads: settings.nThreads,
-    use_mlock: false,
-    use_mmap: true,
-    cache_type_k: "q8_0",
-    cache_type_v: "q8_0",
-    flash_attn_type: "auto",
-    ...candidate.initOptions
-  });
-  const loadTimeMs = Date.now() - loadStartedAt;
-  let firstTokenTimeMs: number | null = null;
-  let tokenCount = 0;
-  const completionStartedAt = Date.now();
-  try {
-    await context.completion(
-      {
-        messages: [
-          { role: "system", content: "Reply in English using only the requested text." },
-          { role: "user", content: "Reply with exactly: OK" }
-        ],
-        n_predict: 12,
-        temperature: 0,
-        stop: ["</s>", "<|end|>", "<|eot_id|>", "<|im_end|>"]
-      },
-      (data) => {
-        if (!data.token) return;
-        tokenCount += 1;
-        firstTokenTimeMs ??= Date.now() - completionStartedAt;
-      }
-    );
-  } finally {
-    await context.release();
-  }
-  const generationTimeMs = Math.max(1, Date.now() - completionStartedAt);
-  const hardwareAfter = await getDeviceHardwareProfile(availableBackends);
-  return {
-    version: LOCAL_MODEL_PROFILE_VERSION,
-    modelKey: modelPerformanceKey(manifest),
-    executionBackend: candidate.backend,
-    accelerationStatus: candidate.backend === "cpu" ? "unavailable" : "benchmarking",
-    availableBackends,
-    loadTimeMs,
-    firstTokenTimeMs,
-    decodeTokensPerSecond: tokenCount > 0 ? Number(((tokenCount * 1000) / generationTimeMs).toFixed(2)) : null,
-    thermalStateBefore: hardwareBefore.thermalState ?? "unknown",
-    thermalStateAfter: hardwareAfter.thermalState ?? "unknown",
-    benchmarkedAt: now(),
-    failureReason: null
-  };
-}
-
-async function probeModelLoad(manifest: LocalModelManifest): Promise<LocalModelManifest> {
-  if (
-    manifest.executionProfile?.version === LOCAL_MODEL_PROFILE_VERSION &&
-    manifest.executionProfile.modelKey === modelPerformanceKey(manifest)
-  ) {
-    return manifest;
-  }
-
-  if (getModelOperation()) {
-    patchModelOperation({ phase: "optimizing" });
-  }
-  const llama = await loadLlamaRn();
-  const backendInfo = await llama.getBackendDevicesInfo();
-  const availableBackends = backendInfo.map((device) => `${device.backend}:${device.deviceName}`);
-  const hardware = await getDeviceHardwareProfile(availableBackends);
-  const candidates = executionCandidatesForHardware(hardware);
-  const baseline = await benchmarkCandidate(manifest, candidates[0]!, availableBackends);
-  let accelerated: NonNullable<LocalModelManifest["executionProfile"]> | null = null;
-  const acceleratedCandidate = candidates.find((candidate) => candidate.backend !== "cpu");
-
-  if (acceleratedCandidate && hardware.lowMemory !== true && hardware.thermalState !== "serious" && hardware.thermalState !== "critical") {
-    try {
-      accelerated = await benchmarkCandidate(manifest, acceleratedCandidate, availableBackends);
-    } catch (error) {
-      accelerated = {
-        ...baseline,
-        executionBackend: acceleratedCandidate.backend,
-        accelerationStatus: "fallback",
-        failureReason: error instanceof Error ? error.message : "Accelerated backend benchmark failed."
-      };
-    }
-  }
-
-  const updated = {
-    ...manifest,
-    executionProfile: chooseExecutionProfile(baseline, accelerated)
-  };
-  new File(manifest.manifestPath).write(JSON.stringify(updated, null, 2));
   return updated;
 }
 
@@ -582,17 +471,6 @@ async function probeLiteRtLmActivation(manifest: LocalModelManifest): Promise<Lo
   }
 }
 
-async function probeGgufActivation(manifest: LocalModelManifest): Promise<LocalModelManifest> {
-  const startedAt = Date.now();
-  try {
-    return writeEvaluation(await probeModelLoad(manifest), true, null, startedAt);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : "GGUF activation probe failed.";
-    writeEvaluation(manifest, false, reason, startedAt);
-    throw error;
-  }
-}
-
 async function activateInstalledModelInternal(modelId: string, operationId: string, ownsMutation = true): Promise<ImportedModelStatus> {
   if (ownsMutation) await startModelMutation(operationId);
   try {
@@ -604,11 +482,8 @@ async function activateInstalledModelInternal(modelId: string, operationId: stri
     if (manifest.rejectionReasons.length > 0) {
       throw new Error(manifest.rejectionReasons[0] ?? "This phone cannot safely activate that model right now.");
     }
-    if ((manifest.runtimeFormat ?? "gguf") === "litert-lm") {
-      manifest = await probeLiteRtLmActivation(manifest);
-    } else {
-      manifest = await probeGgufActivation(manifest);
-    }
+    manifest = await prepareManifestForActivation(manifest, probeLiteRtLmActivation);
+    new File(manifest.manifestPath).write(JSON.stringify(manifest, null, 2));
     writeLibrary({ ...readLibrary(), activeModelId: modelId });
     return statusFromManifest(manifest);
   } finally {
@@ -859,8 +734,12 @@ export async function getChatModelLibrary(): Promise<ChatModelLibrary> {
         filePresent: new File(entry.fileUri).exists,
         manifestPresent: Boolean(manifest),
         runtimeAvailable: runtimeAvailability[runtimeFormat] === true,
-        evaluationStatus: manifest?.evaluationStatus ?? (runtimeFormat === "gguf" ? "not_required" : "pending"),
-        activationFailureReason: manifest?.lastEvaluation?.failureReason ?? entry.rejectionReasons[0] ?? null
+        evaluationStatus: runtimeFormat === "gguf"
+          ? "not_required"
+          : manifest?.evaluationStatus ?? "pending",
+        activationFailureReason: runtimeFormat === "litert-lm"
+          ? manifest?.lastEvaluation?.failureReason ?? entry.rejectionReasons[0] ?? null
+          : entry.rejectionReasons[0] ?? null
       };
     })
   };
