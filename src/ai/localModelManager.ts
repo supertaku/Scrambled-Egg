@@ -21,7 +21,10 @@ import {
   type LocalModelMetadata,
   type LocalModelRole
 } from "./localModelMetadata";
-import { evaluatedManifest, localFilePathFromUri, nativeSafeChatText, withActivationTimeout } from "./modelActivationProbe";
+import {
+  buildLiteRtActivationProbeInput, cleanupLiteRtActivationProbe, evaluatedManifest,
+  localFilePathFromUri, nativeSafeChatText, withActivationTimeout
+} from "./modelActivationProbe";
 import { catalogDownloadFitsHardwareForDownload } from "./modelCatalog";
 import { GGUF_MODELS, type GgufDownloadConfig, type ModelRuntimeFormat, type RuntimeAvailability } from "./modelDownloadConfig";
 import { getLiteRtLmNativeModule } from "./nativeModules";
@@ -835,29 +838,25 @@ async function probeLiteRtLmActivation(manifest: LocalModelManifest): Promise<Lo
   const startedAt = Date.now();
   const nativeModule = getLiteRtLmNativeModule();
   const missingRuntime = "LiteRT-LM native runtime is unavailable. Install an updated Android build before using Gemma.";
+  let requestId: string | null = null;
   try {
     if (!nativeModule?.answerSafeChat) throw new Error(missingRuntime);
     if (nativeModule.isRuntimeAvailable && (await nativeModule.isRuntimeAvailable()) !== true) {
       throw new Error(missingRuntime);
     }
+    requestId = `litert-activation-${Date.now()}`;
     const result = await withActivationTimeout(
-      nativeModule.answerSafeChat({
-        modelPath: localFilePathFromUri(manifest.uri),
-        question: "Reply with exactly: Haki ready.",
-        instruction: "You are Haki. Answer in English only.",
-        appContext: "Local activation probe. Return a short confirmation only.",
-        conversationContext: [],
-        sourceContext: [],
-        sourceReliable: false,
-        taskContext: "This is a local LiteRT-LM model activation check.",
-        scenario: "student_admin"
-      }),
+      nativeModule.answerSafeChat(buildLiteRtActivationProbeInput(
+        localFilePathFromUri(manifest.uri),
+        requestId
+      )),
       LITERT_ACTIVATION_PROBE_TIMEOUT_MS,
       "LiteRT-LM activation probe timed out."
     );
     if (!nativeSafeChatText(result)) throw new Error("LiteRT-LM activation probe returned an empty response.");
     return writeEvaluation(manifest, true, null, startedAt);
   } catch (error) {
+    await cleanupLiteRtActivationProbe(nativeModule, requestId);
     const raw = error instanceof Error ? error.message : "LiteRT-LM activation probe failed.";
     const reason = /e4b|4b/i.test(`${manifest.modelName} ${manifest.originalName}`)
       ? `${raw} Try Gemma 4 E2B or a smaller GGUF model.`

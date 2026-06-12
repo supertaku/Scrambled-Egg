@@ -21,6 +21,8 @@ function deviceNamesMatching(hardware: DeviceHardwareProfile, pattern: RegExp): 
     .map((device) => device.split(":").at(-1)?.trim() || device);
 }
 
+// llama.rn loads packaged Hexagon kernels itself when enabled. Candidate
+// selection remains CPU/Metal/OpenCL until representative HTP benchmarks exist.
 export function executionCandidatesForHardware(hardware: DeviceHardwareProfile): ExecutionCandidate[] {
   const candidates: ExecutionCandidate[] = [{ backend: "cpu", initOptions: { n_gpu_layers: 0 } }];
 

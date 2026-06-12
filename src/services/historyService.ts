@@ -345,6 +345,87 @@ export async function saveConversationMemory(input: {
   });
 }
 
+export interface UnansweredQuestionEntry {
+  question: string;
+  occurrences: number;
+  lastAskedAt: string | null;
+}
+
+interface UnansweredQuestionRow {
+  id: number;
+  question: string;
+  answer: string;
+  last_asked_at: string | null;
+}
+
+const UNANSWERED_ANSWER_MARKERS = [
+  "I do not have enough saved TUP info for that yet",
+  "I don't have a solid saved answer for that yet",
+  "No reliable answer found"
+];
+
+function isUnansweredAnswer(answer: string): boolean {
+  return UNANSWERED_ANSWER_MARKERS.some((marker) => answer.includes(marker));
+}
+
+/**
+ * Aggregates recent source-miss fallbacks without weakening encrypted chat
+ * storage. The bounded recent-memory set is decrypted in process, inspected,
+ * and discarded; plaintext is never written back to SQLite.
+ */
+export async function getUnansweredQuestionReport(limit = 10): Promise<UnansweredQuestionEntry[]> {
+  await ensureConversationMemoryEncrypted();
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<UnansweredQuestionRow>(
+    `SELECT id, question, answer, created_at AS last_asked_at
+     FROM conversation_memory
+     ORDER BY created_at DESC, id DESC
+     LIMIT ?`,
+    [MAX_MEMORY_ROWS]
+  );
+  const aggregated = new Map<string, UnansweredQuestionEntry>();
+
+  for (const row of rows) {
+    try {
+      const [question, answer] = await Promise.all([
+        decryptPrivateText(row.question),
+        decryptPrivateText(row.answer)
+      ]);
+      if (!isUnansweredAnswer(answer)) continue;
+
+      const normalizedQuestion = question.trim().toLowerCase();
+      if (!normalizedQuestion) continue;
+      const current = aggregated.get(normalizedQuestion);
+      if (!current) {
+        aggregated.set(normalizedQuestion, {
+          question: question.trim(),
+          occurrences: 1,
+          lastAskedAt: row.last_asked_at
+        });
+        continue;
+      }
+
+      current.occurrences += 1;
+      if ((row.last_asked_at ?? "") > (current.lastAskedAt ?? "")) {
+        current.lastAskedAt = row.last_asked_at;
+      }
+    } catch (error) {
+      logger.db.warn("An unanswered-question report row could not be decrypted.", {
+        id: row.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  const safeLimit = Math.max(1, Math.min(50, Math.trunc(limit)));
+  return Array.from(aggregated.values())
+    .sort((left, right) =>
+      right.occurrences - left.occurrences ||
+      (right.lastAskedAt ?? "").localeCompare(left.lastAskedAt ?? "")
+    )
+    .slice(0, safeLimit);
+}
+
 export async function clearConversationMemory(): Promise<void> {
   const db = await getDatabase();
   await db.withTransactionAsync(async () => {

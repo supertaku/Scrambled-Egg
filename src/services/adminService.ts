@@ -8,6 +8,11 @@ import { STORAGE_KEYS } from "@/utils/constants";
 //   PowerShell: [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes("YOUR_CODE"))) -replace '-',''
 //   Node:       require('crypto').createHash('sha256').update('YOUR_CODE').digest('hex')
 // and replace the constant below.
+//
+// This is a convenience gate for local administrator screens, not a remote
+// security boundary. Anyone who extracts the JS bundle can brute-force this
+// unsalted hash offline, so deployment must use a long random passphrase.
+// Defeating the gate affects only the corpus stored on that same device.
 const ADMIN_CODE_HASH = "ed8effff543751d1751f3f6886821b67daf6d4847f337da3b8e5fb8eabce327d";
 
 const ATTEMPTS_KEY = "tupt_wiki_admin_attempts";

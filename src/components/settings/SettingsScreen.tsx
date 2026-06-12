@@ -13,7 +13,11 @@ import {
 import { getAppDatabase } from "@/data/appRepository";
 import { getAppMetaValue, getDatabaseStats, getDocumentSummaries, type DatabaseStats } from "@/db/documentRepository";
 import { getCurrentAIMode, getDeviceCapabilityReport, refreshDeviceCapabilities } from "@/services/modeSelectionService";
-import { clearChatMemory } from "@/services/historyService";
+import {
+  clearChatMemory,
+  getUnansweredQuestionReport,
+  type UnansweredQuestionEntry
+} from "@/services/historyService";
 import {
   getChatPrivacySettings,
   setUseProfileContext,
@@ -28,6 +32,7 @@ import { SettingsAppearanceSection } from "./SettingsAppearanceSection";
 import { SettingsCapabilitySection } from "./SettingsCapabilitySection";
 import { SettingsDbSection } from "./SettingsDbSection";
 import { SettingsPreferencesSection } from "./SettingsPreferencesSection";
+import { SettingsUnansweredSection } from "./SettingsUnansweredSection";
 
 export default function SettingsScreen() {
   const colors = useThemeColors();
@@ -49,6 +54,7 @@ export default function SettingsScreen() {
   const [refreshingCapabilities, setRefreshingCapabilities] = useState(false);
   const [seedVersion, setSeedVersion] = useState<string | null>(null);
   const [stats, setStats] = useState<DatabaseStats | null>(null);
+  const [unansweredQuestions, setUnansweredQuestions] = useState<UnansweredQuestionEntry[]>([]);
 
   const loadSettings = useCallback(async (refreshCapabilities: boolean) => {
     if (refreshCapabilities) setRefreshingCapabilities(true);
@@ -57,10 +63,11 @@ export default function SettingsScreen() {
 
     try {
       const db = await getAppDatabase();
-      const [nextStats, nextSeedVersion, nextDocuments] = await Promise.all([
+      const [nextStats, nextSeedVersion, nextDocuments, nextUnansweredQuestions] = await Promise.all([
         getDatabaseStats(db),
         getAppMetaValue(db, "seed_version"),
-        getDocumentSummaries(db)
+        getDocumentSummaries(db),
+        getUnansweredQuestionReport().catch((): UnansweredQuestionEntry[] => [])
       ]);
       const nextMode = refreshCapabilities ? await refreshDeviceCapabilities() : await getCurrentAIMode();
       const [nextCapabilityReport, nextVoiceAutoSend, nextEvaluationReport, privacySettings] = await Promise.all([
@@ -80,6 +87,7 @@ export default function SettingsScreen() {
       setEvaluationReport(nextEvaluationReport);
       setSeedVersion(nextSeedVersion);
       setStats(nextStats);
+      setUnansweredQuestions(nextUnansweredQuestions);
     } catch {
       if (mountedRef.current) {
         setError("Could not load saved guide details. Please try again.");
@@ -176,6 +184,7 @@ export default function SettingsScreen() {
         />
         <AdminGate label="Saved guide and app check details are for administrators only.">
           <SettingsDbSection documents={documents} error={error} loading={loading} seedVersion={seedVersion} stats={stats} />
+          <SettingsUnansweredSection entries={unansweredQuestions} error={error} loading={loading} />
           <SettingsCapabilitySection
             activeMode={activeMode}
             capabilityReport={capabilityReport}

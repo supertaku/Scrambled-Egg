@@ -145,19 +145,35 @@ export class LiteRtLmProvider implements LocalAIProvider {
   }
 
   async summarizeFromSources(input: SummarizeFromSourcesInput): Promise<LocalSummaryResult> {
-    return withLocalModelInferenceLease(async () => {
+    return this.withGenerationSlot(() => withLocalModelInferenceLease(async () => {
       const nativeModule = liteRtLmRuntime.getModule();
       const manifest = await this.getActiveManifest();
       if (!nativeModule?.summarizeFromSources || !manifest) {
         throw new Error("LiteRT-LM summarization is unavailable because no tested Gemma model is active.");
       }
-      const result = await nativeModule.summarizeFromSources({
-        ...input,
-        modelPath: filePathFromUri(manifest.uri),
-        instruction: `${input.instruction}\n\nUse only these sources. End with a SOURCE_IDS line containing only cited source IDs.`
+      const requestId = nextRequestId();
+      const guard = createLiteRtGenerationGuard({
+        cancel: async (id) => (await nativeModule.cancelGeneration?.(id)) === true,
+        readThermalState: async () => (await getDeviceHardwareProfile()).thermalState ?? "unknown",
+        requestId,
+        totalDeadlineMs: LITERT_GENERATION_DEADLINE_MS
       });
-      return coerceNativeSummaryResult(result, input, this.id, this.name);
-    });
+      const startedAt = Date.now();
+      guard.start();
+      try {
+        const result = await nativeModule.summarizeFromSources({
+          ...input,
+          modelPath: filePathFromUri(manifest.uri),
+          requestId,
+          instruction: `${input.instruction}\n\nUse only these sources. End with a SOURCE_IDS line containing only cited source IDs.`
+        });
+        this.lastInferenceTimeMs = Date.now() - startedAt;
+        if (guard.reason) throw new Error(`LiteRT-LM summarization canceled: ${guard.reason}.`);
+        return coerceNativeSummaryResult(result, input, this.id, this.name);
+      } finally {
+        guard.stop();
+      }
+    }));
   }
 
   async answerSafeChat(input: SafeChatInput): Promise<SafeChatResult> {

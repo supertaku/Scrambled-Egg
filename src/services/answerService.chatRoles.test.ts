@@ -173,6 +173,20 @@ describe("four Haki modes", () => {
     expect(response.results[0]?.chunkId).toBe(sourceResult().chunkId);
   });
 
+  it("does not stream a partial section for a composed multi-domain answer", async () => {
+    const onToken = vi.fn();
+
+    await answerStudentQuestion("I feel overwhelmed because I lost my ID. What should I do?", {
+      chatRole: "haki",
+      onToken
+    });
+
+    expect(answerSafeLocalChatWithContext).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.not.objectContaining({ onToken })
+    );
+  });
+
   it("keeps Haki selected without a model and still answers saved campus information", async () => {
     vi.mocked(getSelectedAIMode).mockResolvedValue({ mode: mode(false), summaryProvider: null, embeddingProvider: null });
     const source = await answerStudentQuestion("What should I do if I lose my ID?", { chatRole: "haki" });

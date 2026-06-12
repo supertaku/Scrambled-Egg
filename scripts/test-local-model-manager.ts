@@ -459,6 +459,14 @@ assert.match(localModelManagerSource, /probeLiteRtLmActivation/);
 assert.match(localModelManagerSource, /evaluationStatus/);
 assert.match(localModelManagerSource, /runtimeAvailability/);
 assert.match(localModelManagerSource, /catalogModel \? \{ modelTier: catalogModel\.tier \} : \{\}/);
+const liteRtActivationProbeSource = localModelManagerSource.slice(
+  localModelManagerSource.indexOf("async function probeLiteRtLmActivation"),
+  localModelManagerSource.indexOf("async function probeGgufActivation")
+);
+assert.match(liteRtActivationProbeSource, /cleanupLiteRtActivationProbe/);
+const modelActivationProbeSource = readFileSync(new URL("../src/ai/modelActivationProbe.ts", import.meta.url), "utf8");
+assert.match(modelActivationProbeSource, /cancelGeneration/);
+assert.match(modelActivationProbeSource, /release/);
 
 const liteRtNativeSource = readFileSync(
   new URL("../android/app/src/main/java/com/tupt/haki/HakiLiteRtLmModule.kt", import.meta.url),
@@ -466,6 +474,16 @@ const liteRtNativeSource = readFileSync(
 );
 assert.match(liteRtNativeSource, /fun cancelProcess\(/);
 assert.match(liteRtNativeSource, /fun release\(/);
+const proguardSource = readFileSync(new URL("../android/app/proguard-rules.pro", import.meta.url), "utf8");
+assert.match(proguardSource, /-keep class com\.google\.ai\.edge\.litertlm\.\*\*/);
+
+const liteRtProviderSource = readFileSync(new URL("../src/ai/LiteRtLmProvider.ts", import.meta.url), "utf8");
+const liteRtSummarySource = liteRtProviderSource.slice(
+  liteRtProviderSource.indexOf("async summarizeFromSources"),
+  liteRtProviderSource.indexOf("async answerSafeChat")
+);
+assert.match(liteRtSummarySource, /requestId/);
+assert.match(liteRtSummarySource, /createLiteRtGenerationGuard/);
 
 const hakiStatusSource = readFileSync(new URL("../src/components/models/ModelOperationHaki.tsx", import.meta.url), "utf8");
 assert.match(hakiStatusSource, /The download is complete\. I'm checking the file before using it\./);
@@ -476,6 +494,11 @@ assert.match(hakiStatusSource, /HakiMascotCompat/);
 const apkInspectionSource = readFileSync(new URL("../scripts/inspect-apk-assets.ps1", import.meta.url), "utf8");
 assert.match(apkInspectionSource, /Production builds must let users download compatible models into app-private storage/);
 assert.match(apkInspectionSource, /librnllama/);
+assert.match(apkInspectionSource, /liblitertlm_jni/);
+assert.match(apkInspectionSource, /arm64-v8a/);
+assert.match(apkInspectionSource, /com\/google\/ai\/edge\/litertlm\/Engine/);
+assert.match(apkInspectionSource, /sendMessageAsync/);
+assert.match(apkInspectionSource, /cancelProcess/);
 assert.doesNotMatch(apkInspectionSource, /missing the bundled default GGUF/);
 
 console.log("Local model manager tests passed.");

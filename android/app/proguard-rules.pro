@@ -22,6 +22,9 @@
 # llama.rn / native model bridges
 -keep class com.rnllama.** { *; }
 
+# LiteRT-LM classes are loaded through HakiLiteRtLmModule reflection.
+-keep class com.google.ai.edge.litertlm.** { *; }
+
 # Haki native modules (bundled GGUF copy, device profile)
 -keep class com.tupt.haki.** { *; }
 

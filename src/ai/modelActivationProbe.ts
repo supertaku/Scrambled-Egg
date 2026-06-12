@@ -3,6 +3,7 @@ import {
   type LocalModelManifest,
   type LocalModelEvaluationSummary
 } from "./localModelMetadata";
+import type { HakiLocalAIModule } from "./nativeModules";
 
 export function nativeSafeChatText(result: unknown): string {
   if (typeof result === "string") return result.trim();
@@ -16,6 +17,41 @@ export function nativeSafeChatText(result: unknown): string {
 
 export function localFilePathFromUri(uri: string): string {
   return uri.startsWith("file://") ? decodeURIComponent(uri.slice("file://".length)) : uri;
+}
+
+export function buildLiteRtActivationProbeInput(modelPath: string, requestId: string) {
+  const normalizedRequestId = requestId.trim();
+  if (!normalizedRequestId) throw new Error("LiteRT-LM activation requestId is required.");
+  return {
+    modelPath,
+    requestId: normalizedRequestId,
+    question: "Reply with exactly: Haki ready.",
+    instruction: "You are Haki. Answer in English only.",
+    appContext: "Local activation probe. Return a short confirmation only.",
+    conversationContext: [],
+    sourceContext: [],
+    sourceReliable: false,
+    taskContext: "This is a local LiteRT-LM model activation check.",
+    scenario: "student_admin"
+  };
+}
+
+export async function cleanupLiteRtActivationProbe(
+  nativeModule: Pick<HakiLocalAIModule, "cancelGeneration" | "release"> | null,
+  requestId: string | null
+): Promise<void> {
+  if (requestId) {
+    try {
+      await nativeModule?.cancelGeneration?.(requestId);
+    } catch {
+      // Release is still attempted when request-scoped cancellation fails.
+    }
+  }
+  try {
+    await nativeModule?.release?.();
+  } catch {
+    // Preserve the original activation failure when native cleanup also fails.
+  }
 }
 
 export function withActivationTimeout<T>(

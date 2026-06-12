@@ -55,11 +55,19 @@ Native GGUF (llama.rn) summary mode uses conservative mobile hardware tiers (RAM
 llama.rn / GGUF AI mode:
 
 - Android or iOS custom native build with the `llama.rn` Expo config plugin.
+- The plugin enables OpenCL and Hexagon assets. Runtime backend selection remains benchmark-driven CPU, Metal, or OpenCL until representative Hexagon measurements exist.
 - Uses app-private GGUF files under the document `models/chat/installed/<model-id>/` directory.
 - New installations start with no chat GGUF; FTS5 source search remains available until a student activates a compatible download.
 - Embedding model filenames checked by default: `haki-embed.gguf`, `haki-embedding.gguf`, `haki-minilm-embed.gguf`.
 - Uses the same adaptive tier policy as Android local AI: tiny 0.5B-1.5B, minimum 1B-3B, good 3B-4B, enhanced 4B-7B, flagship 7B-8B.
 - The AI Models screen supports curated compatible downloads, switching, removal, paused-download recovery, public manual import for advanced offline use, and Haki progress feedback. Manual imports are preflighted for GGUF extension, size limits, device fit, and embedding runtime validation before activation.
+
+LiteRT-LM / Gemma AI mode:
+
+- Android arm64 preview and production builds package LiteRT-LM `0.10.2`.
+- Gemma 4 E2B and E4B use verified `.litertlm` artifacts and a real native generation probe before activation.
+- Phi-4-mini-instruct, Qwen, and Llama remain on the GGUF/`llama.rn` path.
+- Multiple verified models may remain installed, but only one model is active at a time.
 
 Apple Intelligence / Foundation Models mode:
 
@@ -325,10 +333,9 @@ npm run typecheck
 
 ## Roadmap
 
-- Representative-device validation for llama.rn acceleration and Apple Foundation Models behavior
-- Embedding-backed hybrid retrieval tuning
-- Hybrid vector search
-- Better reranking
-- Document update packages
-- Admin document-preprocessing tool
-- Official document verification workflow
+1. Official document verification and office sign-off workflow
+2. Admin document-preprocessing tool for official PDFs and notices
+3. Signed document update packages
+4. Representative-device validation for Gemma, Phi-4-mini, acceleration, and thermal behavior
+5. Embedding-backed hybrid retrieval and intent classification
+6. Better reranking
