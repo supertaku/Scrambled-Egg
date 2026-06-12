@@ -1,1388 +1,947 @@
 # Building Haki From Scratch
 
-## A Beginner's Guide to a Mobile, Offline-First AI Assistant
+## A Beginner's Guide to On-Device AI Engineering, Taught Through One Big Question
 
-This guide explains the current Haki/TUP Wiki codebase as an engineering system, not as a marketing demo. It is written for someone learning both mobile development and AI engineering, and it is also structured so you can later explain the design in an interview.
+This guide teaches you how Haki works — and how to build it again from nothing — using a method called **decomposition**, which is the heart of systems thinking:
 
-The most important fact to understand is this:
+> Take one question that is too big to answer.
+> Break it into smaller questions.
+> Break those into even smaller questions.
+> Keep going until each question is so small you can answer it directly.
+> Then walk back up the tree, and the big answer assembles itself.
 
-> Haki is not just a chat screen attached to a language model. It is an offline-first mobile application that combines local source retrieval, deterministic answer rules, optional on-device language generation, device-aware model management, privacy controls, and safety boundaries.
+This is not just how the guide is written. It is how Haki was actually engineered, and it is how most real software gets built. If you learn one thing from this document, learn the habit of asking *"what smaller question is hiding inside this one?"*
 
-The implementation described here was inspected from the project source tree as it exists on May 24, 2026. When the app's bundled content or AI implementation changes, this guide should be updated with the code.
+The guide reflects the codebase as of June 2026 (HD mascot, theme system, Gemma catalog, the full local-AI pipeline). When the code changes, update this guide with it.
+
+---
+
+## How To Read This Guide
+
+Every chapter is one branch of a question tree. The root question is:
+
+> **"How do we build an assistant that answers students' campus questions correctly, on their own phone, even without internet?"**
+
+That question is impossible to answer directly. So we split it:
+
+```mermaid
+flowchart TD
+    ROOT["THE BIG QUESTION:<br/>Correct campus answers,<br/>on a phone, offline?"]
+    ROOT --> Q1["Q1. What is the assistant<br/>ALLOWED to say?<br/>(truth & data)"]
+    ROOT --> Q2["Q2. How does it FIND<br/>the right information?<br/>(retrieval)"]
+    ROOT --> Q3["Q3. WHEN should it use AI,<br/>and when not?<br/>(routing & decisions)"]
+    ROOT --> Q4["Q4. How do you RUN an AI<br/>model on a phone?<br/>(on-device inference)"]
+    ROOT --> Q5["Q5. How do we keep it<br/>SAFE and private?<br/>(guardrails)"]
+    ROOT --> Q6["Q6. How do we make it<br/>a real APP people enjoy?<br/>(software engineering)"]
+    ROOT --> Q7["Q7. How do we KNOW<br/>it all works?<br/>(testing)"]
+```
+
+Each chapter then breaks its question down further until the answers become small and concrete, and ends with a **"walking back up"** summary that shows how the small answers combine. Chapter 9 is the build manual: the exact order to assemble everything from an empty folder.
+
+**Why this order matters:** notice that "run an AI model" is question number four, not one. Most beginners start with the model. Haki's most important engineering decision is that the model is one worker in an office, not the office itself.
 
 ---
 
 ## Table of Contents
 
-1. [The Project In One View](#1-the-project-in-one-view)
-2. [What Is Trusted, Generated, Or Placeholder Data](#2-what-is-trusted-generated-or-placeholder-data)
-3. [How The Whole App Is Connected](#3-how-the-whole-app-is-connected)
-4. [Complete Codebase Responsibility Map](#4-complete-codebase-responsibility-map)
-5. [The AI System: What Haki Actually Does](#5-the-ai-system-what-haki-actually-does)
-6. [One Message From Tap To Answer](#6-one-message-from-tap-to-answer)
-7. [Building The App From Scratch, Step By Step](#7-building-the-app-from-scratch-step-by-step)
-8. [Building The AI Capability In Depth](#8-building-the-ai-capability-in-depth)
-9. [Testing, Debugging, And Release Confidence](#9-testing-debugging-and-release-confidence)
-10. [How To Explain Haki In An Interview](#10-how-to-explain-haki-in-an-interview)
-11. [Current Limitations And Sensible Next Work](#11-current-limitations-and-sensible-next-work)
+1. [Q1 — What Is the Assistant Allowed To Say?](#chapter-1)
+2. [Q2 — How Does It Find the Right Information?](#chapter-2)
+3. [Q3 — When Should It Use AI, and When Not?](#chapter-3)
+4. [Q4 — How Do You Run an AI Model on a Phone?](#chapter-4)
+5. [Q5 — How Do We Keep It Safe and Private?](#chapter-5)
+6. [Q6 — How Do We Make It a Real App?](#chapter-6)
+7. [Q7 — How Do We Know It All Works?](#chapter-7)
+8. [The Map of the Codebase](#chapter-8)
+9. [Building It Back Up: From Empty Folder to Haki](#chapter-9)
+10. [The Lessons, the Glossary, and the Honest Limits](#chapter-10)
 
 ---
 
-# 1. The Project In One View
+<a name="chapter-1"></a>
+# Chapter 1 — Q1: What Is the Assistant Allowed To Say?
 
-## 1.1 What Haki is
+Before writing any code, we hit a question that decides everything else.
 
-Haki is an Expo/React Native mobile app for TUP-Taguig students. Its central experience is a student assistant that can:
-
-- search locally bundled campus procedure information;
-- answer from saved sources with visible evidence;
-- expose four intentional chat modes: source-bounded campus information, supportive guidance, outside-campus research, and a default orchestrating mode;
-- offer optional generated guidance or outside-campus explanations through a downloaded local language model;
-- remember only relevant previous conversation context;
-- protect private profile data;
-- handle voice input, feedback, onboarding, model downloads, and administrative document import;
-- operate without a remote chat API.
-
-The app also has non-chat screens for the campus map, library topics, tips, organization displays, canteen browsing, profile management, settings, and model management.
-
-## 1.2 The central engineering decision
-
-There are two very different kinds of answer:
-
-| Question type | Example | Correct engineering approach |
-| --- | --- | --- |
-| Campus procedure or local fact | "Where do I report a lost ID?" | Retrieve saved source chunks and answer deterministically from them. |
-| Friendly support or general conversation | "I am stressed about exams." | If a safe local model is installed, generate bounded conversational guidance. |
-
-Why separate these?
-
-A language model is good at phrasing, conversation, and broad guidance, but it can confidently invent a fee, deadline, office, or procedure. A campus assistant cannot treat an invented process as an acceptable mistake. Haki therefore keeps source-backed campus answers anchored to stored documents, while it uses the local model only where generation is appropriate and guarded.
-
-**Analogy:** A helpful student volunteer may be great at encouraging you, but official enrollment instructions should be read from the registrar's document, not recalled from memory.
-
-## 1.3 Offline-first does not mean "no download ever"
-
-Haki has two levels of offline capability:
-
-| Capability | Available without downloading an AI model? | Network needed at use time? |
-| --- | --- | --- |
-| Source search and campus source answers | Yes | No |
-| Deterministic utility, safety, and fallback answers | Yes | No |
-| Friendly/local generated conversation | No, a compatible GGUF model must first be downloaded or imported | No after model installation |
-| Optional semantic embeddings | Only if an embedding provider/model becomes available | No after availability |
-
-A user may need internet once to download a curated local chat model. Actual inference then happens on the phone.
-
-## 1.4 A beginner's mental model
-
-Think of Haki as a small campus help desk with several workers:
-
-| System part | Analogy | Code area |
-| --- | --- | --- |
-| React Native screens | The front counter and forms a student sees | `app/`, `src/components/` |
-| Chat hook | The clerk who records each turn and updates the screen | `src/hooks/useChatMessages.ts` |
-| Intent and answer router | The receptionist deciding which desk handles a question | `src/services/answerService.ts`, intent services |
-| SQLite + FTS retrieval | The filing cabinet and fast index of saved documents | `src/db/`, `src/retrieval/` |
-| Deterministic source formatter | The employee reading the approved document aloud | `src/services/sourceAnswerService.ts` |
-| On-device model | A conversational tutor available only after installation | `src/ai/LlamaRnProvider.ts` |
-| Model manager | The technician who downloads, verifies, tests, and activates models | `src/ai/localModelManager.ts` |
-| Safety, language, grounding checks | Office policies preventing harmful or invented advice | `src/services/`, `src/ai/outputQuality.ts` |
-
-This layered design is the AI engineering. The model is one worker, not the entire company.
-
----
-
-# 2. What Is Trusted, Generated, Or Placeholder Data
-
-Before building an AI assistant, define what it is allowed to claim. This is called a **data trust boundary**.
-
-## 2.1 Bundled source corpus
-
-`src/data/seed-documents.json` is the source of bundled campus document chunks. In the current tree it contains 6 documents and 24 chunks, covering areas such as:
-
-- TUP-Taguig Clinic procedures;
-- Guidance and Counselling Office procedures;
-- Office of the Student Affairs procedures;
-- campus safety;
-- feedback or complaints;
-- campus policies.
-
-The database seed process loads these chunks for retrieval. If the seed data is changed, `SEED_VERSION` in `src/db/seed.ts` must change so installed apps receive the updated content.
-
-For production use, content owners must verify this source material and keep it current. The software can retrieve faithfully only what has been stored faithfully.
-
-## 2.2 Generated answers
-
-Generated text comes from a local model only in selected conversational paths. It must not silently become the authority for campus procedures. The normal official campus path produces its answer directly from retrieved content, not by asking the model to rewrite the policy.
-
-## 2.3 UI datasets that are not official answer sources
-
-Several local datasets support screens or demonstrations but must not be presented as verified official campus facts unless the data is later validated:
-
-| Data file | Role in the application | Trust note |
-| --- | --- | --- |
-| `src/data/canteenStores.ts` | Canteen browsing and local canteen response formatting | Contains replaceable menu/pricing data; prices and availability may change. |
-| `src/data/organizationOfficers.ts` | Officer display/chat response support | Explicitly marked mock. |
-| `src/data/orgChart.ts` | Organization chart visualization | Explicitly realistic mock data. |
-| `src/data/organizationGroups.ts` | Organization browsing cards | Display data requiring verification before official use. |
-| `src/data/campusMapDestinations.ts` and `campusMapGameplay.ts` | Interactive campus navigation UI | Uses confirmed or deliberately limited mappings; it avoids inventing unconfirmed room placement. |
-| `src/data/studentTips.ts` | General student tip cards | UI content, not retrieved campus procedure evidence. |
-
-This distinction matters in interviews: you should be able to say which information is evidence-backed, which text is generated, and which features use display content only.
-
----
-
-# 3. How The Whole App Is Connected
-
-## 3.1 High-level architecture
-
-```mermaid
-flowchart TD
-    U["Student"] --> S["Expo Router screens in app/"]
-    S --> H["useChatMessages hook"]
-    H --> R["answerStudentQuestion router"]
-    R --> I["Intent, safety, language, role, and answer contract checks"]
-    I -->|Campus source request| DB["SQLite documents and FTS5 chunks"]
-    DB --> RET["FTS retrieval, optional vector retrieval, ranking, confidence"]
-    RET --> DET["Deterministic source response with citations"]
-    I -->|Safe conversation and local model ready| LM["LocalAIProvider / LlamaRnProvider"]
-    MM["Model download, verification, activation"] --> LM
-    LM --> GUARD["Sanitize and grounding quality checks"]
-    DET --> OUT["SearchResponse and chat message"]
-    GUARD --> OUT
-    OUT --> S
-```
-
-## 3.2 Startup flow
-
-The app starts in `app/_layout.tsx`. This file is more than navigation layout: it coordinates application lifecycle behavior.
-
-At startup it:
-
-1. Determines whether onboarding should be shown.
-2. Cleans incomplete local model downloads and attempts operation recovery.
-3. Initializes or refreshes AI mode detection.
-4. Resets admin state so administrative access is not unintentionally preserved.
-5. Renders the tab navigation and the global model-operation indicator.
-
-When the app moves to the background it:
-
-1. pauses a running model download;
-2. releases local AI contexts to reduce memory pressure;
-3. disables admin mode.
-
-**Why this matters:** phones have constrained RAM and applications are suspended often. A mobile AI app must be a good memory citizen, not merely a desktop script placed inside a phone UI.
-
-## 3.3 Main screen relationships
-
-```mermaid
-flowchart LR
-    Home["Home"] --> Chat["Chat"]
-    Home --> Map["Map"]
-    Home --> Profile["Profile"]
-    Home --> Settings["Admin Settings"]
-    Map --> CampusMap["Interactive Campus Map"]
-    CampusMap --> Canteen["Canteen"]
-    Chat --> Models["AI Chat Options / Models"]
-    Library["Library"] --> Topic["Library Topic Detail"]
-    Settings --> Documents["Saved Documents"]
-    Documents --> Import["Import Document JSON"]
-```
-
-The tab bar exposes the everyday student areas. Several administrative, detail, setup, and AI management routes are intentionally reached through buttons rather than as top-level tabs.
-
----
-
-# 4. Complete Codebase Responsibility Map
-
-This section maps the project-owned source, native, build, and test files. Generated build output, installed packages, and individual image/font binaries are intentionally excluded because they do not explain how Haki is engineered.
-
-## 4.1 Application routes: `app/`
-
-| File | Responsibility |
-| --- | --- |
-| `_layout.tsx` | Root navigation, first-run onboarding gate, app lifecycle reactions, admin reset, AI/model recovery, global operation badge. |
-| `index.tsx` | Home dashboard, navigation cards, typed trivia lines, profile/admin entry points. |
-| `chat.tsx` | Student chat screen, four-mode selector, switch-and-answer actions, keyboard-aware composer, voice entry, message list. |
-| `models.tsx` | Public local chat-model catalog and installed model controls: download, pause/resume, activate, remove. |
-| `onboarding.tsx` | Six-step first-run or edit flow for student profile setup. |
-| `profile.tsx` | Profile editing, avatar selection, model screen link. |
-| `map.tsx` | Entry screen for the campus map experience; its preview crop is focused on the open court. |
-| `campus-map.tsx` | Interactive map gameplay/search, static directional gray-hawk player poses, and local destination navigation. |
-| `canteen.tsx` | Canteen store list and search. |
-| `canteen-store/[storeId].tsx` | Canteen store menu/detail route. |
-| `library.tsx` | Searchable browsing of seed document topics. |
-| `library-topic/[chunkId].tsx` | Detail view for one library/source topic chunk. |
-| `tips.tsx` | Student tips browsing and filtering. |
-| `organization.tsx` | Organization group display. |
-| `org-chart.tsx` | Interactive organization chart visualization. |
-| `settings.tsx` | Thin route exporting the settings screen component. |
-| `documents.tsx` | Admin-only document inventory. |
-| `add-document.tsx` | Admin-only JSON document validation/import flow. |
-
-## 4.2 Core AI layer: `src/ai/`
-
-| Files | Responsibility |
-| --- | --- |
-| `LocalAIProvider.ts`, `DeviceAIMode.ts` | Shared contracts: what a provider can do and what AI mode the app selected. |
-| `providerRegistry.ts`, `providerUtils.ts`, `nativeModules.ts` | Provider construction, utility handling, and access to optional native bridges. |
-| `CapabilityDetector.ts`, `modeSelectionPolicy.ts`, `deviceHardwareProfile.ts` | Inspect device/runtime/model readiness and choose the safest usable capability. |
-| `FallbackProvider.ts` | No-model baseline so the app remains useful through source retrieval. |
-| `LlamaRnProvider.ts`, `llamaRnRuntime.ts`, `llamaStoppedLimit.ts`, `localModelPerformance.ts` | GGUF inference through `llama.rn`, cancellation, bounded streaming, token-limit detection, and benchmarked CPU/Metal/OpenCL profile selection. |
-| `AppleFoundationModelsProvider.ts` | iOS 26+ Apple Foundation Models provider boundary with real native availability checks and source-summary citation validation. |
-| `localModelManager.ts`, `localModelMetadata.ts`, `localModelRequirements.ts`, `modelDownloadConfig.ts` | Curated downloads, provenance/policy metadata, SHA-256 verification, GGUF validation, hardware tiers, benchmarked activation, removal, and inference leases. |
-| `localModelEvaluation.ts` | Administrator-triggered, on-device behavioral evaluation of the active generated-chat model, persisted locally for diagnostics. |
-| `prompts.ts`, `tokenBudget.ts`, `sanitizeAssistantText.ts`, `outputQuality.ts` | Prompt rules, context limits, output cleanup, and hallucination/degeneracy protection. |
-| `llamaStoppedLimit.test.ts` | Unit tests for incomplete local output detection. |
-
-## 4.3 Data storage and retrieval
-
-| Area | Files | Responsibility |
-| --- | --- | --- |
-| Database | `src/db/database.ts`, `schema.ts`, `migrationRunner.ts`, `documentRepository.ts`, `ftsHealth.ts`, `seed.ts`, `chunkEmbeddingBackfill.ts` | Open SQLite, migrate tables, seed source chunks, maintain FTS, read/import documents, and store versioned per-model embeddings/status. |
-| Legacy/minimal migration module | `src/db/migrations.ts` | Retained migration-related module; current database startup uses `migrationRunner.ts`. |
-| Retrieval contract and text search | `src/retrieval/Retriever.ts`, `FTSRetriever.ts`, `queryNormalizer.ts`, `synonymIndex.ts`, `ranking.ts`, `confidence.ts` | Query parsing, FTS matching, domain aliases, result ranking, reliability classification. |
-| Semantic/hybrid retrieval | `src/retrieval/VectorRetriever.ts`, `VectorRetriever.placeholder.ts`, `HybridRetriever.ts`, `HybridRetriever.placeholder.ts`, `rrf.ts` | Optional embedding similarity search and reciprocal-rank fusion. The current vector path scans stored candidate embeddings in memory rather than using a scalable vector index. |
-| Test retriever | `src/retrieval/InMemoryCorpusRetriever.ts` | Deterministic retrieval for scripts/tests without a device database. |
-
-## 4.4 Chat orchestration and application services: `src/services/`
-
-| Files | Responsibility |
-| --- | --- |
-| `answerService.ts`, `answerContractService.ts`, `studentChatTypes.ts` | Central routing and behavioral contracts for every question. |
-| `questionIntentService.ts`, `questionScenarioService.ts`, `replyLanguageService.ts` | Safety classification, scenario/scope recognition, and English-only response policy. |
-| `sourceAnswerService.ts`, `sourceChunkAdapter.ts`, `searchResultText.ts` | Retrieval orchestration, reliable deterministic campus answer construction, source conversion, display formatting. |
-| `safeLocalChatService.ts`, `chatRoleService.ts`, `chatCapabilityService.ts`, `scenarioResponseService.ts`, `modelRefusalUtils.ts`, `refusalResponseBuilder.ts` | Local generated conversation, role boundaries, deterministic helpers, generation refusal retry, and safety responses. |
-| `modeSelectionService.ts` | Service-level caching/refreshing of selected provider mode and memory-pressure cleanup. |
-| `conversationStateService.ts`, `chatConversationContext.ts`, `chatFollowUpDetection.ts`, `chatContinuation.ts`, `chatArithmeticShortcut.ts`, `historyService.ts` | Related context retrieval, actor tracking, follow-up handling, continuation, and persisted conversation memory. |
-| `studentProfileService.ts`, `onboardingService.ts`, `adminService.ts` | Protected profile data, onboarding state, and restricted admin access. |
-| `chatFeedbackService.ts` | Locally retained thumbs-up/down response feedback. |
-| `speechRecognitionAdapter.ts`, `speechToTextService.ts`, `nativeVoiceModuleGuard.ts`, `voiceSettingsService.ts` | Voice-input abstraction, native/web support checks, and autosend preference. |
-| `canteenAnswerService.ts`, `mascotDialogueService.ts`, `triviaService.ts`, `documentImportService.ts` | Feature-specific local responses/content and administrative JSON import. |
-| `answerService.chatRoles.test.ts`, `chatRoleService.test.ts`, `chatFollowUpDetection.test.ts`, `scenarioFallbackResponses.test.ts`, `studentProfileService.test.ts` | Service behavioral tests. |
-
-## 4.5 Hooks, components, types, data, theme, and utilities
-
-| Area | Files and role |
-| --- | --- |
-| Hooks | `src/hooks/useChatMessages.ts` owns live conversation state/orchestration; `useVoiceInput.ts` manages transcription; `useDebouncedQuery.ts` and `useReducedMotion.ts` support UI behavior. |
-| Chat UI | `src/components/chat/ChatInputBar.tsx`, `ChatMessageBubble.tsx`, `ChatRoleSelector.tsx`, `ChatSourceCard.tsx`, and `FeatherLoader.tsx` show a keyboard-safe composer, animated mode selection, waiting state, four roles, switch actions, citations, feedback, retry, and continuation. Response bubbles do not expose internal answer-basis badges. |
-| Model/UI support | `src/components/models/ModelOperationBadge.tsx`, `ModelOperationHaki.tsx`, `AdminGate.tsx`, `AdminUnlockModal.tsx`, and `ErrorBoundary.tsx`. |
-| Settings UI | `src/components/settings/SettingsScreen.tsx`, `SettingsCapabilitySection.tsx`, `SettingsDbSection.tsx`, and `SettingsPreferencesSection.tsx`; administrator capability details can run and display the active-model evaluation. |
-| Mascot UI | `src/components/mascot/PixelHaki.tsx`, `mascotConfig.ts`, `useMascotInteraction.ts`, and `src/components/MascotHeader.tsx`; the header renders a red bold `Did you know?` label only for trivia dialogue and uses an avian gray-hawk sprite set with a uniform-mounted TUP-style patch. |
-| General presentation UI | `src/components/SuggestedQuestions.tsx`, `HakiTabPopup.tsx`, `ConfidenceBadge.tsx`, `ModeStatusBadge.tsx`, `MatchedExcerpt.tsx`, and `QuestionInput.tsx`. |
-| Organization chart UI | `src/components/orgChart/orgChartLayout.ts` and `orgChartLayout.test.ts`. |
-| Domain types | `src/types/document.ts`, `chat.ts`, `search.ts` define data, messages, results, chat roles, answer basis, and citations. |
-| App data | `src/data/seed-documents.json`, `golden-questions.json`, `libraryTopics.ts`, `canteenStores.ts`, `organizationGroups.ts`, `organizationOfficers.ts`, `orgChart.ts`, `studentTips.ts`, `campusMapDestinations.ts`, `campusMapGameplay.ts`, `appRepository.ts`. |
-| Data tests | `src/data/campusMapDestinations.test.ts`, `campusMapGameplay.test.ts`. |
-| Theme | `src/theme/colors.ts`, `metrics.ts`, `typography.ts`. |
-| Utilities | `src/utils/constants.ts`, `aiUtils.ts`, `fileSha256.ts`, `logger.ts`, `validation.ts`, `onboardingState.ts`, `onboardingState.test.ts`. |
-| Broad pure tests | `src/__tests__/pure-modules.test.ts` covers token limits, retrieval scoring, sanitizing, intent/language, and trivia. |
-
-## 4.6 Native modules, scripts, assets, and configuration
-
-| Area | Files and purpose |
-| --- | --- |
-| Android native helper | `android/app/src/main/java/com/tupt/haki/HakiDeviceInfoModule.kt`, `HakiDeviceInfoPackage.kt`, `MainApplication.kt`, `MainActivity.kt` provide native registration plus RAM/ABI/thermal detection and streamed SHA-256 hashing. |
-| Android build integration | `android/app/build.gradle`, `android/gradle.properties`, and `android/app/src/main/AndroidManifest.xml` configure the Android build/runtime permissions and native packaging behavior. |
-| iOS native modules | `modules/haki-apple-foundation-models/ios/HakiAppleFoundationModelsModule.swift` exposes real iOS 26+ Foundation Models generation; `modules/haki-device-info/ios/HakiDeviceInfoModule.swift` reports RAM/thermal state and streams SHA-256 for curated GGUF installation. |
-| Evaluation scripts | `scripts/golden-retrieval.ts`, `chat-scenario-eval.ts`, `test-edge-cases.ts`, `test-local-model-manager.ts` validate retrieval, behavioral rules, quality failures, and model policy. |
-| Build guard scripts | `scripts/inspect-apk-assets.ps1`, `eas-build-pre-install.sh`, `fix-expo-sqlite.js` check APK/model packaging and patch SQLite build compatibility. |
-| Main configuration | `package.json`, `app.json`, `tsconfig.json`, `babel.config.js`, `metro.config.js`, `vitest.config.ts`, `eas.json` configure Expo, TypeScript, native plugins, tests, bundling, and EAS builds. |
-| Native/build configuration | `android/` Gradle/manifest resources and local module files; `patches/` contains dependency compatibility patches used at install/build time. |
-| Visual assets | `assets/` contains images, animations, fonts, and mascot/UI art; it does not contain bundled GGUF chat model weights. |
-| Guidance/docs | `AGENTS.md`, `README.md`, and this guide in `docs/`. |
-
----
-
-# 5. The AI System: What Haki Actually Does
-
-## 5.1 "AI" is the complete decision pipeline
-
-Beginners often assume AI means `send question -> LLM -> show answer`. Haki's practical AI pipeline is closer to:
+## Breaking it down
 
 ```text
-question
-  -> classify safety, language, scenario, source scope, and role
-  -> decide whether this is a source answer or a conversational answer
-  -> retrieve evidence if it concerns campus information
-  -> optionally invoke a local model for safe conversation only
-  -> sanitize and validate output
-  -> show answer, provenance, and sources
-  -> remember limited related context and optional feedback
+Q1. What is the assistant allowed to say?
+├── Q1.1 What happens if it makes things up?
+├── Q1.2 Where does "true" information come from?
+├── Q1.3 How do we store truth so a program can use it?
+└── Q1.4 Which data in the app is official, and which is decoration?
 ```
 
-Every arrow is an engineering choice. In an AI product, reliable behavior normally comes from the system surrounding the model.
+### Q1.1 What happens if it makes things up?
 
-## 5.2 Retrieval-Augmented Generation, adjusted for safety
+> 📂 **Read the code:** `AGENTS.md` (the written rules) · `src/services/answerContractService.ts` (the rules as code)
 
-The usual term **RAG** means Retrieval-Augmented Generation:
+Small answer: **people get hurt in real life.** If Haki invents "pay PHP 100 at Window 3 before Friday," a student wastes a trip, money, or a deadline. A language model is a *very confident autocomplete* — it produces text that sounds right, which is exactly what makes a wrong answer dangerous.
 
-1. Retrieve useful documents.
-2. Give them to a language model.
-3. Ask the model to write the answer.
+**Analogy:** a friendly student volunteer is great at encouragement, but you should read enrollment instructions from the registrar's official paper, not from the volunteer's memory.
 
-Haki is more conservative for official campus answers:
+This single answer creates Haki's core rule, written down before any feature:
 
-1. Retrieve useful document chunks.
-2. Rank and check confidence.
-3. Construct the official answer deterministically from the retrieved chunk.
-4. Attach source metadata and confidence metadata. User-facing verification guidance is shown once in the persistent chat notice rather than repeated inside answer bubbles.
+> Official campus facts must come from saved documents. The AI model is never the authority for procedures, fees, offices, or deadlines.
 
-There is code in `sourceAnswerService.ts` capable of provider-backed source summarization, but the main production route in `answerService.ts` uses the deterministic official response path for campus source answers.
+### Q1.2 Where does "true" information come from?
 
-**Why:** If the source says "submit X" and a model creatively adds "pay PHP 100," the answer becomes harmful even if it sounds polished. Deterministic source construction trades conversational elegance for truthfulness.
+> 📂 **Read the code:** `src/data/seed-documents.json` (the verified content) · `src/db/seed.ts` (`SEED_VERSION` + loading it into the database)
 
-## 5.3 The four Haki modes
+Small answer: from **documents that a human verified** — clinic procedures, OSA processes, safety guidelines. Software cannot create truth; it can only store and retrieve what people approved. This is why `src/data/seed-documents.json` exists and why changing it requires bumping `SEED_VERSION` in `src/db/seed.ts` (so phones that already installed the app reload the new content).
 
-The UI exposes four roles through `ChatRoleSelector`, while `answerService.ts` and `chatRoleService.ts` enforce what each role may answer:
+### Q1.3 How do we store truth so a program can use it?
 
-| Role | What it may answer | What it must not do | Without a safe local model |
-| --- | --- | --- | --- |
-| `haki` / Haki | Default orchestrator: campus facts from saved sources, supportive guidance, and outside-campus explanations when applicable. | Never invent campus information. | Remains selected; campus/source and deterministic safety/app paths work, while generated needs show model setup guidance. |
-| `information_officer` / Information Officer | Campus information found in the saved database only. Its persistent notice asks users to verify important details with the relevant office. | No personal-advice answer and no outside-campus factual answer. | Fully available because the authoritative path is retrieval plus deterministic formatting. |
-| `friendly_buddy` / Friendly Buddy | Empathetic, psychologically informed personal support. | Does not claim to be a psychologist, therapist, or PhD; does not diagnose; does not provide campus facts or research answers. | Requires local generated chat; otherwise explains model setup. |
-| `researcher` / Researcher | General facts outside campus. Its persistent top notice reminds students to verify important facts. | No TUPT campus procedures or personal-support answer. | Requires local generated chat; otherwise explains model setup. |
+> 📂 **Read the code:** `src/types/document.ts` (the chunk shape) · `src/data/seed-documents.json` (real chunks) · `src/services/documentImportService.ts` (how admins add more, with validation)
 
-`Haki` is the default because it first classifies the user's context and then dispatches only the necessary work. For a mixed request, it may compose clearly labeled blocks: a deterministic campus block, a supportive block, and a general-information block. Only the campus block carries campus source cards.
+A whole document is too big to be an answer. So we break documents the same way we break questions: into **chunks** — small, labeled pieces that each answer one thing.
 
-Specialized modes do not quietly answer outside their scope. Their restriction stays visible in the top notice, while an out-of-scope question returns `suggestedModeActions`, rendered as buttons such as **Switch to Researcher and answer**. Pressing one changes mode and immediately submits the same question again.
-
-When Information Officer cannot retrieve a supported campus answer, it uses varied but consistent wording that says the information is not yet in Haki's database and asks the student to report the gap to `hakiadmin@gmail.com`.
-
-## 5.4 Safety and language are decided before model generation
-
-`questionIntentService.ts` identifies safety categories such as self-harm, violence, cyber abuse, private-data misuse, harassment, sexual exploitation, academic dishonesty, and illegal requests. Deterministic responses are used for unsafe requests instead of relying on model judgment.
-
-The app also has an English-only Haki answer policy. Tagalog or Taglish student questions are detected and redirected to English rather than answered in Tagalog or Taglish. This rule is enforced at the central answer router before ordinary model/source responses.
-
-For ambiguous intent or pronoun references, Haki asks one short clarification question instead of guessing who or what the student meant.
-
-## 5.5 Local generation is capability-driven
-
-The `LocalAIProvider` interface prevents the rest of the application from assuming that one AI runtime is always available. A provider declares whether it supports:
-
-- safe chat;
-- summarization;
-- embeddings;
-- reranking or related capability reporting;
-- streaming and cancellation behavior;
-- installed model readiness and hardware information;
-- selected execution backend, acceleration decision, benchmark metrics, and thermal state.
-
-`CapabilityDetector.ts`, `modeSelectionPolicy.ts`, and `modeSelectionService.ts` select an AI mode:
-
-| Mode idea | Behavior |
-| --- | --- |
-| FTS5/source-only baseline | Local text search and deterministic source responses work even with no LLM. |
-| Semantic or hybrid search | Embedding support adds similarity results and fuses rankings. |
-| Local safe chat/summary | A compatible local provider can perform generation. |
-| Fallback | Features continue safely when providers fail or are unavailable. |
-
-The baseline database and FTS capability is checked first because retrieval is the product's dependable foundation.
-
-## 5.6 Local models are managed assets, not app-bundled weights
-
-Haki does not ship a large GGUF chat model inside the APK. It manages models after installation:
-
-```text
-models/chat/library.json
-models/chat/installed/<model-id>/model.gguf
-models/chat/installed/<model-id>/manifest.json
-models/chat/staging/<operation-id>.partial.gguf
-models/chat/staging/<operation-id>.json
-```
-
-The model workflow is:
-
-1. Detect device RAM, architecture, storage, thermal state, and compatible tier.
-2. Display curated, hashed download choices that fit Android or iOS hardware.
-3. Download into staging rather than treating a partial file as installed.
-4. Verify expected SHA-256.
-5. Inspect GGUF metadata, prompt-template family, artifact provenance, and generation policy.
-6. Reject incompatible or unsafe activation candidates.
-7. Benchmark a CPU baseline and a supported Metal/OpenCL candidate; retain acceleration only when it is measurably faster without unsafe thermal state.
-8. Store the selected execution profile and expose it in administrator capability details.
-9. Use an inference lease so a model cannot be removed during an active completion.
-
-**Analogy:** Installing a local model is like fitting an engine into a vehicle. You check that the engine fits, verify it came from the expected supplier, test that it starts, and only then let the driver use it.
-
-## 5.7 The local model runtime
-
-`LlamaRnProvider.ts` integrates downloadable GGUF models through `llama.rn`. On eligible iOS 26+ devices, `AppleFoundationModelsProvider.ts` can instead use Apple's system-managed on-device model after its native availability check succeeds. FTS5 remains the baseline when neither provider is ready.
-
-The GGUF provider:
-
-- loads the activated GGUF model;
-- selects context size, batch size, threads, and the persisted CPU/Metal/OpenCL execution profile based on measured device behavior;
-- builds system/task/profile/history/source prompt context;
-- applies input and output token budgets;
-- streams partial tokens to the UI unless the model policy requires final-output sanitization;
-- accepts cancellation through an abort signal;
-- retries degenerate repetitive output using stricter sampling;
-- returns whether generation was incomplete because a token limit stopped it;
-- allows only source citation IDs that were actually provided to the model;
-- forces Qwen3 catalog models into non-thinking mode and strips/refuses reasoning-tag output before display;
-- exposes embeddings when an embedding model is configured.
-
-This is mobile AI engineering: a useful model must fit memory, produce bounded output, respond progressively, stop on demand, and fail without damaging the user experience.
-
-## 5.8 Embeddings and hybrid retrieval
-
-FTS search works well when a student's words overlap the source text. Embeddings are useful when wording differs but meaning is similar.
-
-The optional flow is:
-
-```text
-saved chunk text -> embedding model -> float vector stored in chunk_embeddings
-new question -> query embedding -> cosine similarity against saved vectors
-FTS ranked list + vector ranked list -> reciprocal rank fusion -> confidence check
-```
-
-`chunkEmbeddingBackfill.ts` populates stored chunk embeddings only when an embedding-capable provider is available. Embeddings and generation status are keyed by both `chunk_id` and `model_name`, so changing an embedding model does not overwrite or permanently suppress another model's vectors. The current vector retriever is functional but scans stored candidates in memory, which is acceptable for the current 25-chunk corpus and not yet a scalable nearest-neighbor architecture.
-
-## 5.9 Context, memory, and privacy
-
-Haki uses context carefully:
-
-- `historyService.ts` stores limited recent conversation memory and retrieves earlier history only when it is relevant by lexical/scenario/scope signals.
-- `conversationStateService.ts` tracks actors such as user, teacher, classmate, office, or company so a follow-up does not accidentally swap roles.
-- `chatConversationContext.ts` prunes current turns to the token budget.
-- `studentProfileService.ts` stores sensitive profile information in `expo-secure-store` where available, with an avatar in application file storage.
-- Profile context explicitly tells generated chat not to repeat student ID/course/year/section unless the user asks.
-
-**Analogy:** Good memory is not throwing every notebook you own onto a desk. It is bringing only the relevant page, while keeping confidential records closed unless they are needed.
-
----
-
-# 6. One Message From Tap To Answer
-
-## 6.1 A campus source question
-
-Suppose the user asks an official procedure question.
-
-1. `app/chat.tsx` receives the message through the input component.
-2. `useChatMessages.ts` adds the optimistic user message and prepares cancellation, context, actor state, profile context, and streaming callbacks.
-3. It calls `answerStudentQuestion(...)` in `src/services/answerService.ts`.
-4. Intent classification determines that the question needs campus source context and may set an office/document scope.
-5. Safety and English-only policy are applied before any generated answer.
-6. `sourceAnswerService.ts` calls FTS retrieval, and optionally vector/hybrid retrieval when available.
-7. Results are ranked and assigned a reliability/confidence result.
-8. If the source is ambiguous or mismatched, Haki asks a focused clarification or reports no reliable saved source rather than guessing.
-9. If reliable, `buildDeterministicSourceResponseFromDraft(...)` builds an answer from source content and attaches citations/provenance.
-10. The chat bubble renders the answer and `ChatSourceCard` can expose the source evidence.
-
-No local language model is required for this path.
-
-## 6.2 A safe supportive question
-
-Suppose the user selects Friendly Buddy and asks for study encouragement.
-
-1. The same central router classifies the prompt as a safe support request.
-2. `chatRoleService.ts` verifies that support is inside Friendly Buddy's allowed domain.
-3. Without a ready model, Friendly Buddy remains the selected mode but responds that local chat setup is needed; the app does not pretend that another mode answered.
-4. With a ready model, `safeLocalChatService.ts` selects the Friendly Buddy prompt, which requires empathetic support but prohibits clinical credentials, diagnosis, campus facts, or research answers.
-5. `LlamaRnProvider.ts` builds a compact prompt, applies token budgets, and streams generation.
-6. The output is sanitized and checked for campus-information leakage. If it introduces procedure details, the generated portion is replaced by a bounded safe fallback.
-7. The hook updates the live assistant bubble and stores limited response metadata/feedback capability.
-
-## 6.3 A researcher question
-
-Suppose the user selects Researcher and asks what photosynthesis is.
-
-1. The router detects an outside-campus fact domain.
-2. With a local model, the Researcher-specific prompt allows a concise factual explanation while prohibiting TUPT procedures and personal counseling.
-3. The top-of-chat Researcher notice remains visible and states the fact-checking limitation once, instead of repeating a disclaimer inside every response.
-4. If the question is about a campus process instead, Researcher does not answer it; the UI offers a switch-and-answer action for Information Officer or default Haki.
-
-## 6.4 A mixed emotional and campus question
-
-If a student is stressed **and** needs a campus process, default `Haki` may compose two clearly separate parts:
-
-- generated supportive guidance, constrained not to invent official instructions;
-- a deterministic campus-source answer with its evidence.
-
-If the same question also asks for outside-campus facts, a Researcher-style general-information block can be added while default Haki's top notice communicates the accuracy limitation once. In a specialized mode, Haki answers only the portion allowed by that mode and offers mode-switch buttons for the omitted portions.
-
-## 6.5 Failure behavior is part of the design
-
-| Failure or risk | Haki behavior |
-| --- | --- |
-| No model installed | Keep default `Haki` selected and keep source/deterministic paths working; requests needing Friendly Buddy or Researcher generation receive setup guidance. |
-| Provider errors while generating | Disable failed provider for the session where appropriate, reselect mode, retry within limits, or return a safe fallback. |
-| User presses stop | Abort local generation and retain a coherent partial/incomplete state. |
-| Answer cut off at output token limit | Mark incomplete and offer continuation stitching. |
-| Retrieved result is weak or wrong-office | Do not show it as reliable official guidance; clarify or report missing source. |
-| Model emits suspicious campus facts | Replace or constrain using source-backed handling. |
-| Unsafe request | Return a specific deterministic protective response. |
-| Tagalog/Taglish input | Redirect the student to ask in English; Haki answers in English only. |
-
----
-
-# 7. Building The App From Scratch, Step By Step
-
-This part teaches the build sequence. Each step answers four questions:
-
-- **What are we building?**
-- **Why is it needed?**
-- **Where does this project implement it?**
-- **How do we know the step works?**
-
-## Step 0: Define the product rules before writing UI
-
-### What you build
-
-Write down behavioral contracts:
-
-- official campus facts must come from saved source chunks;
-- local model generation is optional and cannot invent procedure details;
-- English-only assistant response policy;
-- safe handling of harmful requests;
-- one short clarification for unclear references;
-- no activation of models beyond the device's safe tier;
-- private profile details must not be casually repeated.
-
-### Why you need it
-
-Without contracts, a feature team will implement conflicting behavior: one screen may allow a model to state fees, another may display unverified information as official, and tests will not know what "correct" means.
-
-### Project files
-
-- `AGENTS.md`
-- `src/services/answerContractService.ts`
-- `src/services/studentChatTypes.ts`
-- `src/types/search.ts`
-
-### Checkpoint
-
-You can explain which answers require evidence and which answers may be generated.
-
-## Step 1: Create the Expo and React Native shell
-
-### What you build
-
-Create an Expo Router app with TypeScript and route screens. Configure native plugins required for SQLite, voice, file access, image picking, and `llama.rn`.
-
-### Why you need it
-
-Expo Router gives mobile screens a file-based structure similar to web pages, while React Native provides phone components. AI code is not useful until a student can open a screen, submit a prompt, and see state updates.
-
-### Project files
-
-- `package.json`
-- `app.json`
-- `tsconfig.json`
-- `metro.config.js`
-- `babel.config.js`
-- `app/_layout.tsx`
-
-### Key idea
-
-`app.json` enables SQLite FTS and vector extension support and registers the `llama.rn` plugin. This is a native capability choice: a standard web-only chatbot stack cannot run the same local mobile database and GGUF inference path.
-
-### Checkpoint
-
-The app launches, routes render, and TypeScript resolves `@/` imports into `src/`.
-
-## Step 2: Build navigation, onboarding, and profile protection
-
-### What you build
-
-Build student-facing routes, first-run onboarding, editable profile, administrative unlock boundaries, and app lifecycle behavior.
-
-### Why you need it
-
-AI responses can use student context, but student context is sensitive. Profile and lifecycle features are therefore not "extra UI"; they establish privacy and state management rules around AI usage.
-
-### Project files
-
-- `app/_layout.tsx`, `app/index.tsx`, `app/onboarding.tsx`, `app/profile.tsx`
-- `src/services/onboardingService.ts`, `src/services/studentProfileService.ts`, `src/services/adminService.ts`
-- `src/components/onboarding/OnboardingHaki.tsx`, `src/components/AdminGate.tsx`, `src/components/AdminUnlockModal.tsx`
-
-### Representative design
+**Analogy:** instead of rereading every binder in a filing room, you prepare index cards: "Lost ID replacement," "Dental consultation," "How to file a complaint." Each card says which binder and page it came from.
 
 ```ts
-// Conceptual profile-to-chat boundary:
-// Include useful context, but instruct the model not to reveal it casually.
-studentProfileToChatContext(profile)
-// -> protected context plus a disclosure restriction
-```
-
-### Checkpoint
-
-New users are sent through onboarding, profile data loads safely, and admin areas remain gated.
-
-## Step 3: Define source documents as structured data
-
-### What you build
-
-Create structured document and chunk types. Store each answerable segment with metadata such as office, citation, tags, steps, and update date.
-
-### Why you need it
-
-Search cannot reliably return "the answer" from a giant PDF-shaped string. Chunking turns a document into small addressable evidence cards.
-
-**Analogy:** Instead of searching an entire filing room by rereading every binder, you create labeled index cards: "Clinic consultation," "Lost ID process," or "Feedback procedure."
-
-### Project files
-
-- `src/types/document.ts`
-- `src/data/seed-documents.json`
-- `src/db/seed.ts`
-
-### Simplified shape
-
-```ts
-type DocumentChunkInput = {
-  chunk_id: string;
-  section_title: string;
-  content: string;
-  answer?: string;
-  citation?: string;
-  office?: string;
-  tags?: string[];
-  steps?: string[];
+// src/types/document.ts (simplified)
+type DocumentChunk = {
+  chunk_id: string;        // the card's unique number
+  section_title: string;   // what the card is about
+  content: string;         // the searchable text
+  answer?: string;         // the polished student-facing answer
+  citation?: string;       // which document/page this came from
+  office?: string;         // who owns this process
+  tags?: string[];         // extra search hooks
+  steps?: string[];        // numbered procedure, when applicable
 };
 ```
 
-### Checkpoint
+The `citation` field is the receipt. Every official answer Haki gives can show its receipt — and in the chat UI, tapping a source card opens the full procedure in the Service Desk.
 
-Every campus answer you intend Haki to provide has a source chunk and citation data rather than a hard-coded invented response.
+### Q1.4 Which data is official, and which is decoration?
 
-## Step 4: Build SQLite persistence and migrations
+> 📂 **Read the code:** `src/data/studentTips.ts` · `src/data/canteenStores.ts` · `src/data/orgChart.ts` · `src/data/campusMapDestinations.ts` · `src/data/libraryTopics.ts` (derived from the official chunks — note how it is the only one built FROM seed data)
 
-### What you build
+An app contains lots of data that is *not* an official answer source. Haki draws a hard line called the **trust boundary**:
 
-Open a local SQLite database and create versioned migrations for:
+| Data | Used for | Trusted as official? |
+| --- | --- | --- |
+| `seed-documents.json` chunks | Campus answers in chat + Service Desk | **Yes — the only answer source** |
+| `studentTips.ts` | Tips bulletin board | No — student-authored advice |
+| `canteenStores.ts` | Canteen browsing | No — replaceable menu data |
+| `orgChart.ts` | Org chart screen (marked "SAMPLE DATA") | No — placeholder structure |
+| `campusMapDestinations.ts` | Map game | Locations confirmed, room data limited |
+| Model-generated text | Conversation, support, general facts | **Never for campus facts** |
 
-- `documents`;
-- `chunks`;
-- `chunk_embeddings`;
-- `conversation_memory`;
-- `app_meta`;
-- FTS virtual tables and triggers.
+## Walking back up Q1
 
-### Why you need it
-
-Mobile users need local access even when offline. Migrations let installed apps upgrade their databases without deleting user-owned content or chat memory.
-
-### Project files
-
-- `src/db/schema.ts`
-- `src/db/migrationRunner.ts`
-- `src/db/database.ts`
-- `src/db/documentRepository.ts`
-- `src/db/ftsHealth.ts`
-- `src/db/seed.ts`
-
-### Important behavior
-
-Seed replacement is versioned. Changing `src/data/seed-documents.json` requires increasing `SEED_VERSION`; otherwise an already-installed app may continue using old rows.
-
-### Checkpoint
-
-Database startup initializes successfully, FTS is healthy, and seed chunks are queryable offline.
-
-## Step 5: Build lexical retrieval before adding an LLM
-
-### What you build
-
-Implement Full Text Search (FTS5), query normalization, synonym expansion, scope filtering, ranking, and confidence.
-
-### Why you need it
-
-An assistant should first be able to locate reliable evidence. Adding generation before retrieval gives you an eloquent app that does not know the campus facts.
-
-### Project files
-
-- `src/retrieval/FTSRetriever.ts`
-- `src/retrieval/queryNormalizer.ts`
-- `src/retrieval/synonymIndex.ts`
-- `src/retrieval/ranking.ts`
-- `src/retrieval/confidence.ts`
-- `src/services/questionScenarioService.ts`
-
-### What happens to a query
+The assistant is allowed to say three kinds of things, and each kind has a different authority:
 
 ```text
-"Where do I go if I lost my ID?"
- -> normalize punctuation/casing
- -> remove unhelpful stop words while preserving useful domain terms
- -> add appropriate campus aliases/synonyms
- -> scope toward Student Affairs when scenario detection supports it
- -> run FTS strategies
- -> rank candidate chunks
- -> classify confidence
+1. Campus facts        -> read from verified chunks, with citations  (authority: documents)
+2. Support & chat      -> generated by a local model, bounded        (authority: model, guarded)
+3. App/safety replies  -> written by us, deterministic               (authority: the code)
 ```
 
-### Checkpoint
-
-The golden retrieval tests retrieve expected real chunk IDs and do not return invented office procedures.
-
-## Step 6: Return deterministic source-backed answers
-
-### What you build
-
-Turn retrieved results into an answer object containing:
-
-- answer text;
-- confidence and reliability;
-- citations and retrieved results;
-- provenance;
-- confidence or verification metadata where needed, with its user-facing guidance kept in the persistent top notice;
-- ambiguity/mismatch behavior.
-
-### Why you need it
-
-Retrieval alone gives a list of possible passages. The user needs a concise answer, while still being able to inspect why the app said it.
-
-### Project files
-
-- `src/services/sourceAnswerService.ts`
-- `src/services/searchResultText.ts`
-- `src/services/sourceChunkAdapter.ts`
-- `src/types/search.ts`
-- `src/components/chat/ChatSourceCard.tsx`
-
-### Core principle
-
-```ts
-// Official campus route in the current app:
-const draft = await retrieveSourceAnswerDraft(question, mode, options);
-return buildDeterministicSourceResponseFromDraft(question, draft, mode);
-```
-
-This representative pattern expresses the critical choice: evidence is selected and formatted without permitting a language model to add official-looking facts.
-
-### Checkpoint
-
-Official questions show a source-backed result or an honest clarification/miss, not confident unsupported instructions.
-
-## Step 7: Build the chat UI and orchestration hook
-
-### What you build
-
-Create message bubbles, input controls, source cards, four-mode selection, switch-and-answer actions, retry/stop/continue controls, voice entry, and a hook that coordinates the asynchronous interaction.
-
-### Why you need it
-
-AI is asynchronous: output can stream, fail, stop early, or be canceled. A simple form submission handler is insufficient.
-
-### Project files
-
-- `app/chat.tsx`
-- `src/hooks/useChatMessages.ts`
-- `src/components/chat/ChatInputBar.tsx`
-- `src/components/chat/ChatMessageBubble.tsx`
-- `src/components/chat/ChatSourceCard.tsx`
-- `src/components/chat/ChatRoleSelector.tsx`
-- `src/services/chatContinuation.ts`
-- `src/services/chatFeedbackService.ts`
-
-### The hook's responsibilities
-
-```text
-add student message
- -> load relevant context and actor state
- -> call answer router
- -> receive streamed tokens or deterministic answer
- -> allow abort or continuation
- -> render provenance/sources
- -> store limited memory and optional feedback
-```
-
-### Mobile UI details implemented here
-
-- `app/chat.tsx` uses keyboard-aware layout behavior: iOS applies `KeyboardAvoidingView` padding and Android relies on the activity's `adjustResize` configuration, preserved by Expo's `softwareKeyboardLayoutMode: "resize"` setting. The parent screen calculates composer bottom spacing from the safe-area inset and shared floating-tab measurements, then passes it to `ChatInputBar`; when the keyboard appears, tab-bar clearance is removed while edge-safe spacing remains.
-- `ChatMessageBubble.tsx` deliberately hides internal answer-basis badges at the top of Haki responses. Students still see useful source cards and mode-switch actions.
-- `index.tsx` keeps trivia typed separately from normal mascot dialogue, and `MascotHeader.tsx` renders **Did you know?** in bold red only for trivia content.
-- `PixelHaki.tsx` continues to animate `idle` using open-eye and blink sprites and `thinking` using two pose frames; its standalone transparent PNGs are now a consistent round grayhawk with wings, tail feathers, talons, and a white/maroon uniform. The TUP logo source is reduced and placed on the visible chest patch after the body artwork is prepared, rather than trusting generated text or emblem details.
-- Tapping a Haki chat avatar triggers a small bounce/turn response and springs open the mode selector. Friendly Buddy displays the listening scene whenever it is preparing its reply, and its opening bubble is reduced to one welcoming sentence because restrictions are already visible in the mode notice.
-- Waiting for a generated reply now uses a transparent pixel-art grayhawk feather animated with native float/sway motion, paired with a requested two-second rotating loading-line sequence instead of the previous Lottie loading illustration. Those progress lines are presentation copy, not Haki's answer content, so the English-only answer policy still applies to returned answers.
-- `map.tsx` scales and offsets its preview around the open court, so entering the map does not show an accidental upper-left crop.
-- `campusMapGameplay.ts` explicitly preserves the path in front of IT and Admin and the passage beside Civil/Mechanical, the court, and Multipurpose Hall; unit tests exercise those paths.
-- `campus-map.tsx` uses four complete static directional grayhawk images. Holding the directional controls still moves the position repeatedly, but it does not rotate through walk frames; this avoids unstable atlas cropping, rapid back-and-forth pose changes, and clipped head feathers in the upward view.
-
-### Why these mobile UI corrections matter
-
-A sprite sheet is like a page of passport photos: cropping works only when every frame stays inside an exact box. The earlier walking renderer resized a generated sheet and cut out timed cells. If a feather extended outside a cell or the subject was not centered exactly, the user saw another frame, a clipped head, or a character that appeared to shake. Static directional PNGs trade decorative walking motion for predictable map navigation. Each file has transparent padding and a shared foot anchor, so turning the character cannot move or cut off the silhouette.
-
-A phone keyboard is not an overlay you can ignore; it removes usable room for the conversation controls. On Android, the native window must resize when the keyboard opens. On iOS, `KeyboardAvoidingView` shifts the layout above the keyboard. On both systems, the bottom safe-area inset represents protected device-edge space, while the floating tab bar requires additional clearance only while it is visible. Centralizing those numbers prevents the chat box from being covered or lifted twice.
-
-### Physical-device checkpoint
-
-Automated tests protect routing, retrieval, and TypeScript contracts, but they cannot prove that a physical keyboard and packaged bitmap assets look correct on a handset. Before considering this UI work complete, install a fresh Android/iOS build, type single-line and multiline prompts with the keyboard open, wait through the mascot's idle/blink states, and walk in all four map directions. The composer must remain visible, the header must not show stray sprite pixels, and the map character must stay aligned and unclipped.
-
-### Checkpoint
-
-The UI remains coherent during keyboard entry, loading, streaming, cancellation, retry, incomplete output, source rendering, mode switching, trivia display, and map movement.
-
-## Step 8: Add the central answer router and guardrails
-
-### What you build
-
-Put all question-routing policy behind one main service function rather than letting each screen decide AI behavior.
-
-### Why you need it
-
-Safety and trust rules fail when they are scattered. Central routing makes it possible to test the app's behavior as a contract.
-
-### Project files
-
-- `src/services/answerService.ts`
-- `src/services/answerContractService.ts`
-- `src/services/questionIntentService.ts`
-- `src/services/questionScenarioService.ts`
-- `src/services/replyLanguageService.ts`
-- `src/services/refusalResponseBuilder.ts`
-- `src/services/chatRoleService.ts`
-- `src/services/chatCapabilityService.ts`
-- `src/services/scenarioResponseService.ts`
-
-### Routing order, conceptually
-
-```text
-classify question and contract
- -> check selected local AI capability and requested role
- -> handle unsafe content
- -> handle continuation
- -> handle distress/wellbeing protection
- -> enforce English-only redirection
- -> handle deterministic profile/device/scenario responses
- -> classify campus, supportive, and outside-fact domains
- -> enforce Information Officer / Friendly Buddy / Researcher scope
- -> in default Haki, compose only the needed source/support/research blocks
- -> retrieve saved sources or generate bounded local guidance/facts
- -> run final quality fallback checks
-```
-
-### Checkpoint
-
-Tests can assert that mode selection, switch actions, top-only researcher notices, safety, source answers, and no-model behavior remain consistent regardless of UI state.
-
-## Step 9: Create the provider interface and mode selection
-
-### What you build
-
-Define a common interface for local AI providers and implement capability selection.
-
-### Why you need it
-
-Not all phones can run the same model. Some may support only text search. The app must gracefully select the strongest safe behavior, not crash because a model is absent.
-
-### Project files
-
-- `src/ai/LocalAIProvider.ts`
-- `src/ai/DeviceAIMode.ts`
-- `src/ai/CapabilityDetector.ts`
-- `src/ai/modeSelectionPolicy.ts`
-- `src/ai/providerRegistry.ts`
-- `src/ai/FallbackProvider.ts`
-- `src/services/modeSelectionService.ts`
-
-### Conceptual provider contract
-
-```ts
-interface LocalAIProvider {
-  getCapabilities(): Promise<ProviderCapabilities>;
-  answerSafeChat?(request: SafeChatRequest): Promise<LocalAnswer>;
-  summarizeFromSources?(request: SummaryRequest): Promise<LocalAnswer>;
-  embedText?(text: string): Promise<number[]>;
-  dispose?(): Promise<void>;
-}
-```
-
-### Checkpoint
-
-When no LLM exists, the application still selects a usable FTS/source mode. When a valid local model exists, generated modes can be enabled.
-
-## Step 10: Integrate on-device inference with `llama.rn`
-
-### What you build
-
-Implement a provider that loads and runs a local GGUF model through the mobile native runtime.
-
-### Why you need it
-
-On-device inference supports privacy and offline generated chat, but it has strict RAM, disk, token, and responsiveness constraints.
-
-### Project files
-
-- `src/ai/LlamaRnProvider.ts`
-- `src/ai/llamaRnRuntime.ts`
-- `src/ai/prompts.ts`
-- `src/ai/tokenBudget.ts`
-- `src/ai/sanitizeAssistantText.ts`
-- `src/ai/outputQuality.ts`
-- `src/ai/llamaStoppedLimit.ts`
-- `src/ai/localModelPerformance.ts`
-
-### What generation needs
-
-| Concern | Implementation approach |
-| --- | --- |
-| Limited context memory | Token budgets prune history and sources based on tier. |
-| Slow visible response | Streaming callbacks progressively update chat. |
-| User cancels | Abort signal stops completion. |
-| Repetition or corrupted output | Degenerate output detection and stricter retry. |
-| Prompt leakage | Sanitize assistant text before display. |
-| Reasoning trace leakage | Apply Qwen3 non-thinking policy and reject incomplete reasoning-tag output before display. |
-| Unsupported campus claims | Grounding-quality checks and source-backed fallback. |
-| Answer cut off | Incomplete flag and continuation support. |
-
-### Checkpoint
-
-A compatible installed model streams safe general conversation, can be stopped, and never becomes the unchecked authority for campus procedure answers.
-
-## Step 11: Manage downloadable models safely
-
-### What you build
-
-Create the model catalog, provenance/generation policy, device-tier rules, download staging, cryptographic integrity check, GGUF metadata validation, benchmarked backend selection, and model-operation UI.
-
-### Why you need it
-
-A multi-gigabyte corrupted or oversized model can waste storage, crash a low-memory phone, or fail only after the user tries to chat. Installation itself is a reliability feature.
-
-### Project files
-
-- `src/ai/modelDownloadConfig.ts`
-- `src/ai/localModelRequirements.ts`
-- `src/ai/localModelMetadata.ts`
-- `src/ai/localModelManager.ts`
-- `src/ai/deviceHardwareProfile.ts`
-- `src/utils/fileSha256.ts`
-- `android/app/src/main/java/com/tupt/haki/HakiDeviceInfoModule.kt`
-- `modules/haki-device-info/ios/HakiDeviceInfoModule.swift`
-- `app/models.tsx`
-- `src/components/models/ModelOperationBadge.tsx`
-- `src/components/models/ModelOperationHaki.tsx`
-
-### Activation pipeline
-
-```text
-catalog choice
- -> hardware/storage compatibility check
- -> staged download
- -> SHA-256 verification
- -> GGUF metadata and template validation
- -> safe tier validation
- -> CPU baseline and optional Metal/OpenCL benchmark
- -> persist fastest thermally safe execution profile
- -> active model manifest/library update
- -> capability refresh
-```
-
-### Checkpoint
-
-An interrupted model can be recovered or discarded, an invalid model cannot quietly activate, and no active model is removed while inference is using it.
-
-## Step 12: Add optional semantic retrieval
-
-### What you build
-
-Generate embeddings for document chunks when an embedding provider exists and blend vector similarity with FTS results.
-
-### Why you need it
-
-Lexical retrieval can miss equivalent phrasing. Semantic retrieval can recognize related meaning, while FTS still provides strong exact evidence.
-
-### Project files
-
-- `src/db/chunkEmbeddingBackfill.ts`
-- `src/retrieval/VectorRetriever.ts`
-- `src/retrieval/HybridRetriever.ts`
-- `src/retrieval/rrf.ts`
-- `src/ai/LlamaRnProvider.ts`
-
-### Checkpoint
-
-The app works without embeddings. Stored vectors and generation status are scoped to `(chunk_id, model_name)`, so switching embedding models does not overwrite or suppress another model's data. Hybrid results improve meaning-based matches only when the selected provider's vectors exist.
-
-## Step 13: Add memory, voice, feedback, and supporting experiences
-
-### What you build
-
-Layer in relevant history, actor-state preservation, voice-to-text input, feedback capture, map/library/tips screens, and administrative document management.
-
-### Why you need it
-
-An assistant is a mobile product, not just a benchmark. It must remember the right context, accept practical input, expose evidence, and allow maintainers to update source content.
-
-### Project files
-
-- `src/services/historyService.ts`, `conversationStateService.ts`, `chatConversationContext.ts`
-- `src/hooks/useVoiceInput.ts`, `src/services/speechToTextService.ts`, `voiceSettingsService.ts`
-- `src/services/chatFeedbackService.ts`
-- routes/data/components listed in the responsibility map
-
-### Checkpoint
-
-History is relevant rather than indiscriminately attached, voice input does not change the English-answer policy, and display-only datasets remain separate from official source answers.
-
-## Step 14: Make builds and tests protect the design
-
-### What you build
-
-Add TypeScript checking, unit tests, retrieval evaluations, scenario evaluations, model-manager tests, and APK inspection.
-
-### Why you need it
-
-AI product regressions are often behavioral: a router starts answering from the wrong role, a weak source is presented as reliable, or a release accidentally bundles a huge model file. Tests must check contracts, not only compilation.
-
-### Project files
-
-- `vitest.config.ts`
-- `src/**/*.test.ts`
-- `scripts/golden-retrieval.ts`
-- `scripts/chat-scenario-eval.ts`
-- `scripts/test-edge-cases.ts`
-- `scripts/test-local-model-manager.ts`
-- `scripts/inspect-apk-assets.ps1`
-- `scripts/eas-build-pre-install.sh`
-
-### Checkpoint
-
-Use the project commands shown in [Testing, Debugging, And Release Confidence](#9-testing-debugging-and-release-confidence).
+Everything else in this guide exists to enforce this three-way split.
 
 ---
 
-# 8. Building The AI Capability In Depth
+<a name="chapter-2"></a>
+# Chapter 2 — Q2: How Does It Find the Right Information?
 
-This section is the interview-level technical explanation of Haki's core feature.
+We have truth stored as chunks. Now: a student types *"where do I go if I lost my ID?"* — how does the app find the lost-ID chunk?
 
-## 8.1 Start with the answer contract
+## Breaking it down
 
-The AI system starts by deciding what kind of truth a question requires.
+```text
+Q2. How does it find the right information?
+├── Q2.1 Where do chunks live on the phone?
+├── Q2.2 How do we search text fast?
+├── Q2.3 What if the student's words don't match the document's words?
+├── Q2.4 Several chunks match — which one wins?
+├── Q2.5 Is the winner actually good enough to show?
+└── Q2.6 What about questions with the same MEANING but totally different words?
+```
 
-| Ability | Typical need | Generation authority |
+### Q2.1 Where do chunks live? → SQLite
+
+> 📂 **Read the code:** `src/db/schema.ts` (table definitions) · `src/db/database.ts` (open & configure) · `src/db/migrationRunner.ts` (versioned upgrade scripts) · `src/db/documentRepository.ts` (read/write chunks)
+
+Small answer: in **SQLite**, a tiny database engine that lives inside the app like a filing cabinet bolted to the floor. No server, no internet. The schema includes source documents/chunks, FTS indexes, embedding vectors/status/index metadata, conversation memory, bookmarks, and app metadata. (`src/db/schema.ts`, `src/db/database.ts`, `src/db/migrationRunner.ts`)
+
+Databases on phones must survive app updates, so changes to table shapes go through **migrations** — numbered upgrade scripts, like renovation steps for the filing cabinet that never throw away the existing files.
+
+### Q2.2 How do we search text fast? → FTS5
+
+> 📂 **Read the code:** `src/retrieval/FTSRetriever.ts` (FTS query strategies) · `src/db/ftsHealth.ts` (index health check & repair)
+
+Reading every chunk for every question would be slow. SQLite has **FTS5** (Full-Text Search), which is a pre-built index — like the index pages at the back of a textbook. You don't scan the book; you look up the word and jump to its pages. Database triggers keep the index in sync whenever chunks change. (`src/retrieval/FTSRetriever.ts`, `src/db/ftsHealth.ts`)
+
+### Q2.3 Words don't match? → normalize and expand
+
+> 📂 **Read the code:** `src/retrieval/queryNormalizer.ts` (lowercase, strip punctuation, drop stop-words) · `src/retrieval/synonymIndex.ts` (hand-written alias list)
+
+Students say "lost my ID"; the document says "ID replacement." Two fixes, both boring and both essential:
+
+- **Normalization** (`queryNormalizer.ts`): lowercase, strip punctuation, drop useless words ("the", "po") while keeping domain words.
+- **Synonyms** (`synonymIndex.ts`): a hand-written alias list. "lost ID" also searches "replacement". "clinic" also searches "medical".
+
+**Analogy:** a librarian who knows that a student asking for "the nurse's office" means the clinic.
+
+### Q2.4 Which match wins? → ranking
+
+> 📂 **Read the code:** `src/retrieval/ranking.ts` (score candidates by relevance + metadata)
+
+FTS returns several candidates. `ranking.ts` scores them using lexical relevance plus metadata (does the office match the question's scope? does the chunk have a prepared `answer`?). The first database hit is *not* automatically the best one.
+
+### Q2.5 Is the winner good enough? → confidence
+
+> 📂 **Read the code:** `src/retrieval/confidence.ts` (high/medium/low evidence classifier) · `src/services/sourceAnswerService.ts` (office-scope mismatch checks)
+
+This is the question beginners skip, and it is the difference between a toy and a trustworthy product. `confidence.ts` classifies the evidence as high/medium/low. Weak evidence does **not** get presented as an official answer — Haki instead asks one clarifying question or honestly says the information is not saved yet.
+
+> A wrong-but-confident answer is worse than one short question.
+
+`sourceAnswerService.ts` also checks mismatches: a registrar-style question that retrieved a Student Affairs chunk gets stopped, not shown.
+
+### Q2.6 Same meaning, different words? → embeddings (optional)
+
+> 📂 **Read the code:** `src/retrieval/VectorRetriever.ts` (vector similarity search) · `src/retrieval/HybridRetriever.ts` (merge FTS + vector results) · `src/retrieval/rrf.ts` (Reciprocal Rank Fusion algorithm) · `src/db/chunkEmbeddingBackfill.ts` (background embedding worker)
+
+Sometimes no word overlaps: *"my tooth hurts"* vs *"dental consultation."* The fix is **embeddings**: a small AI model converts text into a list of numbers (a vector) where similar meanings land near each other.
+
+**Analogy:** every sentence gets a GPS coordinate in "meaning-space." "My tooth hurts" and "dental consultation" park in the same lot even though they share no words.
+
+```text
+each chunk --> embedding model --> vector, stored in chunk_embeddings
+new question --> same model    --> query vector
+similarity = how close the vectors are (cosine)
+```
+
+Haki then merges the two ranked lists — word-based (FTS) and meaning-based (vectors) — with **Reciprocal Rank Fusion** (`rrf.ts`), a beautifully simple rule: items that rank high on *either* list rank high overall.
+
+Two engineering choices to notice:
+
+1. **Embeddings are optional.** FTS works on every phone with no model. The app must never require the fancy path. (`VectorRetriever.ts`, `HybridRetriever.ts`)
+2. **Embedding work is a background chore.** `chunkEmbeddingBackfill.ts` computes vectors only after the app has been idle ~30 seconds, pauses whenever the chat is using the model, and stops if the phone is hot. Background work must never make the user's foreground work slower.
+
+## Walking back up Q2
+
+```text
+"where do I go if I lost my ID?"
+   -> normalize + synonyms              (Q2.3)
+   -> FTS5 lookup in SQLite             (Q2.1, Q2.2)
+   -> (optional) vector search + fusion (Q2.6)
+   -> rank candidates                   (Q2.4)
+   -> confidence gate                   (Q2.5)
+   -> a chunk we can SHOW, or an honest "let me clarify"
+```
+
+Notice: **no language model was needed to find truth.** Retrieval is the dependable floor of the whole product.
+
+---
+
+<a name="chapter-3"></a>
+# Chapter 3 — Q3: When Should It Use AI, and When Not?
+
+We can find evidence. We will soon be able to generate text. Who decides which to use for each message?
+
+## Breaking it down
+
+```text
+Q3. When should it use AI, and when not?
+├── Q3.1 What KINDS of questions exist?
+├── Q3.2 Who decides, and where does that code live?
+├── Q3.3 Why are official answers built WITHOUT the model?
+├── Q3.4 What are the four chat modes, and why have modes at all?
+└── Q3.5 What happens when the needed ability is missing?
+```
+
+### Q3.1 What kinds of questions exist?
+
+> 📂 **Read the code:** `src/services/questionScenarioService.ts` (classify question into scenario types) · `src/services/questionIntentService.ts` (detect unsafe intents) · `src/services/answerService.ts` (`classifyHakiDomains` domain split)
+
+Classify first, act second. Haki's router recognizes, roughly:
+
+| Kind | Example | Correct handler |
 | --- | --- | --- |
-| `campus_source` | Campus office/process information | Saved source answer is authoritative; model rewrite disabled in main route. |
-| `student_support` | Study or relationship encouragement | Local model may provide bounded guidance when available. |
-| `general_fact` | Safe general prompt | Local model or deterministic helper depending on route/mode. |
-| `safety` | Dangerous or disallowed request | Deterministic protective response. |
-| `profile_app` | Profile/device/app capability question | Deterministic app-owned response. |
+| Campus procedure | "How do I get a good moral certificate?" | Retrieval → deterministic answer |
+| Emotional support | "I'm so stressed about finals" | Local model, bounded prompt |
+| General knowledge | "What is photosynthesis?" | Local model, "verify facts" notice |
+| Unsafe request | self-harm, harassment, cheating... | Deterministic protective reply — **never** the model |
+| App/profile question | "What can you do?" | Deterministic, written by us |
+| Ambiguous | "How do I get it?" | One short clarification question |
 
-This is the system's first hallucination defense: do not ask the model questions for which it should not be the authority.
+### Q3.2 Who decides? → one central router
 
-`classifyHakiDomains(...)` maps safe requests to three answer domains: `campus_information`, `supportive_advice`, and `external_fact`. Information Officer accepts only the first, Friendly Buddy only the second, and Researcher only the third. Default Haki is an orchestrator: it can call more than one path, but it still cannot let a generated path become the authority for campus information.
+> 📂 **Read the code:** `src/services/answerService.ts` (the single entry point `answerStudentQuestion`) · `src/services/chatRoleService.ts` (role scope rules) · `src/services/replyLanguageService.ts` (language policy) · `src/services/questionIntentService.ts` (safety gate)
 
-## 8.2 Intent and scenario classification
+All policy lives behind **one function**: `answerStudentQuestion(...)` in `src/services/answerService.ts`. Screens never decide AI behavior themselves.
 
-The router needs to know more than "is this a question?" It identifies:
-
-- whether the prompt is safe;
-- the reply language policy;
-- whether source context is required;
-- the scenario, such as student administration, wellbeing, coding help, device specification, canteen, or organization lookup;
-- optional source scope, such as a target office or document.
-
-This classification is primarily rule-based. That is a sensible mobile design for high-consequence routing because it is fast, testable, available with no model, and stable across devices.
-
-## 8.3 FTS retrieval mechanics
-
-SQLite FTS5 indexes the `chunks` source text. Triggers keep the search table synchronized when chunks are inserted, updated, or removed.
-
-`FTSRetriever` then:
-
-1. Normalizes the student's text.
-2. Applies query terms, phrases, aliases, and scopes.
-3. Tries strict and broadened matching strategies.
-4. Can relax an overly tight office scope once when appropriate.
-5. Uses a limited fallback text match if FTS yields no candidates.
-6. Parses structured answer metadata for the strongest candidates.
-7. Sends candidates through ranking.
-
-Ranking considers lexical relevance and metadata value rather than accepting the first database result. Confidence then decides whether the retrieved evidence is dependable enough to answer.
-
-## 8.4 Ambiguity and mismatch handling
-
-A wrong but confident office answer is worse than asking one question. `sourceAnswerService.ts` checks cases such as:
-
-- a broad dental-care prompt that might refer to more than one service;
-- several similarly scored procedures with no clear named match;
-- a registrar-like request that incorrectly retrieves a Student Affairs lost-ID source;
-- a top result outside the requested office scope.
-
-The system can ask for clarification or return a source miss. This is not a failure of AI; it is an explicit reliability behavior.
-
-## 8.5 Why official answers remain deterministic
-
-A generation-first source flow might look attractive:
-
-```text
-documents -> LLM -> polished answer
-```
-
-Haki's normal campus flow instead is:
-
-```text
-documents -> retrieve/rank/confidence -> direct answer/citation formatting
-```
-
-Advantages:
-
-- source claims remain inspectable;
-- failure works without a model;
-- no invented steps or fees from generative paraphrasing;
-- test cases can assert exact retrieved evidence;
-- lower battery, RAM, and latency costs.
-
-Tradeoff:
-
-- official answers may sound less fluid than a full LLM response.
-
-That is a worthwhile tradeoff where accuracy is more important than conversational style.
-
-## 8.6 Generated conversation pipeline
-
-When the route permits generated conversation and a local model is safe and ready:
+**Analogy:** a hospital triage desk. Patients don't wander into operating rooms; one trained person routes everyone. If routing rules were scattered across every hallway, no one could check they're followed.
 
 ```mermaid
 flowchart TD
-    Q["Safe conversational prompt"] --> C["Compose role/task/profile/history context"]
-    C --> B["Prune to tier-specific token budget"]
-    B --> P["LlamaRnProvider prompt and sampling"]
-    P --> T["Stream tokens to UI"]
-    T --> S["Sanitize output"]
-    S --> V["Quality and grounding validation"]
-    V --> A["Display answer or fallback/retry"]
+    M["student message"] --> SAFE["safety check<br/>(questionIntentService)"]
+    SAFE -->|unsafe| BLOCK["deterministic protective reply"]
+    SAFE --> LANG["language policy<br/>(English-only answers)"]
+    LANG --> ROLE["which mode is selected,<br/>what does it allow?<br/>(chatRoleService)"]
+    ROLE --> DOMAIN["campus fact? support? general fact?<br/>(classifyHakiDomains)"]
+    DOMAIN -->|campus| RET["retrieve + rank + confidence"]
+    RET --> DET["deterministic cited answer"]
+    DOMAIN -->|support / general| GEN["local model, bounded prompt"]
+    GEN --> GUARD["sanitize + grounding checks"]
+    DET --> OUT["answer + sources + provenance"]
+    GUARD --> OUT
 ```
 
-Prompt instructions require English output, preserved actor roles, short clarification for ambiguity, no prompt leaks, and no invented source attribution.
+This is the single most useful **software** engineering idea in the project: *put behavior policy in one testable place.*
 
-## 8.7 Token budgeting
+### Q3.3 Why are official answers built WITHOUT the model?
 
-Local mobile models have a finite context window. Every item consumes tokens:
+> 📂 **Read the code:** `src/services/sourceAnswerService.ts` (`buildDeterministicSourceResponseFromDraft`) · `src/services/searchResultText.ts` (format raw chunk text) · `src/services/sourceChunkAdapter.ts` (adapt DB rows to answer drafts)
 
-- system instructions;
-- role rules;
-- task instructions;
-- profile context;
-- relevant history;
-- source excerpts;
-- the user's question;
-- room for the generated answer.
-
-`tokenBudget.ts` estimates or uses available tokenizer information to reserve output space and prune lower-priority context. It also varies limits by model/device tier.
-
-**Analogy:** A model context window is a carry-on bag. If you fill it with old conversations and whole documents, there is no space left for the current problem or the answer.
-
-## 8.8 Streaming, cancellation, and continuation
-
-A mobile chat interface must feel responsive:
-
-- streaming shows partial output as it is produced;
-- an abort signal lets the student stop generation;
-- local runtime stop support ends the active completion;
-- a detected token-limit ending marks a response incomplete;
-- continuation logic requests another segment and stitches overlap rather than repeating text.
-
-These are user-experience features powered by careful inference control.
-
-## 8.9 Model-output quality controls
-
-Generated text goes through several controls:
-
-| Problem | Control |
-| --- | --- |
-| System prompt or formatting echoed back | `sanitizeAssistantText.ts`. |
-| Repetitive/degenerate output | `outputQuality.ts` plus stricter retry in local provider. |
-| Generic false safety refusal for harmless prompt | `modelRefusalUtils.ts` can reframe and retry. |
-| Campus-specific unsupported details | Grounding quality check in the answer service. |
-| Made-up citation IDs | Only allow citation IDs present in supplied source chunks. |
-| Provider failure | Disable/reselect/retry or fall back to deterministic behavior. |
-
-This is why an interview answer should not be "we used an LLM." The engineering achievement is controlling when and how the LLM is allowed to influence output.
-
-## 8.10 Hardware-safe model installation
-
-A model suitable for a high-memory phone may be unsafe on a smaller device. The project defines safe tiers using approximate RAM, free disk, model size/parameter expectations, quantization, platform, and ABI requirements.
-
-Curated model records in `modelDownloadConfig.ts` supply:
-
-- model identity and display information;
-- file URL;
-- expected size;
-- required SHA-256 digest;
-- expected prompt-template family;
-- intended device tier and supported platforms;
-- artifact provenance/license label and lifecycle channel;
-- model-specific generation policy, including non-thinking mode for Qwen3.
-
-Downloaded weights are never trusted merely because the file exists. The manager verifies integrity, validates metadata/template compatibility, checks device safety, benchmarks supported runtime backends, and stores the selected execution profile before activation.
-
-## 8.11 Native/mobile integration
-
-JavaScript/TypeScript orchestrates behavior, but local AI requires native support:
-
-- Expo config enables `llama.rn` and SQLite features.
-- Android native code reports RAM/ABI/thermal information and performs streaming file hashing for large GGUF downloads.
-- The iOS device-info module reports RAM/thermal information and streams SHA-256 verification for curated GGUF/Metal fallback downloads.
-- The iOS 26+ Apple module calls public Foundation Models APIs only when `SystemLanguageModel.default` reports a ready Apple Intelligence session.
-- Build scripts assert that downloadable model weights did not accidentally become bundled APK assets.
-- The app releases contexts under memory pressure or backgrounding.
-
-Both native provider paths preserve the same trust boundary: generated source summaries are accepted only when cited IDs came from supplied retrieval results, and deterministic FTS5 answers remain available whenever generation is unavailable or fails. The Swift and accelerated backend paths still require validation on physical target devices before release.
-
-Administrators can trigger a short, local-only active-model evaluation from capability details. It checks source citation use, obvious unsupported official fee/deadline claims, English output for a Tagalog/Taglish-style request, and whether an ambiguous actor prompt produces a clarification question. Results are saved on the device; they are a promotion/release signal, not a substitute for the automated suite or device-matrix testing.
-
-## 8.12 Retrieval tests and behavioral AI tests
-
-The test suite deliberately tests more than model invocation:
-
-| Test category | What it protects |
-| --- | --- |
-| Golden retrieval | Correct source chunks and confidence behavior for expected campus questions. |
-| Chat scenario evaluation | Routing, official source quality, safe fallbacks, source misses, and no foreign-campus leakage. |
-| Edge cases | Vector ranking, sanitization, language policy, safety categories, hallucination guards, and useful deterministic fallback content. |
-| Role tests | Haki/Information Officer/Friendly Buddy/Researcher boundaries, switch actions, top-only mode notices, and no-model degradation. |
-| Local model manager tests | Cross-platform catalog rules, generation policy metadata, prompt-template validation, and backend-selection policy. |
-| Pure module tests | Token budgets, query normalization, ranking, RRF, text sanitizing, language, and trivia. |
-
----
-
-# 9. Testing, Debugging, And Release Confidence
-
-## 9.1 Commands used by this Windows project
-
-Use `npm.cmd` in PowerShell because it avoids Windows script execution-policy issues with `npm.ps1`.
-
-```powershell
-npm.cmd run typecheck
-npm.cmd run test:golden
-npm.cmd run test:edge-cases
-npm.cmd run test:chat-scenarios
-npm.cmd run test:local-models
-npm.cmd run test:all
-```
-
-Vitest unit tests are also included through the full suite.
-
-## 9.2 What to test while building each AI layer
-
-| After changing | Test focus |
-| --- | --- |
-| Seed documents or retrieval | Update `SEED_VERSION`, use real chunk IDs, run golden/scenario tests. |
-| Role or router behavior | Run chat-role/unit/scenario tests and confirm no-model degradation. |
-| Safety or language policy | Run edge-case/unit tests for specific unsafe categories and English-only routing. |
-| Prompt/token/model output control | Run edge cases and the administrator active-model evaluation on a supported device/build. |
-| Model catalog/download/validation | Run local model manager tests and inspect operation UI. |
-| Native/release packaging | Build the target APK and use the APK inspection script so weights are not accidentally bundled. |
-
-## 9.3 Debugging approach
-
-When an answer is wrong, do not immediately blame the model. Trace the layer that owns the behavior:
-
-| Symptom | First place to inspect |
-| --- | --- |
-| Correct document never appears | Query normalization, scope, FTS, ranking, seed data. |
-| Wrong source presented as reliable | Confidence, ambiguity/mismatch checks, source routing. |
-| Friendly Buddy gives a procedure | Mode prompt, domain routing, and grounding quality validation. |
-| Researcher repeats a warning in each answer or omits the persistent notice | `getChatRoleSessionNotice(...)`, `withResearcherMetadata(...)`, and Researcher route tests. |
-| Model mode missing | Active model status, device report, metadata validation, provider capability selection. |
-| Chat stops mid-response | Output token budget, stopped-limit flag, continuation handling. |
-| Private details repeated | Profile prompt context and route/response handling. |
-| App memory pressure/crash | model tier, context configuration, lifecycle release and streaming behavior. |
-
----
-
-# 10. How To Explain Haki In An Interview
-
-## 10.1 Thirty-second explanation
-
-> Haki is an offline-first Expo/React Native student assistant. I designed its AI behavior around four modes: Information Officer reads saved campus evidence deterministically, Friendly Buddy provides bounded empathetic support, Researcher explains outside-campus facts while its top notice reminds users to verify them, and default Haki orchestrates the applicable pieces without letting generated text invent campus procedures. SQLite FTS provides the local evidence path, while an optional device-compatible GGUF model runs generated modes locally through `llama.rn`. The app verifies models, enforces device tiers, streams bounded output, and applies language, safety, privacy, and grounding rules around every request.
-
-## 10.2 Two-minute architecture explanation
-
-Use this sequence:
-
-1. **Product constraint:** Students may need answers offline and official campus processes must not be hallucinated.
-2. **Data foundation:** Structured source chunks are seeded into SQLite and indexed with FTS5.
-3. **Request routing:** A central answer service classifies safety, language, scenario, source scope, selected mode, and whether the prompt contains campus, support, or outside-fact portions.
-4. **Official path:** Campus questions retrieve, rank, validate confidence, then render deterministic cited answers.
-5. **Generated path:** Friendly Buddy and Researcher use distinct bounded prompts through a locally installed GGUF model; mode limitations are shown in the persistent chat notice rather than repeated in each generated reply.
-6. **Mobile constraints:** Device tiers, token budgets, streaming, cancellation, memory cleanup, checksum verification, and activation probing make local inference practical.
-7. **Safety and privacy:** Harmful prompts are intercepted deterministically, English-only output is enforced, profile disclosure is restricted, and unrelated history is not attached.
-8. **Quality assurance:** Retrieval, role boundaries, model policy, edge cases, and packaging behavior are covered by automated tests/scripts.
-
-## 10.3 Likely interview questions and strong answers
-
-### Why did you not let the LLM answer all campus questions?
-
-Because an official procedure has low tolerance for invented facts. The retrieval layer can expose exactly which local chunk supports an answer. The production official path formats those sources deterministically, while generation is reserved for bounded conversational tasks.
-
-### Is it really RAG if the official response is not generated by the model?
-
-It is a retrieval-grounded assistant, and it has optional RAG-capable summarization code. For its high-trust production campus path, it intentionally uses retrieval-augmented deterministic response construction rather than generative paraphrasing. That distinction is a reliability choice, not a weakness.
-
-### Why use on-device models?
-
-They preserve offline conversation after installation and avoid sending sensitive student interaction text to a hosted LLM service. The cost is mobile resource management: model size, RAM, storage, speed, context length, and installation integrity must be engineered.
-
-### How do you stop a model from hallucinating?
-
-There is no single perfect stop. Haki reduces risk structurally: it routes official facts to deterministic sources, restricts prompt responsibilities, allows only provided citation IDs, validates generated campus claims, detects degenerate output, and falls back when evidence or model behavior is unreliable.
-
-### How do you choose models for different phones?
-
-The app detects hardware characteristics such as memory, architecture, storage and thermal state, maps the device to conservative model tiers, filters a curated provenance-labelled catalog, and validates downloaded GGUF metadata and checksum. During activation it measures a CPU baseline and a supported Metal/OpenCL candidate, persisting acceleration only when it is faster without unsafe thermal pressure. It does not automatically activate a model above the safe device tier.
-
-### How do you handle follow-up context without leaking or confusing information?
-
-It prunes recent context to the model budget, fetches persistent history only when related, tracks the active actor and goal, and tells the prompt not to disclose private profile fields unless requested. Ambiguous references receive a clarification question.
-
-### What would you improve next?
-
-A strong answer acknowledges real limits: verify/expand production source content, replace explicitly mock UI datasets, validate the new Apple/Metal/OpenCL native paths on representative physical devices, and use a scalable vector-index approach if the corpus becomes large.
-
-## 10.4 Terms you should be comfortable explaining
-
-| Term | Plain explanation in this project |
-| --- | --- |
-| Offline-first | Core source answer functionality works on the device without calling a server. |
-| FTS5 | SQLite's fast text-search index for document chunks. |
-| Chunk | A small, retrievable unit of a document carrying answer and citation metadata. |
-| Embedding | A numeric meaning representation used for optional semantic similarity. |
-| Hybrid retrieval | Combining lexical FTS and semantic vector rankings. |
-| RRF | Reciprocal Rank Fusion, a simple way to blend ranked result lists. |
-| Confidence | Logic deciding whether retrieved evidence is strong enough to answer. |
-| GGUF | A local model file format loaded through the llama runtime. |
-| Quantization | Storing model weights with reduced precision to fit devices more efficiently. |
-| Token budget | A limit on how much prompt context and answer output fits in inference. |
-| Streaming | Showing answer tokens as they are generated. |
-| Execution profile | The locally measured CPU/Metal/OpenCL backend selection saved for an installed model. |
-| Hallucination guard | Checks/design rules preventing unsupported claims from being presented as facts. |
-| Capability detection | Selecting behavior based on provider readiness and device/model resources. |
-
----
-
-# 11. Current Limitations And Sensible Next Work
-
-Understanding limitations is part of senior engineering. It shows that you can separate implemented guarantees from future aspirations.
-
-| Current limitation | Why it matters | Sensible next step |
-| --- | --- | --- |
-| Source quality depends on the bundled/imported corpus being current and verified. | Retrieval cannot repair stale official content. | Establish document ownership, review dates, and a signed/controlled update pipeline. |
-| Canteen and organization presentation datasets include replaceable or explicitly mock content. | They cannot be represented as official facts. | Replace them with verified content or retain clear demo labeling. |
-| Apple Foundation Models and accelerated GGUF paths are implemented but not physically validated from this Windows development workspace. | Native APIs and backend speed/thermal behavior must be tested on target handsets. | Run the iOS 26 Apple Intelligence and Android/iOS GGUF device matrix before release. |
-| Vector retrieval currently scans stored embeddings in memory. | Fine for a small corpus, inefficient for much larger content. | Integrate/query an actual vector index strategy once corpus scale requires it. |
-| Local generated quality varies by model tier and hardware. | Smaller models can be less capable despite safeguards and benchmarked execution. | Expand device output evaluations before promoting new catalog models. |
-| A locally managed model download still requires network and storage. | "Offline AI" begins after installation, not before. | Make download size/storage requirements prominent and preserve source-only mode as a first-class experience. |
-
----
-
-## Final Engineering Perspective
-
-If you build Haki from scratch, do not start by searching for the biggest language model. Start by defining truthful behavior, storing evidence cleanly, retrieving it reliably, and deciding exactly when generation is allowed.
-
-The key design can be summarized as:
+The textbook pattern is RAG (Retrieval-Augmented Generation): retrieve documents, hand them to the model, let the model write the answer. Haki deliberately does **less**:
 
 ```text
-Trusted campus source answers first.
-Optional local conversation second.
-Device, privacy, and safety boundaries around both.
+classic RAG:   documents -> LLM rewrites -> answer   (fluent, but can add "pay PHP 100")
+Haki official: documents -> rank -> confidence -> format directly -> answer + citation
 ```
 
-That is why the app remains useful with no model installed, becomes more conversational on capable devices, and can be explained defensibly in a technical interview.
+The model never touches the official path. Formatting a retrieved chunk is deterministic: same input, same output, testable, works with zero models installed, costs no battery. The trade is elegance for truthfulness — the right trade when a wrong fee is a real-world harm. (`sourceAnswerService.ts → buildDeterministicSourceResponseFromDraft`)
+
+> Interview-ready sentence: "It is a retrieval-grounded assistant. For high-trust campus answers it uses retrieval-augmented **deterministic** response construction instead of generative paraphrasing — a reliability choice, not a missing feature."
+
+### Q3.4 Why four modes?
+
+> 📂 **Read the code:** `src/components/chat/ChatRoleSelector.tsx` (the mode picker UI) · `src/services/chatRoleService.ts` (per-mode capability rules) · `src/services/modeSelectionService.ts` (auto-select best available mode)
+
+Different jobs need different rules, and users deserve to know which rules are active. The selector (`ChatRoleSelector.tsx`) offers:
+
+| Mode (display name) | Internal id | May answer | Must never |
+| --- | --- | --- | --- |
+| **All-Around** (default) | `haki` | Orchestrates everything below | Invent campus facts |
+| **Campus Only** | `information_officer` | Saved campus info only | Personal advice, outside facts |
+| **Listener** | `friendly_buddy` | Kind personal support | Claim credentials, diagnose, give campus facts |
+| **Study Helper** | `researcher` | General knowledge | Campus procedures, counseling |
+
+Display names are simple on purpose; internal ids stay stable because services and tests key off them. When a mode is asked something outside its scope, it does not quietly answer — it offers a one-tap "Switch to … and answer" action.
+
+### Q3.5 What if the ability is missing?
+
+> 📂 **Read the code:** `src/ai/FallbackProvider.ts` (the no-model provider) · `src/ai/CapabilityDetector.ts` (detects what modes are safe to offer) · `src/services/modeSelectionService.ts` (picks the safest available mode)
+
+Listener and Study Helper need a downloaded model. Without one, they explain how to set it up — they never pretend another mode answered. Campus answers keep working forever, model or not. **Degrading gracefully is a designed feature, not an accident.**
+
+## Walking back up Q3
+
+The router answers Q3 in one sentence: *classify every message first; send campus facts to retrieval, conversation to the bounded model, danger to fixed replies; and make all of it survive having no model at all.*
+
+---
+
+<a name="chapter-4"></a>
+# Chapter 4 — Q4: How Do You Run an AI Model on a Phone?
+
+This is the chapter you asked to study hardest. A server engineer rents a GPU; a mobile AI engineer inherits whatever phone the student owns — 4GB or 16GB of RAM, hot or cold, plugged in or at 12% battery. Everything in this chapter exists because of that.
+
+## Breaking it down
+
+```text
+Q4. How do you run an AI model on a phone?
+├── Q4.1 What IS a model file, physically?
+├── Q4.2 How does a model fit in a small phone? (quantization)
+├── Q4.3 Will THIS model fit THIS phone? (tiers & tolerance)
+├── Q4.4 How does the model get onto the phone safely? (download pipeline)
+├── Q4.5 How does generation actually work? (prefill, decode, KV cache)
+├── Q4.6 How do we make it fast? (threads, backends, cache reuse)
+├── Q4.7 How do we fit the conversation in its memory? (token budgets)
+├── Q4.8 How do we keep output sane? (sampling, stop words, retries)
+├── Q4.9 What if it stalls, overheats, or the user gives up? (watchdogs)
+└── Q4.10 Who gets the model when two features want it? (leases)
+```
+
+### Q4.1 What is a model file, physically?
+
+> 📂 **Read the code:** `src/ai/localModelManager.ts` (runtime-aware file lifecycle) · `src/ai/modelDownloadConfig.ts` (catalog metadata) · `src/ai/LlamaRnProvider.ts` + `src/ai/llamaRnRuntime.ts` (GGUF through `llama.rn`) · `src/ai/LiteRtLmProvider.ts` + `src/ai/nativeRuntimeAdapters.ts` (LiteRT-LM provider boundary) · `android/app/src/main/java/com/tupt/haki/HakiLiteRtLmModule.kt` (Android bridge)
+
+Small answer: a model is **billions of numbers** (weights) plus metadata that tells a compatible runtime how to execute them. Haki supports two local chat artifact formats:
+
+| Runtime format | Provider | Artifact | Platforms in this project |
+| --- | --- | --- | --- |
+| `gguf` | `LlamaRnProvider` | Quantized `.gguf` file loaded by `llama.rn`/`llama.cpp` | Android and iOS |
+| `litert-lm` | `LiteRtLmProvider` | Packaged `.litertlm` artifact loaded by Google's LiteRT-LM Android runtime | Android only |
+
+The Gemma 4 E2B and E4B catalog entries use LiteRT-LM. They are not GGUF files, are not loaded by `llama.rn`, and are not advertised as usable on iOS because this project has no iOS LiteRT-LM bridge.
+
+The app **never bundles** these files in the APK (a build script literally checks). Models are downloaded later into app-private storage:
+
+```text
+models/chat/library.json                                  <- installed set + active model id
+models/chat/installed/<model-id>/<artifact-file-name>     <- .gguf or .litertlm artifact
+models/chat/installed/<model-id>/manifest.json            <- runtime, limits, validation, evaluation
+models/chat/staging/<operation-id>.partial.<extension>    <- resumable download staging
+```
+
+### Q4.2 How does it fit? → quantization
+
+> 📂 **Read the code:** `src/ai/localModelMetadata.ts` (`deriveModelMetadata` reads GGUF metadata; manifests also carry runtime-specific fields) · `src/ai/localModelRequirements.ts` (base device tiers) · `src/ai/modelDownloadConfig.ts` (per-artifact RAM, storage, and context requirements)
+
+Original weights are commonly 16/32-bit numbers. **Quantization** stores them with fewer bits — the file and working set shrink, with a possible quality cost. Haki's GGUF catalog uses quantized variants such as `Q4_K_M`. LiteRT-LM artifacts are already prepared for that runtime, so Haki trusts their catalog-declared format and resource requirements instead of trying to parse them as GGUF.
+
+**Analogy:** a paint-by-numbers version of a painting. You keep 16 colors instead of 16 million. From a distance it's clearly the same picture; up close you lose subtle shading. A "Q4_K_M" model in Haki's catalog is exactly this: a 4-bit paint-by-numbers copy that fits in a phone.
+
+### Q4.3 Will THIS model fit THIS phone? → tiers, with humility
+
+> 📂 **Read the code:** `src/ai/localModelRequirements.ts` (base tier table + `MODEL_RAM_TOLERANCE_GB`) · `src/ai/modelDownloadConfig.ts` (model-specific overrides) · `src/ai/deviceHardwareProfile.ts` (OS-reported RAM/storage) · `android/app/src/main/java/com/tupt/haki/HakiDeviceInfoModule.kt` (Android RAM/CPU/thermal) · `modules/haki-device-info/` (iOS native equivalent)
+
+Haki defines conservative **tiers** (`localModelRequirements.ts`):
+
+| Tier | Model size | Needs RAM | Needs free storage |
+| --- | --- | --- | --- |
+| tiny | 0.5–1.5B params | 4 GB | 3 GB |
+| minimum | 1–3B | 6 GB | 4 GB |
+| good | 3–4B | 8 GB | 6 GB |
+| enhanced | 4–7B | 12 GB | 10 GB |
+| flagship | 7–8B | 16 GB | 12 GB |
+
+Three hard-won real-world lessons live here:
+
+1. **Phones lie a little.** An "8GB" phone reports ~7.x GB to apps. So visibility and *manual* activation allow a 1 GB tolerance (`MODEL_RAM_TOLERANCE_GB`), while *automatic* tier recommendation stays conservative. Generosity for the user's explicit choice; caution for the machine's own choice.
+2. **A display name is not a resource measurement.** Gemma 4 E2B/E4B use explicit catalog values for estimated working set, minimum RAM, minimum free storage, and context limits. GGUF files use parsed metadata plus the base tier table. The activation decision is based on those runtime-aware requirements, not a name alone.
+3. **Platform and bridge support are separate from hardware fit.** A phone can have enough RAM for Gemma and still be unable to run it because the installed Android build lacks `HakiLiteRtLm`. The Haki Models screen disables those cards with an updated-build message; iOS never receives the Gemma cards.
+4. **Hardware facts need native code.** RAM, CPU core count, and temperature come from a tiny native module written twice — Kotlin for Android (`android/app/src/main/java/com/tupt/haki/HakiDeviceInfoModule.kt`), Swift for iOS (`modules/haki-device-info/ios/HakiDeviceInfoModule.swift`). JavaScript alone cannot see this.
+
+### Q4.4 How does a model get onto the phone safely? → the installation pipeline
+
+> 📂 **Read the code:** `src/ai/localModelManager.ts` (download, integrity check, manifest, runtime probe, activation) · `src/ai/modelOperationCoordinator.ts` (operation state and inference/mutation leases) · `src/ai/modelDownloadConfig.ts` (immutable URL, artifact filename, runtime, platform, requirements, expected SHA-256) · `src/utils/fileSha256.ts` (streamed hash normalization) · `src/ai/storageForecast.ts` (free-space forecast)
+
+A 2–4 GB download that can corrupt, run out of disk, or be the wrong file is itself an engineering problem. Decompose it:
+
+```text
+Q4.4 Safe install?
+├── what may be offered?   -> curated catalog: URL, runtime, platform, size, license, requirements
+├── what if download dies? -> staging dir + pause/resume + auto-resume on restart
+├── is the file intact?    -> streamed SHA-256; compare with the catalog's pinned digest
+├── is it structurally valid?
+│   ├── GGUF               -> parse metadata + validate the chat-template family
+│   └── LiteRT-LM          -> validate extension/catalog contract, then require a native smoke test
+├── is it safe HERE?       -> tier check against this phone's reported hardware
+└── is it actually usable?
+    ├── GGUF               -> load/generate benchmark before activation
+    └── LiteRT-LM          -> bounded real-generation activation probe
+```
+
+```mermaid
+flowchart LR
+    CAT["curated catalog<br/>(runtime + platform + requirements)"] --> FIT["fits this phone and build?"]
+    FIT --> DL["staged download<br/>(pause / resume / recover)"]
+    DL --> HASH["compute SHA-256<br/>compare with pinned digest"]
+    HASH --> TYPE{"runtime format"}
+    TYPE -->|GGUF| META["parse metadata + template<br/>benchmark/load probe"]
+    TYPE -->|LiteRT-LM| SMOKE["Android native bridge<br/>90s generation smoke test"]
+    META --> ACT["set activeModelId"]
+    SMOKE --> ACT
+    META -. failure .-> KEEP["keep installed with reason<br/>and a Use retry action"]
+    SMOKE -. failure .-> KEEP
+```
+
+**Analogy:** fitting an engine into a car. Check it fits the engine bay, verify the serial number against the order, start it once in the workshop — only then hand the keys to the driver. (`localModelManager.ts` is the workshop.)
+
+Every catalog artifact is pinned to an immutable repository revision and an expected SHA-256 digest. The Gemma 4 E2B and E4B values come from the official LiteRT-LM Hugging Face repositories' LFS metadata, and downloads must match before installation continues. This protects against corruption and unexpected artifact replacement relative to the pinned manifest; it does not replace publisher signing or release-manifest governance. Runtime/platform gates and a real native generation probe remain separate requirements because a correct file can still be unusable on a particular build or phone.
+
+Download completion is therefore not the same as readiness. A LiteRT-LM model is shown as **IN USE** only when the file exists, its manifest is valid, the Android runtime is available, its smoke test passed, `activeModelId` points to it, and capability selection resolves to `LiteRtLmProvider`. A failed probe leaves the artifact installed with its failure reason and a **Use** retry action.
+
+### Q4.5 How does generation actually work? → prefill, decode, and the KV cache
+
+> 📂 **Read the code:** `src/ai/LlamaRnProvider.ts` (prefill/decode loop, prewarm, KV-cache reuse, `cache_n` logging) · `src/ai/prompts.ts` (stable system-prompt prefix design) · `src/ai/llamaRnRuntime.ts` (thin `llama.rn` wrapper)
+
+The detailed cache controls in this subsection are the **GGUF/`llama.rn` path**. `LiteRtLmProvider` sends the same bounded Haki task/source context through `HakiLiteRtLmModule`; LiteRT-LM owns its internal prefill, decode, and cache implementation, so Haki does not claim `cache_n` visibility or reuse guarantees for that runtime.
+
+This is the single most useful mental model in on-device AI. Generation has **two phases**:
+
+```text
+PREFILL: the model READS your whole prompt
+         (system rules + history + sources + question)
+         -> one big computation, speed limited by prompt LENGTH
+
+DECODE:  the model WRITES the answer one token at a time
+         -> a small computation per token, this is what you watch stream in
+```
+
+While reading, the model saves its "understanding so far" in a **KV cache** (key/value cache).
+
+**Analogy:** the prompt is a book, the KV cache is your bookmarks and margin notes. If someone hands you the *same book with one new page*, you don't reread it — you use your notes and read only the new page.
+
+The killer optimization follows directly: **if the start of this turn's prompt is byte-identical to last turn's, the runtime skips re-reading it.** So Haki was restructured to keep the prompt prefix stable:
+
+```text
+BEFORE (cache useless):                      AFTER (cache reused):
+[system: rules + TODAY'S task + profile]     [system: rules only]        <- identical every turn
+[history...]                                 [history...]                <- grows at the END only
+[user: question]                             [user: task + profile + question]
+```
+
+One more trick: when the chat screen opens, `prewarm()` loads the model **and runs a 1-token "priming" completion** containing just the system rules. That pre-fills the KV cache so the student's *first* message only pays for its own new text. The runtime even reports `cache_n` — how many prompt tokens were served from cache — which Haki logs to prove the win.
+
+> This is real AI engineering on small models: you didn't change the model at all, and turn-2+ replies got dramatically faster.
+
+### Q4.6 How do we make it fast? → use the silicon you actually have
+
+> 📂 **Read the code:** `src/ai/localModelPerformance.ts` (backend candidates, performance keys, winner selection) · `src/ai/localModelManager.ts` (`benchmarkCandidate` and `probeModelLoad` in GGUF activation) · `src/ai/localModelEvaluation.ts` (separate post-activation behavioral evaluation from Settings, not the backend benchmark)
+
+```text
+Q4.6 Speed?
+├── how many CPU threads?  -> ask the OS for core count; use about half
+│                             (big.LITTLE phones have slow cores you don't want)
+└── CPU or GPU?            -> don't guess. RACE them.
+```
+
+For GGUF, activation runs a short CPU benchmark, then tries Metal (iOS) or OpenCL (Android) when available and safe. It keeps acceleration **only if it measured better without a worse thermal result**. The winner is saved as the model's *execution profile*. LiteRT-LM currently uses the Android runtime's CPU backend configuration and records no comparable Haki-side CPU/GPU race; its activation proof is the bounded generation smoke test instead.
+
+### Q4.7 How does the conversation fit? → token budgets
+
+> 📂 **Read the code:** `src/ai/tokenBudget.ts` (reserves output space, prunes history/sources to fit the context window)
+
+A model has a fixed **context window** (its working memory, measured in tokens — word-pieces).
+
+**Analogy:** a carry-on bag. The system rules, history, source excerpts, the question, *and the space reserved for the answer* must all fit in one bag. Pack too much history and there is no room left for the answer.
+
+`tokenBudget.ts` does the packing: it reserves output space first, then prunes the lowest-priority context (oldest history, longest source excerpts) until everything fits — with smaller bags for smaller tiers. Counting uses the model's own tokenizer when available, estimation only as fallback.
+
+### Q4.8 How do we keep output sane? → sampling, stop words, retries
+
+> 📂 **Read the code:** `src/ai/outputQuality.ts` (degeneracy detector + retry) · `src/ai/sanitizeAssistantText.ts` (strips leaked instructions/tags) · `src/ai/llamaStoppedLimit.ts` (detects mid-sentence cutoff) · `src/services/chatContinuation.ts` (stitch continuations without repeats) · `src/ai/LlamaRnProvider.ts` (`safeChatSamplingForScenario`, `STOP_WORDS`)
+
+Small models misbehave in predictable ways. Most low-level controls below live in `LlamaRnProvider`; LiteRT-LM uses its native conversation/sampler API, then returns through the same Haki service-layer grounding and response contracts.
+
+| Problem | Defense | Where |
+| --- | --- | --- |
+| Boring or chaotic word choice | **Sampling** tuned per scenario (low temperature for facts/code, higher for creative) | `safeChatSamplingForScenario` |
+| Doesn't know when to stop | **Stop words** — every model family's end token, including Gemma's `<end_of_turn>` (no pipes!) | `STOP_WORDS` |
+| Repeats itself in a loop | Degeneracy detector → **one retry with stricter sampling** | `outputQuality.ts` |
+| Leaks its instructions or reasoning tags | Output **sanitizer** strips them; thinking-mode disabled for Qwen3 | `sanitizeAssistantText.ts` |
+| Cites sources it never saw | Only citation IDs that were *in the prompt* are accepted | provider post-check |
+| Hits the output limit mid-sentence | Marked `incomplete` → UI offers **Continue**, stitched without repeats | `llamaStoppedLimit.ts`, `chatContinuation.ts` |
+
+*Sampling in one sentence:* the model outputs probabilities for the next token; **temperature** controls how adventurous the pick is (0.2 = always the safe choice, 0.9 = creative), and top-k/top-p trim the candidate list before picking.
+
+### Q4.9 What if it stalls, overheats, or the user gives up?
+
+> 📂 **Read the code:** `src/ai/inferenceWatchdog.ts` (GGUF first-token deadline + total cap) · `src/ai/liteRtGenerationGuard.ts` (LiteRT total deadline, abort, and thermal guard) · `src/ai/LlamaRnProvider.ts` and `src/ai/LiteRtLmProvider.ts` (provider integration) · `src/ai/nativeModules.ts` and `android/app/src/main/java/com/tupt/haki/HakiLiteRtLmModule.kt` (thermal/cancellation bridges)
+
+Both local runtimes now have explicit cancellation boundaries, with controls matched to what each native API exposes:
+
+- **The user gives up** → every generation carries an *abort signal*. GGUF calls `stopCompletion()`; LiteRT calls `cancelProcess()` through a request-scoped native cancellation method.
+- **The runtime stalls** → GGUF uses `inferenceWatchdog.ts` for a first-token deadline (25s on tiny phones, 15s otherwise) plus a 120s total cap. LiteRT uses `liteRtGenerationGuard.ts` for a 120s total cap around its asynchronous callback API.
+- **The phone overheats** → both providers read native thermal state. LiteRT cancels immediately at *critical* and after two consecutive *serious* readings; GGUF stops coherently under the same safety intent. The app also releases model memory whenever it goes to the background.
+
+The LiteRT bridge serializes native generations, associates each one with a request ID, and completes each callback exactly once across success, failure, timeout, thermal cancellation, or user abort. This avoids overlapping conversations and late callbacks mutating a newer request.
+
+### Q4.10 Who gets the model? → the inference lease
+
+> 📂 **Read the code:** `src/ai/localModelManager.ts` (lease counter, `acquireLease`/`releaseLease`, `isLocalModelInferenceBusy`) · `src/db/chunkEmbeddingBackfill.ts` (checks busy flag before embedding work)
+
+The chat, the embedding backfill, and the model manager (delete/replace) all want the model. A simple **lease** (a counter + waiters in `localModelManager.ts`) guarantees: a model is never deleted mid-generation, mutations wait for inference to finish, and background embedding work checks `isLocalModelInferenceBusy()` and politely backs off.
+
+**Analogy:** one microscope in the lab, with a sign-out sheet. Nobody unplugs it while someone's eye is on the lens.
+
+## Walking back up Q4
+
+```text
+A phone-sized model is:
+  a runtime-compatible artifact   (Q4.1, Q4.2)
+  matched honestly to the device   (Q4.3)
+  installed through verification   (Q4.4)
+  run with its reading cached      (Q4.5)
+  on benchmarked silicon           (Q4.6)
+  inside a packed token budget     (Q4.7)
+  with output disciplined          (Q4.8)
+  under watchdogs and thermal care (Q4.9)
+  shared through a lease           (Q4.10)
+```
+
+None of these steps is glamorous. Together they are the difference between "I called an LLM API" and *on-device AI engineering*.
+
+---
+
+<a name="chapter-5"></a>
+# Chapter 5 — Q5: How Do We Keep It Safe and Private?
+
+## Breaking it down
+
+```text
+Q5. Safe and private?
+├── Q5.1 Who decides a request is dangerous — us or the model?
+├── Q5.2 How do we stop invented campus facts from leaking through chat?
+├── Q5.3 What does the app remember, and what must it protect?
+└── Q5.4 Why one answer language?
+```
+
+### Q5.1 Who decides danger? → the code, before the model
+
+> 📂 **Read the code:** `src/services/questionIntentService.ts` (rules-based dangerous-request classifier) · `src/services/refusalResponseBuilder.ts` (pre-written protective responses, including distress resources)
+
+`questionIntentService.ts` classifies dangerous requests (self-harm, violence, harassment, exploitation, academic dishonesty, illegal acts...) with **rules, not the model**, and replies with specific, pre-written protective responses. Reasons:
+
+- rules run instantly, offline, identically on every phone;
+- a 1B-parameter model's safety judgment is not dependable;
+- pre-written distress responses can be reviewed by humans word-by-word — and for self-harm they point to real help, warmly.
+
+The model only ever sees requests that already passed the gate. Defense-in-depth: classify before, instruct the model during (its prompt also refuses), check output after.
+
+### Q5.2 How do we stop invented campus facts in *chat* modes?
+
+> 📂 **Read the code:** `src/services/answerSourcePolicy.ts` (grounding and source-clarification policy) · `src/services/safeLocalChatService.ts` (bounded local generation) · `src/services/scenarioResponseService.ts` (safe fallback redirects) · `src/ai/LlamaRnProvider.ts` (citation whitelist post-check)
+
+Listener and Study Helper prompts explicitly forbid campus facts — but prompts are requests, not guarantees. So a **grounding check** scans generated output, and a reply that starts stating procedure-like campus details gets replaced with a safe fallback that redirects to Campus Only mode. Plus the citation whitelist from Q4.8: the model cannot invent a receipt.
+
+### Q5.3 What is remembered, and what is protected?
+
+> 📂 **Read the code:** `src/services/historyService.ts` (encrypted relevant-only prior turns) · `src/services/bookmarkService.ts` (encrypted saved answers) · `src/services/privateDataCrypto.ts` (AES-256-GCM and keyed search fingerprints) · `src/services/conversationStateService.ts` (track who is who: user/teacher/office) · `src/services/chatConversationContext.ts` (assemble context for the prompt) · `src/services/studentProfileService.ts` (profile in `expo-secure-store`) · `src/services/chatPrivacySettingsService.ts` (user toggles for what AI may use)
+
+```text
+remembered:  limited recent turns; older history fetched ONLY when relevant
+             (lexical/scenario match — not "attach everything")
+tracked:     who is who (user vs teacher vs office) so follow-ups
+             don't swap actors                     (conversationStateService)
+protected:   student profile in expo-secure-store;
+             recent questions, conversation rows, scopes, and bookmarks
+             encrypted with AES-256-GCM before persistence; the key stays in
+             expo-secure-store; FTS stores keyed token fingerprints, not text;
+             the prompt itself instructs: don't repeat ID/course/section
+             unless asked
+user rights: "Clear recent chat activity" wipes memory; profile/history
+             toggles in settings choose what AI may use
+```
+
+**Analogy:** good memory is bringing the one relevant page to the desk — not dumping every notebook you own onto it, and keeping the confidential folder closed unless it's needed.
+
+Privacy is also why on-device AI exists here: Haki does not send conversations to a model server. Encryption at rest reduces exposure from copied app databases and backups, while device compromise, unlocked-device access, screenshots, and exported shares remain real local risks.
+
+### Q5.4 Why English-only answers?
+
+> 📂 **Read the code:** `src/services/replyLanguageService.ts` (detects non-English input, returns a polite redirect before any model call)
+
+A deliberate quality decision: small local models produce unreliable Tagalog/Taglish. Rather than answer badly, Haki detects non-English input and politely redirects to English — enforced in the router (`replyLanguageService.ts`), where it is testable, not buried in a prompt and hoped for.
+
+## Walking back up Q5
+
+Safety is **layered**, and the model is the least-trusted layer: rules decide danger, prompts set boundaries, output checks catch leaks, storage encrypts secrets, and the user holds the delete switch.
+
+---
+
+<a name="chapter-6"></a>
+# Chapter 6 — Q6: How Do We Make It a Real App?
+
+This chapter is the software-engineering half of your study. An AI pipeline nobody enjoys using is a science experiment.
+
+## Breaking it down
+
+```text
+Q6. A real app?
+├── Q6.1 How is the code organized so it doesn't rot?
+├── Q6.2 How do screens talk to the AI without owning it?
+├── Q6.3 How does a chat UI survive streaming, stopping, failing?
+├── Q6.4 How do we theme a whole app (and add dark mode) without repainting it twice?
+├── Q6.5 How do we make a mascot feel alive without expensive tools?
+└── Q6.6 What small touches make it feel finished?
+```
+
+### Q6.1 Organization → layers with one-way dependencies
+
+> 📂 **Read the code:** `app/` (Expo Router screens) · `src/hooks/useChatMessages.ts` (stateful orchestration) · `src/services/` (dozens of focused service files) · `src/retrieval/` (evidence-finding) · `src/ai/` (on-device model pipeline) · `src/db/` (SQLite + migrations + seed) · `src/theme/` (design tokens)
+
+```text
+app/            screens (Expo Router: each file = one route, like web pages)
+src/components/ reusable UI pieces
+src/hooks/      stateful glue (useChatMessages owns the live conversation)
+src/services/   business logic — dozens of focused files
+src/retrieval/  finding evidence
+src/ai/         everything from Chapter 4
+src/db/         SQLite, migrations, seeding
+src/data/       bundled content + pure data helpers
+src/theme/      design tokens
+src/utils/      tiny shared tools
+```
+
+The dependency arrow points **downward only**: screens → hooks → services → (retrieval / ai / db). The AI layer never imports a screen. That is why the entire mascot could be replaced (twice!) without touching the answer pipeline, and why services can be tested with no UI at all.
+
+Notice the *many small services* pattern: `chatFollowUpDetection.ts`, `replyLanguageService.ts`, `refusalResponseBuilder.ts`... Each file answers one tiny question — the question-decomposition method, fossilized into a folder structure.
+
+### Q6.2 Screens don't own AI → the hook boundary
+
+> 📂 **Read the code:** `src/hooks/useChatMessages.ts` (the only thing the chat screen calls) · `app/chat.tsx` (renders; delegates all logic to the hook)
+
+`useChatMessages.ts` is the only thing the chat screen talks to. It owns: the message list, the optimistic user bubble, calling the router, receiving streamed tokens (batched ~50ms so React isn't re-rendered per token), abort, retry, continuation, feedback. The screen renders; the hook orchestrates; the services decide. Three jobs, three homes.
+
+### Q6.3 A chat UI for an *asynchronous* world
+
+> 📂 **Read the code:** `app/chat.tsx` (all chat UI states: waiting, streaming, stopped, failed) · `src/components/chat/ChatMessageBubble.tsx` (individual message bubble + states) · `src/components/chat/ChatInputBar.tsx` (composer + keyboard handling) · `src/components/chat/ChatSourceCard.tsx` (tap-to-Service-Desk source card) · `src/utils/simpleMarkdown.ts` (hand-written markdown parser)
+
+AI output streams, stalls, fails, and gets canceled — a plain form-submit mentality breaks immediately. The UI therefore has explicit states for: waiting (Haki's feather animation + rotating loading lines), streaming (live bubble), stopped (partial kept), incomplete (Continue button), failed (Retry button). Plus mobile realities: the keyboard must resize the layout (Android `adjustResize`, iOS `KeyboardAvoidingView`), and the floating tab bar hides while typing.
+
+Haki's answers render lightweight **markdown** (bold, italics, bullets, numbered steps) through a ~100-line hand-written parser (`src/utils/simpleMarkdown.ts`) instead of a heavy library — unit-tested, and unrecognized syntax simply renders as plain text, because model output must never crash a renderer.
+
+#### The Service Desk taxonomy
+
+> 📂 **Read the code:** `app/library.tsx` (desk switching, routed searches, office filter reset) · `app/library-topic/[chunkId].tsx` (topic detail route) · `src/data/libraryTopics.ts` (seed-derived topics, desk membership, office aliases) · `src/data/libraryTopics.test.ts` (grouping/filter contracts)
+
+The Service Desk presents the verified campus corpus through four stable counters: **Offices**, **Safety**, **Campus Guidelines**, and **Map Directory**. The Offices counter starts with these filters: **All**, **OSA**, **Registrar**, **Medical Clinic**, **Dental Clinic**, **Guidance**, **Public Assistance / QA**, and **Security / Admin**.
+
+Membership is derived from the seed document's category plus searchable verified fields such as office, title, process name, location, answer text, and tags. Alias rules handle variations such as “Office of Student Affairs,” “quality assurance,” and “campus dental clinic”; the UI does not depend on one exact raw office string. Switching desks or receiving a routed search resets an incompatible office filter to **All**.
+
+### Q6.4 Theming → semantic tokens, with a migration still in progress
+
+> 📂 **Read the code:** `src/theme/palette.ts` (raw color values) · `src/theme/themes.ts` (semantic token sets per mode) · `src/theme/ThemeProvider.tsx` (context provider + `useTheme()` hook) · `src/theme/colors.ts` (legacy alias to the light theme)
+
+Hardcoding colors throughout screens makes every palette change expensive. The target architecture is:
+
+```text
+palette.ts   raw colors            ("maroon = #7A0019", "dark surface = #171318")
+themes.ts    semantic tokens       ("textPrimary", "card", "accent" — one set per mode)
+ThemeProvider/useTheme()           migrated screens consume semantic tokens
+```
+
+Dark mode can become *data*, not a rewrite, once every screen consumes semantic tokens. This repository is not there yet: `src/theme/colors.ts` still aliases the light theme for legacy consumers, some screens/components still use raw colors, and dark mode remains an admin-preview capability until the migration is complete. The subtle bugs explain why semantic naming matters: a token like `white` used both for "text on maroon" and "card background" cannot flip safely. **Name colors by role, not by appearance.**
+
+### Q6.5 The mascot — and an honest engineering story
+
+> 📂 **Read the code:** `src/mascot/adapter/HakiMascotCompat.tsx` (stable status-driven entry point) · `src/mascot/hd/HakiHdMascot.tsx` (full-body image + Reanimated motion) · `src/mascot/hd/HakiHdAvatar.tsx` (compact square chat portrait only) · `src/mascot/hd/hdAssets.ts` (status/onboarding/model-operation asset maps) · `src/components/mascot/mascotConfig.ts` (`MascotStatus` contract) · `src/components/mascot/useMascotInteraction.ts` (tap/double-tap/shake gestures)
+
+Haki the bird went through three implementations:
+
+1. **Pixel sprites** — charming, but only 2 frames per mood; felt stiff.
+2. **Code-drawn vector rig** (Skia, ~16 layered shapes, a behavior state machine with blinking, idle fidgets, eye-tracking) — technically impressive, visually disappointing. It did not look like the official HD art.
+3. **HD images + procedural motion** (current, `src/mascot/hd/`) — one consistent white-polo Haki image per status, plus dedicated onboarding, model-operation, detective, and chat-portrait art. Full-body assets share one portrait canvas; the compact avatar uses a square canvas. Motion remains layered in code: ambient float, breathing, a squash-and-stretch "pop" with crossfade on every mood change, thinking sway, celebration hops, groggy wobble.
+
+```text
+HakiMascotCompat: stable status/source facade used across screens
+HD_STATUS_IMAGES: every MascotStatus -> dedicated transparent PNG
+HakiHdMascot:     full-body image + Reanimated transforms on the UI thread
+HakiHdAvatar:     compact chat-bubble portrait + gentle breathing only
+gestures kept:    tap bounce, double-tap sleep, shake -> dizzy
+```
+
+Two lessons worth keeping for your studies. First: **requirements change; architecture should absorb the change.** Because every screen used one `HakiMascotCompat` component with a stable `status` prop, swapping the entire rendering engine touched call sites almost not at all. Second: **"more engineering" is not "better product."** The vector rig was the most sophisticated code in the app, and deleting it was the correct decision. Attachment to clever code is a bug in the engineer.
+
+### Q6.6 Finishing touches
+
+> 📂 **Read the code:** `src/utils/haptics.ts` (haptic wrapper + user toggle) · `src/services/bookmarkService.ts` (save/unsave answers) · `src/services/shareAnswerService.ts` (system share-sheet with citations) · `app/campus-map.tsx` (Feather Hunt mini-game UI) · `src/data/campusMapCollectibles.ts` (feather positions) · `src/data/campusMapGameplay.ts` (game logic) · `src/services/campusFeatherService.ts` (persistence)
+
+Haptics (one tiny wrapper, `src/utils/haptics.ts`, with a user toggle), accessibility labels and live-regions on streaming answers, reduced-motion support everywhere animation exists, bookmarks for answers (a `bookmarks` table + a Saved section in the Service Desk), system share-sheet export with citations, and a Feather Hunt mini-game on the pixel map — 8 collectible feathers whose positions are *unit-tested to be standable* (`campusMapCollectibles.test.ts`). Even play gets tests.
+
+## Walking back up Q6
+
+A real app = layered code with one-way dependencies + an async-honest UI + design tokens + the humility to delete clever work. The AI made Haki possible; this chapter makes it likable.
+
+---
+
+<a name="chapter-7"></a>
+# Chapter 7 — Q7: How Do We Know It All Works?
+
+## Breaking it down
+
+```text
+Q7. How do we know?
+├── Q7.1 What can break silently in an AI app?
+├── Q7.2 What kinds of tests catch what?
+├── Q7.3 How do you debug a wrong answer?
+└── Q7.4 What can only a real phone tell you?
+```
+
+### Q7.1 What breaks silently?
+
+> 📂 **Read the code:** `src/services/answerService.ts` (the router whose behavior must stay correct) · `src/services/answerService.chatRoles.test.ts` (mode-boundary contract tests that catch silent regressions)
+
+AI regressions are *behavioral*: the router answers from the wrong mode, weak evidence is shown as reliable, a prompt edit makes a tiny model leak its instructions. The app still compiles. The demo still works. **Compilation is not correctness.**
+
+### Q7.2 The test pyramid, AI edition
+
+> 📂 **Read the code:** `scripts/golden-retrieval.ts` (frozen expected chunk IDs) · `scripts/chat-scenario-eval.ts` (mode/safety/source-miss behavior contracts) · `scripts/test-edge-cases.ts` (Taglish, distress, hallucination) · `scripts/test-local-model-manager.ts` (catalog/tier/hash/template rules) · `scripts/seed-data-qa.ts` (corpus sanity checks) · `src/**/*.test.ts` (unit tests: watchdog, markdown, feather placement, ranking, RRF)
+
+| Layer | Command | Protects |
+| --- | --- | --- |
+| Types | `npm.cmd run typecheck` | Contracts between layers |
+| Unit (vitest) | `npm.cmd run test:unit` | Pure logic: token budgets, ranking, RRF, sanitizer, watchdog, markdown, feather placement |
+| **Golden retrieval** | `npm.cmd run test:golden` | 26 real questions must return the **exact expected chunk IDs** |
+| **Scenario evals** | `npm.cmd run test:chat-scenarios` | Mode boundaries, safety refusals, source misses — behavior as a contract |
+| Edge cases | `npm.cmd run test:edge-cases` | Taglish redirects, distress handling, hallucination guards |
+| Model manager | `npm.cmd run test:local-models` | Catalog groups, runtime/platform gates, tier rules, integrity policy, template validation |
+| Everything | `npm.cmd run test:all` | The gate before any release |
+
+Two patterns to copy into your own projects:
+
+- **Golden tests:** freeze known-correct outputs for representative inputs; any drift fails loudly. This is the cheapest honest eval for retrieval systems.
+- **Extract pure functions to make AI testable:** the watchdog takes an injectable clock; the markdown parser has no React imports; feather placement is plain math. Deterministic logic gets pulled *out* of the async/native soup precisely so it can be tested in milliseconds.
+
+### Q7.3 Debugging a wrong answer — blame layers in order
+
+> 📂 **Read the code:** `src/retrieval/queryNormalizer.ts` + `synonymIndex.ts` + `FTSRetriever.ts` + `ranking.ts` (retrieval chain) · `src/retrieval/confidence.ts` + `src/services/sourceAnswerService.ts` (confidence gate) · `src/ai/tokenBudget.ts` + `src/ai/llamaStoppedLimit.ts` (output-cut issues) · `src/ai/LlamaRnProvider.ts` (stop words, cache hits)
+
+| Symptom | Look first at |
+| --- | --- |
+| Right document never found | normalization → synonyms → FTS → ranking → the seed data itself |
+| Wrong source shown confidently | confidence gate, office-scope mismatch checks |
+| Listener gives a campus procedure | role prompt, domain routing, grounding check |
+| Replies slow after turn 1 | prompt-prefix stability (is the cache being missed? check `cache_n` in logs) |
+| Output cut mid-sentence | token budget, stopped-limit flag, continuation |
+| Gemma never stops talking | stop-word list (`<end_of_turn>`) |
+| Model mode missing | manifest rejection reasons, tier check, hardware report |
+
+The discipline: **don't blame the model first.** Most "AI bugs" live in the system around it.
+
+### Q7.4 Only a phone can tell you...
+
+> 📂 **Read the code:** `scripts/inspect-apk-assets.ps1` (verify no model weights bundled in the APK) · `eas.json` (preview build profile) · `src/ai/LlamaRnProvider.ts` (`cache_n` and `prompt_ms` for GGUF) · `android/app/src/main/java/com/tupt/haki/HakiLiteRtLmModule.kt` (real LiteRT-LM bridge)
+
+...whether the keyboard hides the composer, whether streaming feels smooth, whether a 3GB download resumes after a crash, how hot the phone gets, what `prompt_ms`/`cache_n` actually measure for GGUF, and whether the packaged LiteRT-LM native libraries can load Gemma 4 E2B/E4B on the intended Android device. Hence Android compilation/debug builds, preview APK builds (`eas build -p android --profile preview`), and a physical-device activation/chat checklist as final gates. Automated tests protect *logic*; devices validate native execution and experience.
+
+---
+
+<a name="chapter-8"></a>
+# Chapter 8 — The Map of the Codebase
+
+A condensed "where does X live" reference while rebuilding.
+
+| Question from this guide | Code |
+| --- | --- |
+| Truth & chunks (Q1) | `src/data/seed-documents.json`, `src/types/document.ts`, `src/db/seed.ts` |
+| Database & FTS (Q2.1–2) | `src/db/{database,schema,migrationRunner,ftsHealth,documentRepository}.ts` |
+| Search smarts (Q2.3–5) | `src/retrieval/{FTSRetriever,queryNormalizer,synonymIndex,ranking,confidence}.ts` |
+| Meaning search (Q2.6) | `src/retrieval/{VectorRetriever,HybridRetriever,rrf}.ts`, `src/db/chunkEmbeddingBackfill.ts` |
+| The router (Q3) | `src/services/{answerService,answerContractService,questionIntentService,questionScenarioService,chatRoleService,replyLanguageService}.ts` |
+| Deterministic answers (Q3.3) | `src/services/{sourceAnswerService,searchResultText,sourceChunkAdapter}.ts` |
+| Provider contract & mode pick | `src/ai/{LocalAIProvider,CapabilityDetector,modeSelectionPolicy,providerRegistry,FallbackProvider}.ts`, `src/services/modeSelectionService.ts` |
+| GGUF runtime (Q4.5–9) | `src/ai/{LlamaRnProvider,llamaRnRuntime,tokenBudget,prompts,sanitizeAssistantText,outputQuality,llamaStoppedLimit,inferenceWatchdog}.ts` |
+| LiteRT-LM runtime | `src/ai/{LiteRtLmProvider,nativeRuntimeAdapters,nativeModules}.ts`, `android/app/src/main/java/com/tupt/haki/HakiLiteRtLmModule.kt` |
+| Model install & tiers (Q4.3–4) | `src/ai/{localModelManager,localModelMetadata,localModelRequirements,modelDownloadConfig,deviceHardwareProfile,storageForecast}.ts` |
+| Native hardware truth | `android/app/src/main/java/com/tupt/haki/HakiDeviceInfoModule.kt`, `modules/haki-device-info/ios/HakiDeviceInfoModule.swift` |
+| Memory & privacy (Q5.3) | `src/services/{historyService,conversationStateService,chatConversationContext,studentProfileService,chatPrivacySettingsService}.ts` |
+| Chat UI (Q6.2–3) | `app/chat.tsx`, `src/hooks/useChatMessages.ts`, `src/components/chat/*` (incl. `ChatMarkdownText`, `ChatSourceCard` with tap-to-Service-Desk) |
+| Service Desk | `app/library.tsx`, `app/library-topic/[chunkId].tsx`, `src/data/libraryTopics.ts` |
+| Theme (Q6.4) | `src/theme/palette.ts`, `src/theme/themes.ts`, `src/theme/ThemeProvider.tsx`, `src/theme/colors.ts` |
+| Mascot (Q6.5) | `src/mascot/adapter/HakiMascotCompat.tsx`, `src/mascot/hd/HakiHdMascot.tsx`, `src/mascot/hd/HakiHdAvatar.tsx`, `src/mascot/hd/hdAssets.ts`, `src/components/mascot/{mascotConfig,useMascotInteraction}.ts` |
+| Map game (Q6.6) | `app/campus-map.tsx`, `src/data/{campusMapGameplay,campusMapCollectibles}.ts`, `src/services/campusFeatherService.ts` |
+| Tests (Q7) | `scripts/{golden-retrieval,chat-scenario-eval,test-edge-cases,test-local-model-manager,seed-data-qa}.ts`, `src/**/*.test.ts` |
+| Other screens | `app/index.tsx`, `app/library.tsx`, `app/library-topic/[chunkId].tsx`, `app/tips.tsx`, `app/models.tsx`, `app/onboarding.tsx`, `app/profile.tsx`, `app/settings.tsx`, `app/org-chart.tsx`, `app/canteen.tsx`, `app/map.tsx` |
+
+---
+
+<a name="chapter-9"></a>
+# Chapter 9 — Building It Back Up: From Empty Folder to Haki
+
+The question tree, now reversed. Build leaf answers first; each step has a checkpoint so you never stack new work on broken work. **The model-provider layer arrives at step 9 of this 15-step sequence — and the app already works at step 6.**
+
+```text
+rules -> shell -> data -> database -> retrieval -> answers -> UI -> router
+      -> providers -> runtime -> model manager -> semantics -> polish -> proof
+```
+
+**Step 0 — Write the rules.** Behavioral contracts on paper before code: campus facts only from sources; generation optional and bounded; English-only answers; deterministic safety; one clarification for ambiguity; conservative model activation; profile privacy. *(Checkpoint: you can say which answers need evidence.)* → later lives in `AGENTS.md`, `src/services/answerContractService.ts`.
+
+**Step 1 — Expo shell.** Expo Router + TypeScript; plugins for SQLite/FTS, voice, file access, `llama.rn`; `@/ → src/` alias. → `app.json`, `package.json`, `babel.config.js`, `tsconfig.json`, `app/_layout.tsx`. *(App launches; routes render.)*
+
+**Step 2 — Navigation, onboarding, profile.** Tabs, first-run flow, profile in secure storage, admin gate, lifecycle handlers (background → release resources). → `app/onboarding.tsx`, `app/profile.tsx`, `src/components/AdminGate.tsx`, `src/services/studentProfileService.ts`, `src/utils/onboardingState.ts`. *(New users onboard; admin stays locked.)*
+
+**Step 3 — Chunk the truth.** Define `DocumentChunk`, author `seed-documents.json` with real verified content + citations. → `src/types/document.ts`, `src/data/seed-documents.json`. *(Every intended answer has a chunk and a receipt.)*
+
+**Step 4 — Database.** SQLite open + migrations + versioned seeding + FTS virtual tables with sync triggers + health check. → `src/db/database.ts`, `src/db/schema.ts`, `src/db/migrationRunner.ts`, `src/db/seed.ts`, `src/db/ftsHealth.ts`, `src/db/documentRepository.ts`. *(Chunks queryable offline; reseed on `SEED_VERSION` bump.)*
+
+**Step 5 — Retrieval.** Normalizer → synonyms → FTS strategies → ranking → confidence. Write the golden test file *now*. → `src/retrieval/queryNormalizer.ts`, `src/retrieval/synonymIndex.ts`, `src/retrieval/FTSRetriever.ts`, `src/retrieval/ranking.ts`, `src/retrieval/confidence.ts`, `src/data/golden-questions.json`, `scripts/golden-retrieval.ts`. *(Golden questions return expected chunk IDs.)*
+
+**Step 6 — Deterministic answers.** Draft → `buildDeterministicSourceResponseFromDraft` → answer + citations + confidence + ambiguity handling. **You now have a working, truthful product with zero AI models.** → `src/services/sourceAnswerService.ts`, `src/services/searchResultText.ts`, `src/services/sourceChunkAdapter.ts`. *(Official questions: cited answer or honest miss.)*
+
+**Step 7 — Chat UI + hook.** Bubbles, input, source cards, mode selector, `useChatMessages` with optimistic updates, streaming plumbing, abort/retry/continue, keyboard handling, markdown rendering. → `app/chat.tsx`, `src/hooks/useChatMessages.ts`, `src/components/chat/ChatMessageBubble.tsx`, `src/components/chat/ChatInputBar.tsx`, `src/components/chat/ChatSourceCard.tsx`, `src/components/chat/ChatRoleSelector.tsx`, `src/utils/simpleMarkdown.ts`. *(UI coherent through every async state.)*
+
+**Step 8 — The router.** Centralize: safety → language → role scope → domain split → source or generation or deterministic reply; mode-switch suggestions; scenario evals written against it. → `src/services/answerService.ts`, `src/services/questionIntentService.ts`, `src/services/questionScenarioService.ts`, `src/services/chatRoleService.ts`, `src/services/replyLanguageService.ts`, `src/services/refusalResponseBuilder.ts`, `scripts/chat-scenario-eval.ts`. *(Behavior is testable as a contract.)*
+
+**Step 9 — Provider interface.** `LocalAIProvider` capabilities contract; `FallbackProvider` (no model — app still answers); capability detection picks the safest available mode. → `src/ai/LocalAIProvider.ts`, `src/ai/FallbackProvider.ts`, `src/ai/CapabilityDetector.ts`, `src/ai/DeviceAIMode.ts`, `src/services/modeSelectionService.ts`. *(No model = graceful; never a crash.)*
+
+**Step 10 — Local runtimes.** Implement the shared provider contract, then add GGUF through `llama.rn` and Android Gemma 4 through LiteRT-LM. The GGUF path owns stable prompt prefixes, prewarm priming, sampling, stop words, streaming/abort, retries, sanitizer, watchdog, thermal checks, and backend benchmarking. The LiteRT-LM path owns native bridge detection, `.litertlm` loading, bounded activation probing, safe chat/summary calls, and release. → `src/ai/LlamaRnProvider.ts`, `src/ai/llamaRnRuntime.ts`, `src/ai/LiteRtLmProvider.ts`, `src/ai/nativeRuntimeAdapters.ts`, `android/app/src/main/java/com/tupt/haki/HakiLiteRtLmModule.kt`. *(A runtime can be absent without taking down source search.)*
+
+**Step 11 — Model manager and Haki Models UI.** Curate runtime/platform/artifact/size/license/requirements/context/activation metadata plus an immutable revision and expected SHA-256; group cards into **Recommended for this phone**, **Other compatible models**, and conditional **Experimental high-RAM** sections. Stage downloads with pause/resume/recovery, verify integrity, build runtime-aware manifests, run the runtime-specific activation probe, refresh capability selection, and only then set `activeModelId`. → `src/ai/localModelManager.ts`, `src/ai/modelDownloadConfig.ts`, `src/ai/modelCatalog.ts`, `src/ai/localModelMetadata.ts`, `src/ai/localModelRequirements.ts`, `src/ai/deviceHardwareProfile.ts`, `src/ai/storageForecast.ts`, `src/ai/localModelPerformance.ts`, `src/ai/modelActivationState.ts`, `src/utils/fileSha256.ts`, `app/models.tsx`, `src/components/models/ModelCatalogSection.tsx`, `scripts/test-local-model-manager.ts`. *(Downloaded-but-failed artifacts remain installed with a reason and retry; “IN USE” requires file, manifest, runtime, evaluation, active id, and selected provider agreement.)*
+
+**Step 12 — Semantic retrieval (optional).** Embedding provider → polite background backfill → vector + RRF hybrid, keyed by `(chunk_id, model_name)`. → `src/retrieval/VectorRetriever.ts`, `src/retrieval/HybridRetriever.ts`, `src/retrieval/rrf.ts`, `src/db/chunkEmbeddingBackfill.ts`, `src/db/sqliteVec.ts`. *(Meaning-matches improve; absence of embeddings changes nothing.)*
+
+**Step 13 — Memory, voice, polish.** Relevant-only encrypted history, keyed private search terms, actor tracking, voice input, feedback, encrypted bookmarks, share, theme tokens + dark mode, HD mascot, haptics, map game. → `src/services/historyService.ts`, `src/services/privateDataCrypto.ts`, `src/services/conversationStateService.ts`, `src/services/chatPrivacySettingsService.ts`, `src/hooks/useVoiceInput.ts`, `src/services/bookmarkService.ts`, `src/services/shareAnswerService.ts`, `src/theme/palette.ts`, `src/theme/featurePalettes.ts`, `src/theme/themes.ts`, `src/theme/ThemeProvider.tsx`, `src/mascot/hd/HakiHdMascot.tsx`, `src/utils/haptics.ts`, `app/campus-map.tsx`, `src/data/campusMapCollectibles.ts`. *(The product feels finished, not assembled.)*
+
+**Step 14 — Proof.** Wire `npm.cmd run test:all`; APK inspection (no bundled weights); Android Kotlin/debug builds; preview build; on-device checklist (keyboard, streaming, stop, download resume, theme coverage, GGUF `cache_n`, Gemma E2B/E4B activation/chat). → `scripts/inspect-apk-assets.ps1`, `scripts/seed-data-qa.ts`, `scripts/test-edge-cases.ts`, `eas.json`, `vitest.config.ts`. *(Green suite + a phone in your hand that behaves.)*
+
+---
+
+<a name="chapter-10"></a>
+# Chapter 10 — The Lessons, the Glossary, and the Honest Limits
+
+## 10.1 The ten lessons (your study summary)
+
+1. **Decompose until trivial.** Every chapter of this guide — and every small service file — is the same move: split the question until the answer is obvious, then compose.
+2. **Decide what the AI is *not* allowed to do before deciding what it does.** The trust boundary came before any model code.
+3. **Retrieval is the floor; generation is the bonus.** The app is useful with zero models installed.
+4. **Deterministic beats fluent when the cost of error is real.** Official answers are formatted, not generated.
+5. **The model is the least-trusted component in its own pipeline.** Rules before it, bounded prompts inside it, validators after it.
+6. **On-device AI is mostly resource engineering.** Quantization, tiers, token budgets, KV-cache reuse, thread counts, benchmarks, thermal care, leases — the model never changed; the system around it did.
+7. **Measure, don't assume.** Benchmark CPU vs GPU. Log `cache_n`. Trust effective footprints over parameter names. Allow for phones that under-report RAM.
+8. **Centralize policy; scatter nothing.** One router made safety, modes, and language testable.
+9. **Name things by role, not appearance** — colors (`textPrimary`, not `white`), modes (stable ids under friendly names), files (one question each).
+10. **Be willing to delete your cleverest code.** The vector mascot rig was the most sophisticated module in the repo and the right thing to remove. Swappable architecture (one compat component) made that cheap.
+
+## 10.2 Glossary in plain words
+
+| Term | Plain meaning here |
+| --- | --- |
+| Offline-first | Core answers work with no internet and no server |
+| Chunk | An index card cut from a document, with a citation receipt |
+| FTS5 | SQLite's back-of-the-book index for fast text search |
+| Embedding | A sentence's GPS coordinate in meaning-space |
+| RRF | Merge two ranked lists; reward items high on either |
+| Confidence gate | "Is this evidence good enough to show?" — the no-guessing rule |
+| GGUF | The single-file format for local model weights |
+| LiteRT-LM | Google's local language-model runtime used here through an Android native bridge |
+| `.litertlm` | A packaged model artifact consumed by LiteRT-LM; not a GGUF file |
+| Runtime format | The manifest/catalog contract that selects the loader and provider |
+| Activation smoke test | A real bounded generation call required before a downloaded model becomes active |
+| Quantization | Paint-by-numbers compression of weights (~4 bits) |
+| Token | A word-piece; the unit of model memory and speed |
+| Context window | The model's carry-on bag for prompt + answer |
+| Prefill / decode | Reading the prompt / writing the answer, one token at a time |
+| KV cache | The model's margin notes — never reread an unchanged prefix |
+| Prewarm / priming | Loading the model and pre-reading the system rules before the first message |
+| Sampling / temperature | How adventurously the next token is picked |
+| Stop word | The token that means "the answer is finished" |
+| Watchdog | A timer that kills a stalled generation |
+| Inference lease | The sign-out sheet for the one shared model |
+| Tier | A conservative "will it fit this phone" class |
+| Grounding check | Catching campus-fact leaks in generated text |
+| Golden test | Frozen known-correct outputs that fail loudly on drift |
+
+## 10.3 Honest limits (knowing them is senior engineering)
+
+| Limit | Why it matters | Sensible next step |
+| --- | --- | --- |
+| Truth is only as good as the seeded corpus | Retrieval cannot repair stale documents | Document ownership + update pipeline (planned: signed update packages) |
+| Org chart and some display data are samples | Must not read as official | Replace with verified data; keep the SAMPLE badge until then |
+| Vector search scans embeddings in memory | Fine for dozens of chunks, not thousands | Adopt a real vector index when the corpus grows |
+| Tiny models stay tiny | Safeguards bound the harm, not the awkwardness | On-device evals before promoting new catalog models |
+| "Offline AI" starts after one download | Network + storage needed once | Keep source-only mode first-class forever |
+| Apple/GPU paths need physical-device validation | Simulators don't sweat | Device-matrix testing before each release |
+| Gemma 4 support is Android-only | No iOS LiteRT-LM bridge exists in this project | Keep cards hidden on iOS; add and test a real bridge before advertising support |
+| Pinned Gemma hashes depend on upstream repository governance | A matching digest proves the file matches Haki's pinned manifest, not the publisher's identity | Add a signed release manifest or controlled artifact mirror before broad production distribution |
+
+## 10.4 The whole system on one page
+
+```mermaid
+flowchart TD
+    U["student"] --> UI["screens (app/) + chat hook"]
+    UI --> R["answer router — one door for all policy"]
+    R -->|unsafe| FIX["pre-written protective reply"]
+    R -->|campus fact| RET["SQLite + FTS5 (+ vectors) -> rank -> confidence"]
+    RET --> DET["deterministic cited answer"]
+    R -->|support / general| PICK{"selected local provider"}
+    PICK --> GGUF["GGUF via llama.rn<br/>budgets · cache · sampling · watchdog"]
+    PICK --> LRT["Gemma 4 via LiteRT-LM<br/>Android native bridge"]
+    MM["model manager<br/>runtime catalog · tiers · pinned digest · smoke test · lease"] --> PICK
+    GGUF --> G["sanitize · grounding · citation whitelist"]
+    LRT --> G
+    DET --> OUT["answer + sources + provenance"]
+    G --> OUT
+    OUT --> UI
+```
+
+Read it bottom-up one last time: verified data, found honestly, routed deliberately, generated carefully, guarded constantly, shipped with proof. That is the whole of Haki — and now you can build it again.

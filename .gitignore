@@ -28,3 +28,4 @@ tmp/
 .gradle/
 build/
 *.apk
+artifacts/

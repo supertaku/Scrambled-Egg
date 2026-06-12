@@ -6,6 +6,8 @@
 - Local AI providers, model selection, token budgeting, and model download/import logic live in `src/ai/`.
 - Retrieval and source ranking live in `src/retrieval/`; SQLite schema, migrations, and seed loading live in `src/db/`.
 - Student chat orchestration lives mainly in `src/hooks/useChatMessages.ts` and `src/services/answerService.ts`.
+- The mascot is the HD cartoon Haki in `src/mascot/hd/` (one PNG per expression in `assets/images/mascot/`, procedural motion via Reanimated). `HakiMascotCompat` is the status-driven entry point; `src/components/mascot/` keeps only the interaction hook (tap/double-tap/shake) and the `MascotStatus` contract.
+- Theme tokens live in `src/theme/themes.ts` behind `ThemeProvider`/`useTheme()`; the legacy `colors` export is aliased to the light theme, and dark mode stays admin-preview until every screen consumes tokens.
 
 ## Commands
 - Use `npm.cmd` on Windows PowerShell to avoid `npm.ps1` execution-policy failures.

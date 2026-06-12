@@ -12,6 +12,9 @@ android/app/src/main/assets/models/*
 !package.json
 !tsconfig.json
 
+# Machine-specific Android SDK path must never reach the EAS builder.
+android/local.properties
+
 # Standard ignores
 node_modules/
 tmp/
