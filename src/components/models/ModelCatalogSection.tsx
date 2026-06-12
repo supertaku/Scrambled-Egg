@@ -27,6 +27,10 @@ function runtimeLabel(model: CatalogModel): string {
   return model.runtimeFormat === "litert-lm" ? "LiteRT-LM" : "GGUF";
 }
 
+function downloadSizeLabel(sizeMB: number): string {
+  return sizeMB >= 1024 ? `${(sizeMB / 1024).toFixed(2)} GB` : `${Math.round(sizeMB)} MB`;
+}
+
 export function ModelCatalogSection({
   busy,
   catalog,
@@ -64,7 +68,7 @@ export function ModelCatalogSection({
           <View key={model.id} style={styles.modelCard}>
             <Text selectable style={styles.modelName}>{model.name}</Text>
             <Text selectable style={styles.meta}>
-              {runtimeLabel(model)} | About {model.sizeMB} MB | {model.minimumRamGB}GB+ RAM
+              Download: {downloadSizeLabel(model.sizeMB)} | Device RAM: {model.minimumRamGB} GB minimum, {model.recommendedRamGB} GB recommended | {runtimeLabel(model)}
             </Text>
             <Text selectable style={styles.body}>{model.description}</Text>
             {forecast?.summary ? <Text selectable style={styles.forecast}>{forecast.summary}</Text> : null}

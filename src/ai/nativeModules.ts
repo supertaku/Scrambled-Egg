@@ -41,6 +41,7 @@ export interface HakiLocalAIModule {
     streamIdOrTokenCallback: string | ((token: string) => void)
   ) => Promise<Partial<SafeChatResult> | string>;
   cancelGeneration?: (requestId: string) => Promise<boolean>;
+  cancelProcess?: () => Promise<boolean>;
   embedText?: (text: string) => Promise<number[]>;
   isModelTierDownloaded?: (tier: string) => Promise<boolean>;
   release?: () => Promise<void> | void;

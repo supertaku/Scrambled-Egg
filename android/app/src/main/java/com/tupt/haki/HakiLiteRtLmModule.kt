@@ -103,6 +103,11 @@ class HakiLiteRtLmModule(
   }
 
   @ReactMethod
+  fun cancelProcess(promise: Promise) {
+    promise.resolve(cancelActiveGeneration(null))
+  }
+
+  @ReactMethod
   fun release(promise: Promise) {
     cancelActiveGeneration(null)
     synchronized(lock) {

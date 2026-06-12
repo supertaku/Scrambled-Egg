@@ -94,8 +94,8 @@ export default function ModelsScreen() {
     try {
       await action();
       await load(true);
-    } catch {
-      setError("That change did not finish. Please try again.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That change did not finish. Please try again.");
       await load();
     }
   }, [load]);
@@ -164,6 +164,14 @@ export default function ModelsScreen() {
               Campus Haki already answers from the saved campus guide. Download a chat model to unlock Friendly Haki and Campus Haki + Friendly Haki.
             </Text>
             <Text selectable style={styles.meta}>Only downloads suited for this phone are shown.</Text>
+            {catalog && catalog.hardware.memoryGB !== null && catalog.hardware.freeStorageGB !== null ? (
+              <Text selectable style={styles.meta}>
+                This phone reports {catalog.hardware.memoryGB.toFixed(1)} GB total RAM and {catalog.hardware.freeStorageGB.toFixed(1)} GB free storage.
+              </Text>
+            ) : null}
+            <Text selectable style={styles.body}>
+              If Haki feels slow, switch to another downloaded model, or remove this model and install a smaller one.
+            </Text>
             {catalog?.unavailableReason ? <Text selectable style={styles.warning}>Chat downloads are not available on this phone right now.</Text> : null}
             {catalog?.unavailableReason ? (
               <ActionButton

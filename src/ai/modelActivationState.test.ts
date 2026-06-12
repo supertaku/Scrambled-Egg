@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { evaluateModelActivation } from "@/ai/modelActivationState";
+import * as localModelMetadata from "@/ai/localModelMetadata";
 
 const base = {
   activeModelId: "gemma-4-e2b-litert-lm",
@@ -14,6 +15,19 @@ const base = {
 };
 
 describe("model activation truth", () => {
+  it("normalizes activation failures into persisted diagnostic categories", () => {
+    const classify = (localModelMetadata as unknown as {
+      classifyModelEvaluationFailure?: (message: string) => string;
+    }).classifyModelEvaluationFailure;
+
+    expect(typeof classify).toBe("function");
+    expect(classify?.("LiteRT-LM native runtime is unavailable.")).toBe("missing_runtime");
+    expect(classify?.("Activation probe timed out.")).toBe("timeout");
+    expect(classify?.("Activation probe returned an empty response.")).toBe("empty_output");
+    expect(classify?.("OutOfMemoryError while initializing the engine.")).toBe("memory_pressure");
+    expect(classify?.("Model file is missing or corrupt.")).toBe("corrupt_artifact");
+  });
+
   it("does not treat a completed download as ready before smoke testing", () => {
     expect(evaluateModelActivation({ ...base, smokeTestStatus: "pending" })).toEqual({
       ready: false,

@@ -187,6 +187,13 @@ assert.equal(GGUF_MODELS.find((model) => model.id === "gemma-4-e4b-litert-lm")?.
 assert.deepEqual(GGUF_MODELS.find((model) => model.id === "gemma-4-e2b-litert-lm")?.supportedPlatforms, ["android"]);
 assert.ok(GGUF_MODELS.every((model) => model.lifecycleChannel === "supported" || model.lifecycleChannel === "evaluation"));
 assert.equal(GGUF_MODELS.find((model) => model.id === "qwen3-4b")?.generationPolicy?.thinkingMode, "disabled");
+assert.equal(GGUF_MODELS.find((model) => model.id === "phi-4-mini-gguf")?.chatTemplateFamily, "phi");
+assert.equal(GGUF_MODELS.find((model) => model.id === "phi-4-mini-gguf")?.recommendedRamGB, 12);
+assert.equal(GGUF_MODELS.find((model) => model.id === "qwen3-8b")?.minimumRamGB, 12);
+assert.ok(GGUF_MODELS.every((model) => /\/resolve\/[0-9a-f]{40}\//.test(model.url)));
+assert.ok(GGUF_MODELS.every((model) => /^[0-9a-f]{40}$/.test(model.artifactRevision)));
+assert.ok(GGUF_MODELS.every((model) => /^[0-9a-f]{64}$/.test(model.sha256Hex)));
+assert.ok(GGUF_MODELS.every((model) => !model.id.includes("onnx") && !model.runtimeFormat.includes("onnx")));
 
 function compatibleCatalogIds(hardware: DeviceHardwareProfile): string[] {
   return GGUF_MODELS.filter((model) => catalogDownloadFitsHardwareForDownload(model, hardware)).map((model) => model.id);
@@ -204,7 +211,8 @@ assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 8 }), [
   "gemma-4-e4b-litert-lm",
   "llama-3.2-3b",
   "qwen-2.5-3b",
-  "qwen3-4b"
+  "qwen3-4b",
+  "phi-4-mini-gguf"
 ]);
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 7.1 }), [
   "qwen-2.5-0.5b",
@@ -221,7 +229,9 @@ assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 12 }), [
   "llama-3.2-3b",
   "qwen-2.5-3b",
   "qwen3-4b",
-  "qwen-2.5-7b"
+  "phi-4-mini-gguf",
+  "qwen-2.5-7b",
+  "qwen3-8b"
 ]);
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 8, freeStorageGB: 8 }), [
   "qwen-2.5-0.5b",
@@ -233,7 +243,7 @@ assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 8, freeStor
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, lowMemory: true }), []);
 assert.deepEqual(
   compatibleCatalogIds({ ...capableAndroid, platform: "ios", supportedAbis: ["arm64"], architecture: "arm64", lowMemory: false }),
-  ["qwen-2.5-0.5b", "llama-3.2-1b", "llama-3.2-3b", "qwen-2.5-3b", "qwen3-4b"]
+  ["qwen-2.5-0.5b", "llama-3.2-1b", "llama-3.2-3b", "qwen-2.5-3b", "qwen3-4b", "phi-4-mini-gguf"]
 );
 
 const openClCandidates = executionCandidatesForHardware({
@@ -330,7 +340,16 @@ const manifestInput: BuildManifestInput = {
   hardware: capableAndroid,
   now: "2026-05-06T00:00:00.000Z"
 };
-const manifest = buildLocalModelManifest(manifestInput);
+const manifest = buildLocalModelManifest({
+  ...manifestInput,
+  artifactRevision: "7ff82c2aaa4dde30121698a973765f39be5288c0",
+  artifactSha256: "01999f17c39cc3074afae5e9c539bc82d45f2dd7faa3917c66cbef76fce8c0c2",
+  minimumRamGB: 8,
+  recommendedRamGB: 12,
+  minimumFreeStorageGB: 6,
+  requiredArchitecture: "arm64",
+  fallbackModelIds: ["qwen3-4b"]
+} as BuildManifestInput & Record<string, unknown>);
 assert.equal(manifest.fileHashAlgorithm, "md5");
 assert.equal(manifest.runtimeFormat, "gguf");
 assert.equal(manifest.activationPolicy, "auto-after-smoke-test");
@@ -339,6 +358,13 @@ assert.equal(manifest.downloadId, "qwen3-0.6b");
 assert.equal(manifest.chatTemplate?.status, "unknown");
 assert.equal(manifest.rejectionReasons.length, 0);
 assert.equal(manifest.recommendedModelTier, "good");
+assert.equal(manifest.artifactRevision, "7ff82c2aaa4dde30121698a973765f39be5288c0");
+assert.equal(manifest.artifactSha256, "01999f17c39cc3074afae5e9c539bc82d45f2dd7faa3917c66cbef76fce8c0c2");
+assert.equal(manifest.minimumRamGB, 8);
+assert.equal(manifest.recommendedRamGB, 12);
+assert.equal(manifest.minimumFreeStorageGB, 6);
+assert.equal(manifest.requiredArchitecture, "arm64");
+assert.deepEqual(manifest.fallbackModelIds, ["qwen3-4b"]);
 assert.equal(modelPerformanceKey(manifest), "abc123");
 assert.equal(modelPerformanceKey({ ...manifest, fileHash: null }), `${manifest.uri}:${manifest.sizeBytes}`);
 
@@ -433,6 +459,13 @@ assert.match(localModelManagerSource, /probeLiteRtLmActivation/);
 assert.match(localModelManagerSource, /evaluationStatus/);
 assert.match(localModelManagerSource, /runtimeAvailability/);
 assert.match(localModelManagerSource, /catalogModel \? \{ modelTier: catalogModel\.tier \} : \{\}/);
+
+const liteRtNativeSource = readFileSync(
+  new URL("../android/app/src/main/java/com/tupt/haki/HakiLiteRtLmModule.kt", import.meta.url),
+  "utf8"
+);
+assert.match(liteRtNativeSource, /fun cancelProcess\(/);
+assert.match(liteRtNativeSource, /fun release\(/);
 
 const hakiStatusSource = readFileSync(new URL("../src/components/models/ModelOperationHaki.tsx", import.meta.url), "utf8");
 assert.match(hakiStatusSource, /The download is complete\. I'm checking the file before using it\./);

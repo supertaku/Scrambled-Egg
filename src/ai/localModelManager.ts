@@ -21,6 +21,7 @@ import {
   type LocalModelMetadata,
   type LocalModelRole
 } from "./localModelMetadata";
+import { evaluatedManifest, localFilePathFromUri, nativeSafeChatText, withActivationTimeout } from "./modelActivationProbe";
 import { catalogDownloadFitsHardwareForDownload } from "./modelCatalog";
 import { GGUF_MODELS, type GgufDownloadConfig, type ModelRuntimeFormat, type RuntimeAvailability } from "./modelDownloadConfig";
 import { getLiteRtLmNativeModule } from "./nativeModules";
@@ -630,8 +631,13 @@ async function buildManifestForFile(input: {
     activationPolicy: catalogModel?.activationPolicy ?? "auto-after-smoke-test",
     artifactSource: catalogModel?.artifactSource,
     artifactLicense: catalogModel?.artifactLicense,
+    artifactRevision: catalogModel?.artifactRevision,
+    artifactSha256: catalogModel?.sha256Hex,
     minimumRamGB: catalogModel?.minimumRamGB,
+    recommendedRamGB: catalogModel?.recommendedRamGB,
     minimumFreeStorageGB: catalogModel?.minimumFreeStorageGB,
+    requiredArchitecture: catalogModel?.requiredArchitecture,
+    fallbackModelIds: catalogModel?.fallbackModelIds,
     defaultContextTokens: catalogModel?.defaultContextTokens,
     maxContextTokens: catalogModel?.maxContextTokens
   });
@@ -665,6 +671,27 @@ async function refreshInstalledManifest(entry: InstalledChatModel): Promise<Loca
     artifactFiles: manifest.artifactFiles ?? [manifest.uri],
     evaluationStatus: manifest.evaluationStatus ?? (runtimeFormat === "litert-lm" ? "pending" : "not_required"),
     activationPolicy: catalogModel?.activationPolicy ?? manifest.activationPolicy ?? "auto-after-smoke-test",
+    ...((catalogModel?.artifactRevision ?? manifest.artifactRevision)
+      ? { artifactRevision: catalogModel?.artifactRevision ?? manifest.artifactRevision! }
+      : {}),
+    ...((catalogModel?.sha256Hex ?? manifest.artifactSha256)
+      ? { artifactSha256: catalogModel?.sha256Hex ?? manifest.artifactSha256! }
+      : {}),
+    ...((catalogModel?.minimumRamGB ?? manifest.minimumRamGB) !== undefined
+      ? { minimumRamGB: catalogModel?.minimumRamGB ?? manifest.minimumRamGB! }
+      : {}),
+    ...((catalogModel?.recommendedRamGB ?? manifest.recommendedRamGB) !== undefined
+      ? { recommendedRamGB: catalogModel?.recommendedRamGB ?? manifest.recommendedRamGB! }
+      : {}),
+    ...((catalogModel?.minimumFreeStorageGB ?? manifest.minimumFreeStorageGB) !== undefined
+      ? { minimumFreeStorageGB: catalogModel?.minimumFreeStorageGB ?? manifest.minimumFreeStorageGB! }
+      : {}),
+    ...((catalogModel?.requiredArchitecture ?? manifest.requiredArchitecture)
+      ? { requiredArchitecture: catalogModel?.requiredArchitecture ?? manifest.requiredArchitecture! }
+      : {}),
+    ...((catalogModel?.fallbackModelIds ?? manifest.fallbackModelIds)
+      ? { fallbackModelIds: catalogModel?.fallbackModelIds ?? manifest.fallbackModelIds! }
+      : {}),
     ...((catalogModel?.defaultContextTokens ?? manifest.defaultContextTokens) !== undefined
       ? { defaultContextTokens: catalogModel?.defaultContextTokens ?? manifest.defaultContextTokens! }
       : {}),
@@ -793,41 +820,19 @@ async function probeModelLoad(manifest: LocalModelManifest): Promise<LocalModelM
   return updated;
 }
 
-function filePathFromUri(uri: string): string {
-  return uri.startsWith("file://") ? decodeURIComponent(uri.slice("file://".length)) : uri;
-}
-
-function nativeSafeChatText(result: unknown): string {
-  if (typeof result === "string") return result.trim();
-  if (!result || typeof result !== "object") return "";
-  const record = result as { text?: unknown; answer?: unknown; response?: unknown; message?: unknown };
-  for (const value of [record.text, record.answer, record.response, record.message]) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  const timer = new Promise<never>((_, reject) => {
-    timeout = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-  });
-  return Promise.race([promise, timer]).finally(() => {
-    if (timeout) clearTimeout(timeout);
-  });
-}
-
-function writeEvaluation(manifest: LocalModelManifest, passed: boolean, failureReason: string | null): LocalModelManifest {
-  const updated: LocalModelManifest = {
-    ...manifest,
-    evaluationStatus: passed ? "passed" : "failed",
-    lastEvaluation: { evaluatedAt: now(), passed, failureReason }
-  };
+function writeEvaluation(
+  manifest: LocalModelManifest,
+  passed: boolean,
+  failureReason: string | null,
+  startedAt: number
+): LocalModelManifest {
+  const updated = evaluatedManifest(manifest, passed, failureReason, startedAt, now());
   new File(manifest.manifestPath).write(JSON.stringify(updated, null, 2));
   return updated;
 }
 
 async function probeLiteRtLmActivation(manifest: LocalModelManifest): Promise<LocalModelManifest> {
+  const startedAt = Date.now();
   const nativeModule = getLiteRtLmNativeModule();
   const missingRuntime = "LiteRT-LM native runtime is unavailable. Install an updated Android build before using Gemma.";
   try {
@@ -835,9 +840,9 @@ async function probeLiteRtLmActivation(manifest: LocalModelManifest): Promise<Lo
     if (nativeModule.isRuntimeAvailable && (await nativeModule.isRuntimeAvailable()) !== true) {
       throw new Error(missingRuntime);
     }
-    const result = await withTimeout(
+    const result = await withActivationTimeout(
       nativeModule.answerSafeChat({
-        modelPath: filePathFromUri(manifest.uri),
+        modelPath: localFilePathFromUri(manifest.uri),
         question: "Reply with exactly: Haki ready.",
         instruction: "You are Haki. Answer in English only.",
         appContext: "Local activation probe. Return a short confirmation only.",
@@ -851,17 +856,28 @@ async function probeLiteRtLmActivation(manifest: LocalModelManifest): Promise<Lo
       "LiteRT-LM activation probe timed out."
     );
     if (!nativeSafeChatText(result)) throw new Error("LiteRT-LM activation probe returned an empty response.");
-    return writeEvaluation(manifest, true, null);
+    return writeEvaluation(manifest, true, null, startedAt);
   } catch (error) {
     const raw = error instanceof Error ? error.message : "LiteRT-LM activation probe failed.";
     const reason = /e4b|4b/i.test(`${manifest.modelName} ${manifest.originalName}`)
       ? `${raw} Try Gemma 4 E2B or a smaller GGUF model.`
       : raw;
-    writeEvaluation(manifest, false, reason);
+    writeEvaluation(manifest, false, reason, startedAt);
     const library = readLibrary();
     const entry = library.installedModels.find((item) => item.manifestUri === manifest.manifestPath);
     if (entry) writeLibrary(updateInstalledEntry(library, { ...entry, rejectionReasons: [reason] }));
     throw new Error(reason);
+  }
+}
+
+async function probeGgufActivation(manifest: LocalModelManifest): Promise<LocalModelManifest> {
+  const startedAt = Date.now();
+  try {
+    return writeEvaluation(await probeModelLoad(manifest), true, null, startedAt);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "GGUF activation probe failed.";
+    writeEvaluation(manifest, false, reason, startedAt);
+    throw error;
   }
 }
 
@@ -879,7 +895,7 @@ async function activateInstalledModelInternal(modelId: string, operationId: stri
     if ((manifest.runtimeFormat ?? "gguf") === "litert-lm") {
       manifest = await probeLiteRtLmActivation(manifest);
     } else {
-      manifest = await probeModelLoad(manifest);
+      manifest = await probeGgufActivation(manifest);
     }
     writeLibrary({ ...readLibrary(), activeModelId: modelId });
     return statusFromManifest(manifest);

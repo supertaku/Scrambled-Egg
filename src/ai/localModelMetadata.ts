@@ -159,6 +159,32 @@ export interface LocalModelEvaluationSummary {
   evaluatedAt: string;
   passed: boolean;
   failureReason: string | null;
+  durationMs?: number;
+  failureCategory?: LocalModelEvaluationFailureCategory | null;
+}
+
+export type LocalModelEvaluationFailureCategory =
+  | "missing_runtime"
+  | "corrupt_artifact"
+  | "unsupported_architecture"
+  | "initialization_failed"
+  | "memory_pressure"
+  | "timeout"
+  | "empty_output"
+  | "canceled"
+  | "unknown";
+
+export function classifyModelEvaluationFailure(message: string): LocalModelEvaluationFailureCategory {
+  const normalized = message.trim().toLowerCase();
+  if (/runtime.*unavailable|missing.*runtime|does not include.*runtime/.test(normalized)) return "missing_runtime";
+  if (/outofmemory|out of memory|memory pressure|low-memory|low memory/.test(normalized)) return "memory_pressure";
+  if (/timed out|timeout/.test(normalized)) return "timeout";
+  if (/empty (response|output)|returned.*empty/.test(normalized)) return "empty_output";
+  if (/cancel/.test(normalized)) return "canceled";
+  if (/arm64|architecture|unsupported abi/.test(normalized)) return "unsupported_architecture";
+  if (/corrupt|integrity|checksum|sha-?256|model file is missing/.test(normalized)) return "corrupt_artifact";
+  if (/initializ|failed to load|engine/.test(normalized)) return "initialization_failed";
+  return "unknown";
 }
 
 /**
@@ -215,6 +241,8 @@ export interface LocalModelManifest {
   runtimeFormat?: LocalModelRuntimeFormat;
   artifactEntrypointUri?: string;
   artifactFiles?: string[];
+  artifactRevision?: string;
+  artifactSha256?: string;
   sizeBytes: number;
   fileHash: string | null;
   fileHashAlgorithm: "md5" | null;
@@ -238,6 +266,11 @@ export interface LocalModelManifest {
   maxContextTokens?: number;
   artifactSource?: string;
   artifactLicense?: string;
+  minimumRamGB?: number;
+  recommendedRamGB?: number;
+  minimumFreeStorageGB?: number;
+  requiredArchitecture?: "arm64";
+  fallbackModelIds?: string[];
   rawInfo?: Record<string, unknown>;
 }
 
@@ -282,6 +315,11 @@ export interface BuildManifestInput {
   maxContextTokens?: number | undefined;
   artifactSource?: string | undefined;
   artifactLicense?: string | undefined;
+  artifactRevision?: string | undefined;
+  artifactSha256?: string | undefined;
+  recommendedRamGB?: number | undefined;
+  requiredArchitecture?: "arm64" | undefined;
+  fallbackModelIds?: string[] | undefined;
 }
 
 export function canonicalModelFileName(role: LocalModelRole): string {
@@ -661,7 +699,7 @@ export function validateImportedModel(input: {
   if (input.role === "chat" && tierRequirements) {
     const minimumRamGB = input.minimumRamGB ?? tierRequirements.minimumRamGB;
     const minimumFreeStorageGB = input.minimumFreeStorageGB ?? tierRequirements.minimumFreeStorageGB;
-    const runtimeRamToleranceGB = runtimeFormat === "litert-lm" && minimumRamGB >= 8 ? 1 : MODEL_RAM_TOLERANCE_GB;
+    const runtimeRamToleranceGB = input.minimumRamGB === undefined ? MODEL_RAM_TOLERANCE_GB : 0;
     if (hardware.memoryGB === null) {
       reasons.push("Device RAM could not be detected, so Haki cannot safely activate this model.");
     } else if (hardware.memoryGB < minimumRamGB - runtimeRamToleranceGB) {
@@ -707,6 +745,8 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
     runtimeFormat: input.runtimeFormat ?? "gguf",
     artifactEntrypointUri: input.uri,
     artifactFiles: [input.uri],
+    ...(input.artifactRevision ? { artifactRevision: input.artifactRevision } : {}),
+    ...(input.artifactSha256 ? { artifactSha256: input.artifactSha256 } : {}),
     sizeBytes: input.sizeBytes,
     fileHash: input.fileHash,
     fileHashAlgorithm: input.fileHash ? "md5" : null,
@@ -728,6 +768,11 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
     ...(input.maxContextTokens ? { maxContextTokens: input.maxContextTokens } : {}),
     ...(input.artifactSource ? { artifactSource: input.artifactSource } : {}),
     ...(input.artifactLicense ? { artifactLicense: input.artifactLicense } : {}),
+    ...(input.minimumRamGB !== undefined ? { minimumRamGB: input.minimumRamGB } : {}),
+    ...(input.recommendedRamGB !== undefined ? { recommendedRamGB: input.recommendedRamGB } : {}),
+    ...(input.minimumFreeStorageGB !== undefined ? { minimumFreeStorageGB: input.minimumFreeStorageGB } : {}),
+    ...(input.requiredArchitecture ? { requiredArchitecture: input.requiredArchitecture } : {}),
+    ...(input.fallbackModelIds ? { fallbackModelIds: input.fallbackModelIds } : {}),
     ...(input.metadata.rawInfo ? { rawInfo: input.metadata.rawInfo } : {})
   };
 }

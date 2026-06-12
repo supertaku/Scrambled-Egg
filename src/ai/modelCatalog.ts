@@ -6,6 +6,7 @@ type CatalogModel = {
   activationPolicy?: "auto-after-smoke-test" | "manual";
   minimumFreeStorageGB?: number;
   minimumRamGB?: number;
+  requiredArchitecture?: "arm64";
   runtimeFormat?: ModelRuntimeFormat;
   sizeMB: number;
   supportedPlatforms?: Array<"android" | "ios">;
@@ -29,16 +30,17 @@ function fitsHardware(
   const runtimeFormat = model.runtimeFormat ?? "gguf";
   const runtimeAvailable = options.ignoreRuntime || (options.runtimeAvailability?.[runtimeFormat] ?? runtimeFormat === "gguf");
   const supportsPlatform = model.supportedPlatforms?.includes(hardware.platform as "android" | "ios") ?? false;
-  if (!requirements || !runtimeAvailable || !supportsPlatform || !hardware.supportedAbis.some((abi) => /arm64|aarch64/i.test(abi))) {
+  const supportsArchitecture = model.requiredArchitecture !== "arm64" ||
+    hardware.supportedAbis.some((abi) => /arm64|aarch64/i.test(abi));
+  if (!requirements || !runtimeAvailable || !supportsPlatform || !supportsArchitecture) {
     return false;
   }
   if (hardware.memoryGB === null || hardware.freeStorageGB === null || hardware.lowMemory === true) return false;
 
   const minimumRamGB = model.minimumRamGB ?? requirements.minimumRamGB;
   const minimumFreeStorageGB = model.minimumFreeStorageGB ?? requirements.minimumFreeStorageGB;
-  const ramToleranceGB = runtimeFormat === "litert-lm" && minimumRamGB >= 8 ? 1 : 0;
   return (
-    hardware.memoryGB + ramToleranceGB >= minimumRamGB &&
+    hardware.memoryGB >= minimumRamGB &&
     hardware.freeStorageGB >= minimumFreeStorageGB + model.sizeMB / 1024
   );
 }
