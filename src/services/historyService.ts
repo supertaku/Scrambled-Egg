@@ -235,6 +235,8 @@ async function runMemorySearch(ftsQuery: string): Promise<ConversationMemoryRow[
       m.scenario,
       m.route,
       m.source_scope_json,
+      -- question/answer/scenario hold ciphertext, so only the keywords column
+      -- (HMAC token fingerprints) actually matches; its weight is what ranks.
       bm25(conversation_memory_fts, 8.0, 4.0, 2.0, 3.0) AS score
     FROM conversation_memory_fts
     JOIN conversation_memory m ON m.id = conversation_memory_fts.rowid

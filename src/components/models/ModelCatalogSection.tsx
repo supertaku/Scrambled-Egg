@@ -77,6 +77,9 @@ export function ModelCatalogSection({
             {model.activationPolicy === "manual" ? (
               <Text selectable style={styles.notice}>Experimental: manual activation is required after the on-device smoke test.</Text>
             ) : null}
+            {model.lifecycleChannel === "evaluation" ? (
+              <Text selectable style={styles.notice}>In evaluation: this model activates only after it passes the on-device smoke test.</Text>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               disabled={Boolean(reason) || selectedOperation || busy || operation?.phase === "paused"}

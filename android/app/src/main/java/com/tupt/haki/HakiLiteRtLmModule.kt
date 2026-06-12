@@ -1,13 +1,13 @@
 package com.tupt.haki
 
 import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.Callback
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.io.File
 import java.lang.reflect.Proxy
 import java.util.concurrent.Executors
@@ -26,7 +26,7 @@ class HakiLiteRtLmModule(
   private data class ActiveGeneration(
     val requestId: String,
     val promise: Promise,
-    val onToken: Callback?,
+    val emitTokens: Boolean,
     val output: StringBuilder = StringBuilder(),
     var conversation: AutoCloseable? = null,
     var completed: Boolean = false
@@ -70,7 +70,7 @@ class HakiLiteRtLmModule(
 
   @ReactMethod
   fun summarizeFromSources(input: ReadableMap, promise: Promise) {
-    startGeneration(input, promise, null, "E_HAKI_LITERT_SUMMARY", "LiteRT-LM summarization failed.") {
+    startGeneration(input, promise, false, "E_HAKI_LITERT_SUMMARY", "LiteRT-LM summarization failed.") {
       val instruction = stringValue(input, "instruction")
       val question = stringValue(input, "question")
       val sources = sourceBlock(arrayValue(input, "sources"))
@@ -85,16 +85,30 @@ class HakiLiteRtLmModule(
 
   @ReactMethod
   fun answerSafeChat(input: ReadableMap, promise: Promise) {
-    startGeneration(input, promise, null, "E_HAKI_LITERT_CHAT", "LiteRT-LM safe chat failed.") {
+    startGeneration(input, promise, false, "E_HAKI_LITERT_CHAT", "LiteRT-LM safe chat failed.") {
+      safeChatPrompt(input)
+    }
+  }
+
+  // Token deltas are emitted as TOKEN_EVENT_NAME device events keyed by
+  // requestId rather than through a bridge Callback: legacy-bridge Callbacks
+  // permit a single invocation, so a per-token Callback silently drops every
+  // delta after the first. The promise still resolves with the full text.
+  @ReactMethod
+  fun streamSafeChat(input: ReadableMap, promise: Promise) {
+    startGeneration(input, promise, true, "E_HAKI_LITERT_CHAT", "LiteRT-LM safe chat failed.") {
       safeChatPrompt(input)
     }
   }
 
   @ReactMethod
-  fun streamSafeChat(input: ReadableMap, onToken: Callback, promise: Promise) {
-    startGeneration(input, promise, onToken, "E_HAKI_LITERT_CHAT", "LiteRT-LM safe chat failed.") {
-      safeChatPrompt(input)
-    }
+  fun addListener(@Suppress("UNUSED_PARAMETER") eventName: String) {
+    // Required by NativeEventEmitter; events flow through RCTDeviceEventEmitter.
+  }
+
+  @ReactMethod
+  fun removeListeners(@Suppress("UNUSED_PARAMETER") count: Double) {
+    // Required by NativeEventEmitter; events flow through RCTDeviceEventEmitter.
   }
 
   @ReactMethod
@@ -123,7 +137,7 @@ class HakiLiteRtLmModule(
   private fun startGeneration(
     input: ReadableMap,
     promise: Promise,
-    onToken: Callback?,
+    emitTokens: Boolean,
     errorCode: String,
     errorMessage: String,
     promptFactory: () -> String
@@ -139,7 +153,7 @@ class HakiLiteRtLmModule(
         promise.reject("E_HAKI_LITERT_BUSY", "LiteRT-LM is already generating a response.")
         null
       } else {
-        ActiveGeneration(requestId, promise, onToken).also { activeGeneration = it }
+        ActiveGeneration(requestId, promise, emitTokens).also { activeGeneration = it }
       }
     } ?: return
 
@@ -248,9 +262,14 @@ class HakiLiteRtLmModule(
       generation.output.append(next)
       next
     }
-    if (delta.isNotEmpty()) {
+    if (delta.isNotEmpty() && generation.emitTokens) {
       try {
-        generation.onToken?.invoke(delta)
+        val params = Arguments.createMap()
+        params.putString("requestId", generation.requestId)
+        params.putString("token", delta)
+        reactContext
+          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+          .emit(TOKEN_EVENT_NAME, params)
       } catch (_: Throwable) {
         // A detached JS listener must not terminate native generation.
       }
@@ -471,6 +490,7 @@ class HakiLiteRtLmModule(
   }
 
   private companion object {
+    private const val TOKEN_EVENT_NAME = "HakiLiteRtLmToken"
     private const val BACKEND_CLASS = "com.google.ai.edge.litertlm.Backend"
     private const val BACKEND_CPU_CLASS = "com.google.ai.edge.litertlm.Backend\$CPU"
     private const val CONTENT_TEXT_CLASS = "com.google.ai.edge.litertlm.Content\$Text"

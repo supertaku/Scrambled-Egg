@@ -1,3 +1,5 @@
+import { DeviceEventEmitter } from "react-native";
+
 import type {
   LocalAICapabilities,
   LocalAIProvider,
@@ -17,6 +19,8 @@ import { coerceNativeSafeChatResult, coerceNativeSummaryResult } from "./provide
 import { safeInputBudgetTokens, safeOutputTokens } from "./tokenBudget";
 
 const LITERT_GENERATION_DEADLINE_MS = 120_000;
+// Per-token stream events from HakiLiteRtLmModule; payload { requestId, token }.
+const LITERT_TOKEN_EVENT = "HakiLiteRtLmToken";
 let nextRequestSequence = 0;
 
 function nextRequestId(): string {
@@ -233,14 +237,22 @@ export class LiteRtLmProvider implements LocalAIProvider {
         requestId,
         totalDeadlineMs: LITERT_GENERATION_DEADLINE_MS
       });
+      // Deltas arrive as device events keyed by requestId (a bridge Callback
+      // can only fire once); the awaited promise returns the complete text.
+      const tokenSubscription = DeviceEventEmitter.addListener(
+        LITERT_TOKEN_EVENT,
+        (event: { requestId?: string; token?: string }) => {
+          if (event?.requestId !== requestId || !event.token) return;
+          if (!abortSignal?.aborted && !guard.reason) onToken(event.token);
+        }
+      );
       guard.start();
       try {
-        const result = await streamSafeChat(
-          { ...nativeInput, modelPath: filePathFromUri(manifest.uri), requestId },
-          (token) => {
-            if (!abortSignal?.aborted && !guard.reason) onToken(token);
-          }
-        );
+        const result = await streamSafeChat({
+          ...nativeInput,
+          modelPath: filePathFromUri(manifest.uri),
+          requestId
+        });
         if (guard.reason || abortSignal?.aborted) {
           return {
             status: "incomplete",
@@ -251,6 +263,7 @@ export class LiteRtLmProvider implements LocalAIProvider {
         }
         return coerceNativeSafeChatResult(result, this.id, this.name);
       } finally {
+        tokenSubscription.remove();
         guard.stop();
       }
     }));

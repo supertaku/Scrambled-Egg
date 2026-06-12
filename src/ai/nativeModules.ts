@@ -36,9 +36,13 @@ export interface HakiLocalAIModule {
   }>>;
   summarizeFromSources?: (input: SummarizeFromSourcesInput & { modelPath?: string; requestId?: string }) => Promise<Partial<LocalSummaryResult> | string>;
   answerSafeChat?: (input: Omit<SafeChatInput, "abortSignal"> & { modelPath?: string; requestId?: string }) => Promise<Partial<SafeChatResult> | string>;
+  // Apple Foundation Models (expo-modules) streams through the callback
+  // argument. The Android LiteRT-LM module ignores it and emits per-token
+  // "HakiLiteRtLmToken" device events keyed by requestId instead, because
+  // legacy-bridge Callbacks only permit a single invocation.
   streamSafeChat?: (
     input: Omit<SafeChatInput, "abortSignal"> & { modelPath?: string; requestId?: string },
-    streamIdOrTokenCallback: string | ((token: string) => void)
+    streamIdOrTokenCallback?: string | ((token: string) => void)
   ) => Promise<Partial<SafeChatResult> | string>;
   cancelGeneration?: (requestId: string) => Promise<boolean>;
   cancelProcess?: () => Promise<boolean>;

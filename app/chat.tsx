@@ -249,7 +249,7 @@ export default function ChatScreen() {
   // Input helpers
 
   const trimmedDraft = draft.trim();
-  const canSend = trimmedDraft.length >= 3 && !loading && !initializing;
+  const canSend = trimmedDraft.length >= 2 && !loading && !initializing;
   const generatedModesAvailable = Boolean(aiMode?.capabilities.safeChat);
   const showSuggestedQuestions = messages.length === 1 && !loading && !initializing;
   const displayedMessages = useMemo(

@@ -210,8 +210,10 @@ export function useChatMessages(
 
     if (inFlightRef.current) return;
 
-    if (question.length < 3) {
-      setError("Type at least 3 characters so Haki has enough context.");
+    // 2 characters keeps greetings like "hi" working (the greeting scenario
+    // answers them deterministically) while still blocking stray keystrokes.
+    if (question.length < 2) {
+      setError("Type at least 2 characters so Haki has enough context.");
       return;
     }
 
