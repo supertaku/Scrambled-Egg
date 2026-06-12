@@ -1,4 +1,5 @@
 import type { DeviceThermalState, LocalModelPerformanceProfile, LocalModelTier } from "./LocalAIProvider";
+import type { ModelActivationPolicy, ModelRuntimeFormat } from "./modelDownloadConfig";
 import type { NormalizedPlatform } from "./providerUtils";
 
 const ANDROID_MODEL_TIER_ORDER = ["tiny", "minimum", "good", "enhanced", "flagship"] as const;
@@ -141,6 +142,7 @@ export interface DeviceHardwareProfile {
   memoryGB: number | null;
   memoryClass: string | null;
   lowMemory: boolean | null;
+  cpuCoreCount: number | null;
   freeStorageGB: number | null;
   backendDevices: string[];
   thermalState?: DeviceThermalState;
@@ -149,6 +151,23 @@ export interface DeviceHardwareProfile {
 export interface LocalModelGenerationPolicy {
   thinkingMode?: "disabled";
 }
+
+export type LocalModelRuntimeFormat = ModelRuntimeFormat;
+export type LocalModelEvaluationStatus = "not_required" | "pending" | "passed" | "failed";
+
+export interface LocalModelEvaluationSummary {
+  evaluatedAt: string;
+  passed: boolean;
+  failureReason: string | null;
+}
+
+/**
+ * Reported RAM is always a little below the marketing figure (an "8GB"
+ * phone reports ~7.x GB), so tier checks allow this much slack. Applies to
+ * catalog visibility and manual activation only — automatic tier
+ * recommendations stay conservative.
+ */
+export const MODEL_RAM_TOLERANCE_GB = 1;
 
 export function catalogDownloadFitsHardware(
   model: { tier: LocalModelTier; sizeMB: number; supportedPlatforms?: Array<"android" | "ios"> },
@@ -169,7 +188,10 @@ export function catalogDownloadFitsHardware(
     return false;
   }
   const requiredBeforeDownload = requirements.minimumFreeStorageGB + model.sizeMB / 1024;
-  return hardware.memoryGB >= requirements.minimumRamGB && hardware.freeStorageGB >= requiredBeforeDownload;
+  return (
+    hardware.memoryGB >= requirements.minimumRamGB - MODEL_RAM_TOLERANCE_GB &&
+    hardware.freeStorageGB >= requiredBeforeDownload
+  );
 }
 
 export interface LocalModelMetadata {
@@ -182,7 +204,7 @@ export interface LocalModelMetadata {
 }
 
 export interface LocalModelManifest {
-  version: 1;
+  version: 1 | 2;
   role: LocalModelRole;
   source?: "bundled" | "downloaded" | "imported" | "legacy-bundled" | "admin-imported" | undefined;
   sourceId?: string | undefined;
@@ -190,6 +212,9 @@ export interface LocalModelManifest {
   originalName: string;
   storedName: string;
   uri: string;
+  runtimeFormat?: LocalModelRuntimeFormat;
+  artifactEntrypointUri?: string;
+  artifactFiles?: string[];
   sizeBytes: number;
   fileHash: string | null;
   fileHashAlgorithm: "md5" | null;
@@ -206,6 +231,11 @@ export interface LocalModelManifest {
   rejectionReasons: string[];
   generationPolicy?: LocalModelGenerationPolicy;
   executionProfile?: LocalModelPerformanceProfile;
+  evaluationStatus?: LocalModelEvaluationStatus;
+  lastEvaluation?: LocalModelEvaluationSummary | null;
+  activationPolicy?: ModelActivationPolicy;
+  defaultContextTokens?: number;
+  maxContextTokens?: number;
   artifactSource?: string;
   artifactLicense?: string;
   rawInfo?: Record<string, unknown>;
@@ -242,7 +272,14 @@ export interface BuildManifestInput {
   metadata: LocalModelMetadata;
   hardware: DeviceHardwareProfile;
   now: string;
+  runtimeFormat?: LocalModelRuntimeFormat | undefined;
   generationPolicy?: LocalModelGenerationPolicy | undefined;
+  evaluationStatus?: LocalModelEvaluationStatus | undefined;
+  activationPolicy?: ModelActivationPolicy | undefined;
+  minimumRamGB?: number | undefined;
+  minimumFreeStorageGB?: number | undefined;
+  defaultContextTokens?: number | undefined;
+  maxContextTokens?: number | undefined;
   artifactSource?: string | undefined;
   artifactLicense?: string | undefined;
 }
@@ -509,6 +546,22 @@ export function inferChatTemplateValidation(input: {
   };
 }
 
+/**
+ * Gemma 3n MatFormer models report raw parameter counts (~5.4B for E2B,
+ * ~6.9B for E4B) but run with much smaller effective footprints thanks to
+ * per-layer embeddings — Google sizes them as 2B/4B-class models. Without
+ * this correction they land in the 12GB-RAM "enhanced" tier and get
+ * rejected on the exact phones they were designed for.
+ */
+function effectiveParameterCountB(nameA: string, nameB: string, rawCountB: number | null): number | null {
+  const combined = `${nameA} ${nameB}`.toLowerCase();
+  if (/gemma[\s_-]?3n|gemma3n/.test(combined) || /\be[24]b\b/.test(combined)) {
+    if (/e2b/.test(combined)) return 2;
+    if (/e4b/.test(combined)) return 4;
+  }
+  return rawCountB;
+}
+
 export function deriveModelMetadata(input: {
   originalName: string;
   modelInfo?: unknown;
@@ -517,10 +570,13 @@ export function deriveModelMetadata(input: {
   const infoName = firstStringFromInfo(rawInfo, [/general\.name$/i, /model\.name$/i, /name$/i]);
   const modelName = infoName?.trim() || input.originalName.trim();
   const rawParameterCount = firstNumberFromInfo(rawInfo, [/n_?params$/i, /parameter.*count/i, /params$/i]);
-  const modelParameterCountB =
+  const modelParameterCountB = effectiveParameterCountB(
+    modelName,
+    input.originalName,
     normalizeParameterCount(rawParameterCount) ??
-    parseParameterCountBFromText(modelName) ??
-    parseParameterCountBFromText(input.originalName);
+      parseParameterCountBFromText(modelName) ??
+      parseParameterCountBFromText(input.originalName)
+  );
   const fileType = firstStringFromInfo(rawInfo, [/file.*type/i, /quant/i]);
   const modelQuantization =
     parseQuantizationFromText(fileType) ??
@@ -565,12 +621,18 @@ export function validateImportedModel(input: {
   metadata: LocalModelMetadata;
   sizeBytes: number | null;
   hardware: DeviceHardwareProfile;
+  runtimeFormat?: LocalModelRuntimeFormat;
+  minimumRamGB?: number;
+  minimumFreeStorageGB?: number;
 }): string[] {
   const reasons: string[] = [];
   const { hardware, metadata } = input;
 
-  if (!isGgufFileName(input.fileName)) {
+  const runtimeFormat = input.runtimeFormat ?? "gguf";
+  if (runtimeFormat === "gguf" && !isGgufFileName(input.fileName)) {
     reasons.push("Imported local models must use the .gguf file extension.");
+  } else if (runtimeFormat === "litert-lm" && !input.fileName.trim().toLowerCase().endsWith(".litertlm")) {
+    reasons.push("LiteRT-LM chat models must use the .litertlm file extension.");
   }
 
   if (input.sizeBytes !== null && input.sizeBytes <= 0) {
@@ -582,7 +644,7 @@ export function validateImportedModel(input: {
       reasons.push("Chat model filename or metadata must report a supported parameter tier such as 0.6B, 1.5B, 3B, 4B, or 7B.");
     }
 
-    if (!isQuantizedModel(metadata.modelQuantization)) {
+    if (runtimeFormat === "gguf" && !isQuantizedModel(metadata.modelQuantization)) {
       reasons.push("Chat model must be a quantized GGUF build such as q4, q5, q8, int4, or int8.");
     }
 
@@ -597,16 +659,19 @@ export function validateImportedModel(input: {
 
   const tierRequirements = getAndroidModelTierRequirements(metadata.modelTier);
   if (input.role === "chat" && tierRequirements) {
+    const minimumRamGB = input.minimumRamGB ?? tierRequirements.minimumRamGB;
+    const minimumFreeStorageGB = input.minimumFreeStorageGB ?? tierRequirements.minimumFreeStorageGB;
+    const runtimeRamToleranceGB = runtimeFormat === "litert-lm" && minimumRamGB >= 8 ? 1 : MODEL_RAM_TOLERANCE_GB;
     if (hardware.memoryGB === null) {
       reasons.push("Device RAM could not be detected, so Haki cannot safely activate this model.");
-    } else if (hardware.memoryGB < tierRequirements.minimumRamGB) {
-      reasons.push(`${tierRequirements.label} requires at least ${tierRequirements.minimumRamGB}GB RAM.`);
+    } else if (hardware.memoryGB < minimumRamGB - runtimeRamToleranceGB) {
+      reasons.push(`${tierRequirements.label} requires at least ${minimumRamGB}GB RAM.`);
     }
 
     if (hardware.freeStorageGB === null) {
       reasons.push("Free storage could not be detected, so Haki cannot safely activate this model.");
-    } else if (hardware.freeStorageGB < tierRequirements.minimumFreeStorageGB) {
-      reasons.push(`${tierRequirements.label} requires at least ${tierRequirements.minimumFreeStorageGB}GB free storage.`);
+    } else if (hardware.freeStorageGB < minimumFreeStorageGB) {
+      reasons.push(`${tierRequirements.label} requires at least ${minimumFreeStorageGB}GB free storage.`);
     }
   }
 
@@ -624,11 +689,14 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
     role: input.role,
     metadata: input.metadata,
     sizeBytes: input.sizeBytes,
-    hardware: input.hardware
+    hardware: input.hardware,
+    ...(input.runtimeFormat ? { runtimeFormat: input.runtimeFormat } : {}),
+    ...(input.minimumRamGB !== undefined ? { minimumRamGB: input.minimumRamGB } : {}),
+    ...(input.minimumFreeStorageGB !== undefined ? { minimumFreeStorageGB: input.minimumFreeStorageGB } : {})
   });
 
   return {
-    version: 1,
+    version: 2,
     role: input.role,
     ...(input.source ? { source: input.source } : {}),
     ...(input.sourceId ? { sourceId: input.sourceId } : {}),
@@ -636,6 +704,9 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
     originalName: input.originalName,
     storedName: input.storedName,
     uri: input.uri,
+    runtimeFormat: input.runtimeFormat ?? "gguf",
+    artifactEntrypointUri: input.uri,
+    artifactFiles: [input.uri],
     sizeBytes: input.sizeBytes,
     fileHash: input.fileHash,
     fileHashAlgorithm: input.fileHash ? "md5" : null,
@@ -650,6 +721,11 @@ export function buildLocalModelManifest(input: BuildManifestInput): LocalModelMa
     manifestPath: input.manifestPath,
     rejectionReasons,
     ...(input.generationPolicy ? { generationPolicy: input.generationPolicy } : {}),
+    evaluationStatus: input.evaluationStatus ?? (input.runtimeFormat === "litert-lm" ? "pending" : "not_required"),
+    lastEvaluation: null,
+    activationPolicy: input.activationPolicy ?? "auto-after-smoke-test",
+    ...(input.defaultContextTokens ? { defaultContextTokens: input.defaultContextTokens } : {}),
+    ...(input.maxContextTokens ? { maxContextTokens: input.maxContextTokens } : {}),
     ...(input.artifactSource ? { artifactSource: input.artifactSource } : {}),
     ...(input.artifactLicense ? { artifactLicense: input.artifactLicense } : {}),
     ...(input.metadata.rawInfo ? { rawInfo: input.metadata.rawInfo } : {})
@@ -664,24 +740,40 @@ export function deviceCapabilityClassForTier(tier: LocalModelTier) {
   return ANDROID_MODEL_TIER_RANK[tier] >= ANDROID_MODEL_TIER_RANK.good ? "high" as const : "standard" as const;
 }
 
-export function getLlamaContextSettingsForTier(tier: LocalModelTier, embedding: boolean): LlamaContextSettings {
+export function getLlamaContextSettingsForTier(
+  tier: LocalModelTier,
+  embedding: boolean,
+  cpuCoreCount?: number | null
+): LlamaContextSettings {
   if (embedding) {
     return { nCtx: 512, nBatch: 128, nThreads: 2 };
   }
 
-  switch (tier) {
-    case "flagship":
-    case "enhanced":
-      return { nCtx: 2048, nBatch: 256, nThreads: 4 };
-    case "good":
-      return { nCtx: 2048, nBatch: 192, nThreads: 4 };
-    case "minimum":
-      return { nCtx: 1536, nBatch: 160, nThreads: 4 };
-    case "tiny":
-      return { nCtx: 1280, nBatch: 128, nThreads: 3 };
-    default:
-      return { nCtx: 1024, nBatch: 128, nThreads: 2 };
+  const base = (() => {
+    switch (tier) {
+      case "flagship":
+      case "enhanced":
+        return { nCtx: 2048, nBatch: 256, nThreads: 4 };
+      case "good":
+        return { nCtx: 2048, nBatch: 192, nThreads: 4 };
+      case "minimum":
+        return { nCtx: 1536, nBatch: 160, nThreads: 4 };
+      case "tiny":
+        return { nCtx: 1280, nBatch: 128, nThreads: 3 };
+      default:
+        return { nCtx: 1024, nBatch: 128, nThreads: 2 };
+    }
+  })();
+
+  // Half the reported cores keeps us on the big cluster of big.LITTLE chips
+  // without starving the UI thread; the tier value caps it (small models
+  // gain little from more threads) and remains the fallback when the native
+  // module cannot report a count.
+  if (typeof cpuCoreCount === "number" && cpuCoreCount > 0) {
+    const tuned = Math.max(2, Math.min(Math.floor(cpuCoreCount / 2), base.nThreads));
+    return { ...base, nThreads: tuned };
   }
+  return base;
 }
 
 export function parseMemoryGB(value: number | string | null | undefined): number | null {

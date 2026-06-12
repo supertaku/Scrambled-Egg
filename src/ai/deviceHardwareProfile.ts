@@ -13,6 +13,7 @@ interface NativeHardwareProfile {
   memoryClassMb?: number | string | null;
   largeMemoryClassMb?: number | string | null;
   lowMemory?: boolean | null;
+  cpuCoreCount?: number | null;
   thermalState?: DeviceThermalState | null;
 }
 
@@ -60,6 +61,7 @@ export async function getDeviceHardwareProfile(backendDevices: string[] = []): P
       memoryGB: null,
       memoryClass: null,
       lowMemory: null,
+      cpuCoreCount: null,
       freeStorageGB: getFreeStorageGB(),
       backendDevices,
       thermalState: "unknown"
@@ -83,6 +85,10 @@ export async function getDeviceHardwareProfile(backendDevices: string[] = []): P
       memoryGB,
       memoryClass: memoryClassGB !== null ? `${memoryClassGB.toFixed(1)}GB app heap class` : null,
       lowMemory: nativeProfile.lowMemory ?? null,
+      cpuCoreCount:
+        typeof nativeProfile.cpuCoreCount === "number" && nativeProfile.cpuCoreCount > 0
+          ? Math.floor(nativeProfile.cpuCoreCount)
+          : null,
       freeStorageGB: getFreeStorageGB(),
       backendDevices,
       thermalState: nativeProfile.thermalState ?? "unknown"
@@ -97,6 +103,7 @@ export async function getDeviceHardwareProfile(backendDevices: string[] = []): P
       memoryGB: null,
       memoryClass: null,
       lowMemory: null,
+      cpuCoreCount: null,
       freeStorageGB: getFreeStorageGB(),
       backendDevices,
       thermalState: "unknown"

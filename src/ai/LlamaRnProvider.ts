@@ -30,6 +30,7 @@ import {
   safeInputBudgetTokens,
   safeOutputTokens
 } from "./tokenBudget";
+import { createInferenceWatchdog, watchdogConfigForTier } from "./inferenceWatchdog";
 import { isCompletionStoppedDueToTokenLimit } from "./llamaStoppedLimit";
 import { executionOptionsForManifest } from "./localModelPerformance";
 import { logger } from "@/utils/logger";
@@ -44,7 +45,9 @@ const STOP_WORDS = [
   "<|im_end|>",
   "<|EOT|>",
   "<|end_of_turn|>",
-  "<|endoftext|>"
+  "<|endoftext|>",
+  // Gemma's turn delimiter has no pipes.
+  "<end_of_turn>"
 ];
 
 function sourceBlock(sources: SourceChunkForSummary[] | undefined): string {
@@ -392,10 +395,38 @@ export class LlamaRnProvider implements LocalAIProvider {
   /**
    * Eager model load. Fire-and-forget from the chat screen; swallows errors so
    * mount-time warmup never crashes the UI.
+   *
+   * After loading, runs a one-token priming completion with the standing
+   * system instruction so its KV cache is hot before the first user send —
+   * the first real message then only prefills its own new tokens.
    */
   async prewarm(): Promise<void> {
     try {
-      await withLocalModelInferenceLease(() => this.ensureChatContext());
+      await withLocalModelInferenceLease(async () => {
+        const context = await this.ensureChatContext();
+        try {
+          const manifest = await this.getAvailableManifest("chat");
+          const instruction = instructionForManifest(
+            safeChatInstructionForTier(manifest.modelTier, "haki"),
+            manifest
+          );
+          const startedAt = Date.now();
+          await context.completion({
+            messages: [{ content: instruction, role: "system" as const }],
+            n_predict: 1,
+            stop: STOP_WORDS
+          });
+          logger.ai.log("llama.rn prewarm primed the system prompt KV cache.", {
+            modelTier: manifest.modelTier,
+            primeMs: Date.now() - startedAt
+          });
+        } catch (error) {
+          // Priming is an optimization; a failure must not block the loaded model.
+          logger.ai.warn("llama.rn prewarm priming skipped.", {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      });
     } catch (error) {
       logger.ai.warn("llama.rn prewarm failed; first send will retry.", {
         error: error instanceof Error ? error.message : String(error)
@@ -443,12 +474,17 @@ export class LlamaRnProvider implements LocalAIProvider {
     const instruction = manifest.modelTier === "tiny" || manifest.modelTier === "minimum"
       ? tierInstruction
       : input.instruction;
+    // Keep the system message session-stable (instruction + app context only).
+    // Per-message context goes into the user block instead, so consecutive
+    // turns share a long token prefix and llama.cpp can reuse the KV cache
+    // instead of re-prefilling the whole prompt every message.
     const systemContent = [
       instructionForManifest(instruction, manifest),
-      input.appContext,
-      input.taskContext,
-      input.profileContext
+      input.appContext
     ]
+      .filter(Boolean)
+      .join("\n\n");
+    const perMessageContext = [input.taskContext, input.profileContext]
       .filter(Boolean)
       .join("\n\n");
 
@@ -475,6 +511,7 @@ export class LlamaRnProvider implements LocalAIProvider {
       const tc = (text: string) => this.tokenizerTokenCount(context, text);
       const baseTokens =
         (await tc(systemContent)) +
+        (await tc(perMessageContext)) +
         (await tc(input.question)) +
         (await tc(input.sourceReliable === undefined ? "" : "Source reliability: reliable")) +
         96;
@@ -532,6 +569,7 @@ export class LlamaRnProvider implements LocalAIProvider {
         totalInputTokens
       };
       const userContent = [
+        perMessageContext,
         promptSources,
         sourceContext?.length
           ? `Source reliability: ${input.sourceReliable ? "reliable" : "weak or uncertain"}`
@@ -556,21 +594,78 @@ export class LlamaRnProvider implements LocalAIProvider {
         }
       ];
       const streamAllowed = Boolean(onToken) && !thinkingDisabledForManifest(manifest);
-      const complete = async (retry = false) =>
-        context.completion(
-          {
-            messages,
-            n_predict: safeChatOutputTokens(settings.nCtx, manifest.modelTier, retry),
-            stop: STOP_WORDS,
-            ...safeChatSamplingForScenario(input.scenario, retry)
-          },
-          streamAllowed && onToken && !retry
-            ? (data: TokenData) => {
-                if (signal?.aborted) return;
-                if (data.token) onToken(data.token);
-              }
-            : undefined
-        );
+      // Without streamed tokens there is no first-token signal, so only the
+      // total deadline applies (non-streaming models prefill + generate in
+      // one opaque native call).
+      const watchdogBase = watchdogConfigForTier(manifest.modelTier);
+      const watchdog = createInferenceWatchdog(
+        streamAllowed && onToken
+          ? watchdogBase
+          : { ...watchdogBase, firstTokenDeadlineMs: watchdogBase.totalDeadlineMs },
+        (reason) => {
+          logger.ai.warn("llama.rn inference watchdog stopped a stalled completion.", {
+            modelName: manifest.modelName,
+            modelTier: manifest.modelTier,
+            reason
+          });
+          void context.stopCompletion();
+        }
+      );
+      // Runtime thermal guard: re-check device heat every ~24 streamed tokens.
+      // A "serious" device may finish a short answer but long generations
+      // stop early into the incomplete path (the user can tap Continue once
+      // the phone cools); "critical" stops immediately.
+      let streamedTokens = 0;
+      let thermalCheckInFlight = false;
+      let thermalStop: "serious" | "critical" | null = null;
+      const maybeCheckThermal = () => {
+        streamedTokens += 1;
+        if (streamedTokens % 24 !== 0 || thermalCheckInFlight || thermalStop) return;
+        thermalCheckInFlight = true;
+        void getDeviceHardwareProfile()
+          .then((profile) => {
+            const state = profile.thermalState;
+            const shouldStop =
+              state === "critical" || (state === "serious" && streamedTokens > 64);
+            if (shouldStop) {
+              thermalStop = state as "serious" | "critical";
+              logger.ai.warn("llama.rn generation stopped early due to device thermal state.", {
+                modelTier: manifest.modelTier,
+                streamedTokens,
+                thermalState: state
+              });
+              void context.stopCompletion();
+            }
+          })
+          .catch(() => undefined)
+          .finally(() => {
+            thermalCheckInFlight = false;
+          });
+      };
+      const complete = async (retry = false) => {
+        watchdog.stop();
+        watchdog.start();
+        try {
+          return await context.completion(
+            {
+              messages,
+              n_predict: safeChatOutputTokens(settings.nCtx, manifest.modelTier, retry),
+              stop: STOP_WORDS,
+              ...safeChatSamplingForScenario(input.scenario, retry)
+            },
+            streamAllowed && onToken && !retry
+              ? (data: TokenData) => {
+                  watchdog.onActivity();
+                  maybeCheckThermal();
+                  if (signal?.aborted) return;
+                  if (data.token) onToken(data.token);
+                }
+              : undefined
+          );
+        } finally {
+          watchdog.stop();
+        }
+      };
       let result = await complete(false);
       if (signal?.aborted) {
         const partial = sanitizeAssistantText(result.content || result.text);
@@ -589,6 +684,46 @@ export class LlamaRnProvider implements LocalAIProvider {
           providerName: this.name
         };
       }
+      if (thermalStop) {
+        const partial = sanitizeAssistantText(result.content || result.text);
+        const { text: cleanedText, citationIds: footerIds } = extractCitationFooter(partial);
+        const inlineIds = citationIdsFromText(cleanedText, sourceContext);
+        const allowed = new Set((sourceContext ?? []).map((source) => source.citationId));
+        const citationIds = Array.from(
+          new Set([...footerIds, ...inlineIds].filter((id) => allowed.has(id)))
+        );
+        return {
+          status: partial ? "incomplete" : "refused",
+          text:
+            cleanedText ||
+            partial ||
+            "This phone is getting too warm to keep generating safely. Let it cool for a moment, then ask again.",
+          citationIds,
+          contextUsage,
+          providerId: this.id,
+          providerName: this.name
+        };
+      }
+      if (watchdog.breached) {
+        const partial = sanitizeAssistantText(result.content || result.text);
+        const { text: cleanedText, citationIds: footerIds } = extractCitationFooter(partial);
+        const inlineIds = citationIdsFromText(cleanedText, sourceContext);
+        const allowed = new Set((sourceContext ?? []).map((source) => source.citationId));
+        const citationIds = Array.from(
+          new Set([...footerIds, ...inlineIds].filter((id) => allowed.has(id)))
+        );
+        return {
+          status: partial ? "incomplete" : "refused",
+          text:
+            cleanedText ||
+            partial ||
+            "This answer took too long on this phone, so I stopped it. Please try again with a shorter question.",
+          citationIds,
+          contextUsage,
+          providerId: this.id,
+          providerName: this.name
+        };
+      }
       let text = sanitizeAssistantText(result.content || result.text);
       if (!signal?.aborted && isDegenerateAssistantText(text)) {
         logger.ai.warn("llama.rn generated repetitive safe-chat output; retrying with stricter sampling.", {
@@ -599,6 +734,18 @@ export class LlamaRnProvider implements LocalAIProvider {
         text = sanitizeAssistantText(result.content || result.text);
       }
       this.lastInferenceTimeMs = Date.now() - startedAt;
+      if (result.timings) {
+        // cache_n counts prompt tokens served from the KV cache: it should be
+        // near the full prefix length on turn 2+ now that the system prompt
+        // and prior turns are byte-stable.
+        logger.ai.log("llama.rn safe-chat timings.", {
+          cachedPromptTokens: result.timings.cache_n,
+          modelTier: manifest.modelTier,
+          promptMs: Math.round(result.timings.prompt_ms),
+          promptTokens: result.timings.prompt_n,
+          tokensPerSecond: Math.round(result.timings.predicted_per_second * 10) / 10
+        });
+      }
 
       if (isDegenerateAssistantText(text)) {
         text = "I had trouble generating a clean answer. Please send the question again in one sentence, and I will answer directly.";
@@ -611,7 +758,7 @@ export class LlamaRnProvider implements LocalAIProvider {
         new Set([...footerIds, ...inlineIds].filter((id) => allowed.has(id)))
       );
 
-      const isIncomplete = isCompletionStoppedDueToTokenLimit(result.stopped_limit);
+      const isIncomplete = isCompletionStoppedDueToTokenLimit(result.stopped_limit) || watchdog.breached;
 
       return {
         status: isIncomplete ? "incomplete" : cleanedText ? "ok" : "refused",
@@ -703,8 +850,8 @@ export class LlamaRnProvider implements LocalAIProvider {
   }
 
   private async createContext(manifest: LocalModelManifest, embedding: boolean): Promise<LlamaContext> {
-    const llama = await loadLlamaRn();
-    const settings = getLlamaContextSettingsForTier(manifest.modelTier, embedding);
+    const [llama, hardware] = await Promise.all([loadLlamaRn(), getDeviceHardwareProfile()]);
+    const settings = getLlamaContextSettingsForTier(manifest.modelTier, embedding, hardware.cpuCoreCount);
     const startedAt = Date.now();
     const context = await llama.initLlama({
       model: manifest.uri,

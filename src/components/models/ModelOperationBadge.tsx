@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, Text } from "react-native";
 import { useRouter } from "expo-router";
 
 import { subscribeModelOperation, type ModelOperationState } from "@/ai/localModelManager";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 function badgeText(operation: ModelOperationState): string {
   if (operation.phase === "queued") return "Chat download queued";
@@ -19,6 +20,8 @@ function badgeText(operation: ModelOperationState): string {
 }
 
 export function ModelOperationBadge() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
   const [operation, setOperation] = useState<ModelOperationState | null>(null);
 
@@ -33,7 +36,7 @@ export function ModelOperationBadge() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   badge: {
     alignSelf: "center",
     backgroundColor: colors.maroon,

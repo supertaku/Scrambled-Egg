@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 
 import {
   buildLocalModelManifest,
-  catalogDownloadFitsHardware,
   deriveModelMetadata,
   getLlamaContextSettingsForTier,
   inferChatTemplateFamilyFromText,
@@ -13,6 +12,7 @@ import {
   type BuildManifestInput,
   type DeviceHardwareProfile
 } from "../src/ai/localModelMetadata";
+import { catalogDownloadFitsHardwareForDownload } from "../src/ai/modelCatalog";
 import { GGUF_MODELS } from "../src/ai/modelDownloadConfig";
 import {
   chooseExecutionProfile,
@@ -181,35 +181,59 @@ assert.match(
   }).join("\n"),
   /template mismatch/
 );
-assert.ok(GGUF_MODELS.every((model) => model.chatTemplateFamily === "llama" || model.chatTemplateFamily === "qwen"));
+assert.ok(GGUF_MODELS.every((model) => model.runtimeFormat === "litert-lm" || Boolean(model.chatTemplateFamily)));
+assert.equal(GGUF_MODELS.find((model) => model.id === "gemma-4-e2b-litert-lm")?.recommendationGroup, "recommended");
+assert.equal(GGUF_MODELS.find((model) => model.id === "gemma-4-e4b-litert-lm")?.recommendationGroup, "recommended");
+assert.deepEqual(GGUF_MODELS.find((model) => model.id === "gemma-4-e2b-litert-lm")?.supportedPlatforms, ["android"]);
 assert.ok(GGUF_MODELS.every((model) => model.lifecycleChannel === "supported" || model.lifecycleChannel === "evaluation"));
-assert.ok(GGUF_MODELS.every((model) => model.supportedPlatforms.includes("android") && model.supportedPlatforms.includes("ios")));
 assert.equal(GGUF_MODELS.find((model) => model.id === "qwen3-4b")?.generationPolicy?.thinkingMode, "disabled");
 
 function compatibleCatalogIds(hardware: DeviceHardwareProfile): string[] {
-  return GGUF_MODELS.filter((model) => catalogDownloadFitsHardware(model, hardware)).map((model) => model.id);
+  return GGUF_MODELS.filter((model) => catalogDownloadFitsHardwareForDownload(model, hardware)).map((model) => model.id);
 }
 
-assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 4 }), ["qwen-2.5-0.5b"]);
+assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 4 }), [
+  "qwen-2.5-0.5b",
+  "llama-3.2-1b",
+  "gemma-4-e2b-litert-lm"
+]);
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 8 }), [
   "qwen-2.5-0.5b",
   "llama-3.2-1b",
-  "qwen-2.5-3b"
+  "gemma-4-e2b-litert-lm",
+  "gemma-4-e4b-litert-lm",
+  "llama-3.2-3b",
+  "qwen-2.5-3b",
+  "qwen3-4b"
+]);
+assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 7.1 }), [
+  "qwen-2.5-0.5b",
+  "llama-3.2-1b",
+  "gemma-4-e2b-litert-lm",
+  "gemma-4-e4b-litert-lm",
+  "llama-3.2-3b"
 ]);
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 12 }), [
   "qwen-2.5-0.5b",
   "llama-3.2-1b",
+  "gemma-4-e2b-litert-lm",
+  "gemma-4-e4b-litert-lm",
+  "llama-3.2-3b",
   "qwen-2.5-3b",
-  "qwen3-4b"
+  "qwen3-4b",
+  "qwen-2.5-7b"
 ]);
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, memoryGB: 8, freeStorageGB: 8 }), [
   "qwen-2.5-0.5b",
-  "llama-3.2-1b"
+  "llama-3.2-1b",
+  "gemma-4-e2b-litert-lm",
+  "llama-3.2-3b",
+  "qwen-2.5-3b"
 ]);
 assert.deepEqual(compatibleCatalogIds({ ...capableAndroid, lowMemory: true }), []);
 assert.deepEqual(
   compatibleCatalogIds({ ...capableAndroid, platform: "ios", supportedAbis: ["arm64"], architecture: "arm64", lowMemory: false }),
-  ["qwen-2.5-0.5b", "llama-3.2-1b", "qwen-2.5-3b"]
+  ["qwen-2.5-0.5b", "llama-3.2-1b", "llama-3.2-3b", "qwen-2.5-3b", "qwen3-4b"]
 );
 
 const openClCandidates = executionCandidatesForHardware({
@@ -308,6 +332,8 @@ const manifestInput: BuildManifestInput = {
 };
 const manifest = buildLocalModelManifest(manifestInput);
 assert.equal(manifest.fileHashAlgorithm, "md5");
+assert.equal(manifest.runtimeFormat, "gguf");
+assert.equal(manifest.activationPolicy, "auto-after-smoke-test");
 assert.equal(manifest.source, "downloaded");
 assert.equal(manifest.downloadId, "qwen3-0.6b");
 assert.equal(manifest.chatTemplate?.status, "unknown");
@@ -368,6 +394,10 @@ assert.equal(teacherState.userGoal, "find contact information");
 assert.match(formatConversationState(teacherState), /Active actor\/entity: teacher/);
 
 const localModelManagerSource = readFileSync(new URL("../src/ai/localModelManager.ts", import.meta.url), "utf8");
+const modelOperationCoordinatorSource = readFileSync(
+  new URL("../src/ai/modelOperationCoordinator.ts", import.meta.url),
+  "utf8"
+);
 assert.equal(/FileSystem\.makeDirectoryAsync|FileSystem\.copyAsync|FileSystem\.deleteAsync|FileSystem\.getInfoAsync/.test(localModelManagerSource), false);
 assert.match(localModelManagerSource, /expo-file-system\/legacy/);
 assert.match(localModelManagerSource, /cleanupPartialGgufDownloads/);
@@ -376,7 +406,9 @@ assert.match(localModelManagerSource, /migrateLegacyChatModel/);
 assert.match(localModelManagerSource, /activateChatModel/);
 assert.match(localModelManagerSource, /recoverInterruptedModelOperation/);
 assert.match(localModelManagerSource, /phase: "verifying"/);
-assert.match(localModelManagerSource, /phase: "waiting_for_chat"/);
+assert.match(localModelManagerSource, /modelOperationCoordinator/);
+assert.match(modelOperationCoordinatorSource, /phase: "waiting_for_chat"/);
+assert.match(modelOperationCoordinatorSource, /withInferenceLease/);
 assert.doesNotMatch(localModelManagerSource, /ensureBundledDefaultChatModel/);
 
 const settingsSource = readFileSync(new URL("../src/components/settings/SettingsScreen.tsx", import.meta.url), "utf8");
@@ -387,21 +419,26 @@ assert.match(settingsSource, /loadSettings\(true\)/);
 assert.doesNotMatch(settingsSource, /ModelDownloader/);
 
 const modelsScreenSource = readFileSync(new URL("../app/models.tsx", import.meta.url), "utf8");
-assert.match(modelsScreenSource, /Models available for this phone/);
+assert.match(modelsScreenSource, /Haki Models/);
+assert.match(modelsScreenSource, /Recommended for this phone/);
+assert.match(modelsScreenSource, /Other compatible models/);
 assert.match(modelsScreenSource, /Campus Haki/);
 assert.match(modelsScreenSource, /Friendly Haki/);
 assert.match(modelsScreenSource, /activateChatModel/);
 assert.match(modelsScreenSource, /removeChatModel/);
 assert.match(modelsScreenSource, /resumePausedModelDownload/);
-assert.match(modelsScreenSource, /catalogOperationLabel/);
-assert.match(modelsScreenSource, /Downloading\.\.\./);
-assert.match(modelsScreenSource, /inProgressButton/);
+assert.match(modelsScreenSource, /ModelCatalogSection/);
+
+assert.match(localModelManagerSource, /probeLiteRtLmActivation/);
+assert.match(localModelManagerSource, /evaluationStatus/);
+assert.match(localModelManagerSource, /runtimeAvailability/);
+assert.match(localModelManagerSource, /catalogModel \? \{ modelTier: catalogModel\.tier \} : \{\}/);
 
 const hakiStatusSource = readFileSync(new URL("../src/components/models/ModelOperationHaki.tsx", import.meta.url), "utf8");
 assert.match(hakiStatusSource, /The download is complete\. I'm checking the file before using it\./);
 assert.match(hakiStatusSource, /Campus Haki is still available\./);
 assert.match(hakiStatusSource, /interrupted download cannot be resumed/);
-assert.match(hakiStatusSource, /PixelHaki/);
+assert.match(hakiStatusSource, /HakiMascotCompat/);
 
 const apkInspectionSource = readFileSync(new URL("../scripts/inspect-apk-assets.ps1", import.meta.url), "utf8");
 assert.match(apkInspectionSource, /Production builds must let users download compatible models into app-private storage/);

@@ -8,7 +8,6 @@ import type { LocalModelTier } from "./LocalAIProvider";
 import { ANDROID_LOCAL_MODEL_TIERS, ANDROID_MODEL_TIER_ORDER } from "./localModelRequirements";
 import {
   buildLocalModelManifest,
-  catalogDownloadFitsHardware,
   canonicalModelFileName,
   deriveModelMetadata,
   getLlamaContextSettingsForTier,
@@ -22,7 +21,9 @@ import {
   type LocalModelMetadata,
   type LocalModelRole
 } from "./localModelMetadata";
-import { GGUF_MODELS, type GgufDownloadConfig } from "./modelDownloadConfig";
+import { catalogDownloadFitsHardwareForDownload } from "./modelCatalog";
+import { GGUF_MODELS, type GgufDownloadConfig, type ModelRuntimeFormat, type RuntimeAvailability } from "./modelDownloadConfig";
+import { getLiteRtLmNativeModule } from "./nativeModules";
 import {
   chooseExecutionProfile,
   executionCandidatesForHardware,
@@ -31,6 +32,19 @@ import {
   type ExecutionCandidate
 } from "./localModelPerformance";
 import { loadLlamaRn } from "./llamaRnRuntime";
+import {
+  assertNoBusyModelOperation,
+  emitModelOperation,
+  endModelMutation,
+  getModelOperation,
+  isBusyModelOperationPhase,
+  newModelOperation,
+  patchModelOperation,
+  startModelMutation,
+  subscribeModelOperation,
+  type ModelOperationPhase,
+  type ModelOperationState
+} from "./modelOperationCoordinator";
 import { normalizeSha256Hex, sha256HexFromFileLike } from "@/utils/fileSha256";
 import { logger } from "@/utils/logger";
 
@@ -46,7 +60,8 @@ const CHAT_DIR = new Directory(MODELS_DIR, "chat");
 const INSTALLED_DIR = new Directory(CHAT_DIR, "installed");
 const STAGING_DIR = new Directory(CHAT_DIR, "staging");
 const LIBRARY_VERSION = 2;
-const TEMP_DOWNLOAD_SUFFIX = ".partial.gguf";
+const TEMP_DOWNLOAD_MARKER = ".partial.";
+const LITERT_ACTIVATION_PROBE_TIMEOUT_MS = 90_000;
 const MAX_SAFE_INLINE_HASH_BYTES = 64 * 1024 * 1024;
 const MAX_IMPORTED_CHAT_MODEL_BYTES = 10 * 1024 * 1024 * 1024;
 const MAX_IMPORTED_EMBEDDING_MODEL_BYTES = 2 * 1024 * 1024 * 1024;
@@ -78,6 +93,12 @@ export interface InstalledChatModel {
   verifiedSha256: string | null;
   installedAt: string;
   rejectionReasons: string[];
+  runtimeFormat?: ModelRuntimeFormat;
+  filePresent?: boolean;
+  manifestPresent?: boolean;
+  runtimeAvailable?: boolean;
+  evaluationStatus?: "not_required" | "pending" | "passed" | "failed";
+  activationFailureReason?: string | null;
 }
 
 export interface ChatModelLibrary {
@@ -86,40 +107,12 @@ export interface ChatModelLibrary {
   installedModels: InstalledChatModel[];
 }
 
-export type ModelOperationPhase =
-  | "queued"
-  | "downloading"
-  | "paused"
-  | "verifying"
-  | "validating"
-  | "optimizing"
-  | "waiting_for_chat"
-  | "activating"
-  | "removing"
-  | "completed"
-  | "failed"
-  | "canceled";
-
-export interface ModelOperationState {
-  operationId: string;
-  phase: ModelOperationPhase;
-  modelId: string;
-  modelName: string;
-  catalogId: string | null;
-  progress: number | null;
-  bytesWritten: number;
-  totalBytes: number | null;
-  startedAt: string;
-  updatedAt: string;
-  error: string | null;
-  resumable: boolean;
-}
-
 export interface CompatibleModelCatalog {
   compatibleModels: GgufDownloadConfig[];
   hiddenModels: GgufDownloadConfig[];
   hardware: DeviceHardwareProfile;
   maximumTier: LocalModelTier;
+  runtimeAvailability: RuntimeAvailability;
   unavailableReason: string | null;
 }
 
@@ -138,7 +131,7 @@ interface StagedDownloadRecord {
 interface DeviceInfoNativeModule {
   sha256File?: (targetUri: string, operationId: string) => Promise<string>;
   cancelSha256File?: (operationId: string) => void;
-  startBackgroundDownload?: (url: string, operationId: string) => Promise<{ downloadId: number; fileUri: string }>;
+  startBackgroundDownload?: (url: string, operationId: string, artifactFileName?: string) => Promise<{ downloadId: number; fileUri: string }>;
   getBackgroundDownloadStatus?: (operationId: string) => Promise<{
     phase: "queued" | "downloading" | "completed" | "failed" | "missing";
     bytesWritten: number;
@@ -149,18 +142,10 @@ interface DeviceInfoNativeModule {
   clearBackgroundDownloadRecord?: (operationId: string) => Promise<void>;
 }
 
-type OperationListener = (state: ModelOperationState | null) => void;
-
-let currentOperation: ModelOperationState | null = null;
-const operationListeners = new Set<OperationListener>();
 let activeDownload: ReturnType<typeof createDownloadResumable> | null = null;
 let activeStagingRecord: StagedDownloadRecord | null = null;
 let activeNativeDownloadTimer: ReturnType<typeof setTimeout> | null = null;
 let activeHashOperationId: string | null = null;
-let activeInferenceCount = 0;
-let mutationInProgress = false;
-const inferenceIdleWaiters = new Set<() => void>();
-const mutationWaiters = new Set<() => void>();
 
 function getDeviceInfoNativeModule(): DeviceInfoNativeModule | null {
   try {
@@ -198,16 +183,26 @@ function libraryFile(): File {
   return new File(CHAT_DIR, "library.json");
 }
 
-function installedModelFile(modelId: string): File {
-  return new File(installedModelDirectory(modelId), "model.gguf");
+function safeArtifactFileName(fileName: string | null | undefined, fallback = "model.gguf"): string {
+  const base = fileName?.trim().split(/[\\/]/).pop()?.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return base || fallback;
+}
+
+function artifactFileNameForCatalogModel(model: GgufDownloadConfig | null | undefined): string {
+  return safeArtifactFileName(model?.artifactFileName, model?.runtimeFormat === "litert-lm" ? "model.litertlm" : "model.gguf");
+}
+
+function installedModelFile(modelId: string, artifactFileName = "model.gguf"): File {
+  return new File(installedModelDirectory(modelId), safeArtifactFileName(artifactFileName));
 }
 
 function installedManifestFile(modelId: string): File {
   return new File(installedModelDirectory(modelId), "manifest.json");
 }
 
-function stagingModelFile(operationId: string): File {
-  return new File(STAGING_DIR, `${operationId}${TEMP_DOWNLOAD_SUFFIX}`);
+function stagingModelFile(operationId: string, artifactFileName = "model.gguf"): File {
+  const extension = safeArtifactFileName(artifactFileName).split(".").pop() ?? "model";
+  return new File(STAGING_DIR, `${operationId}${TEMP_DOWNLOAD_MARKER}${extension}`);
 }
 
 function stagingRecordFile(operationId: string): File {
@@ -424,7 +419,8 @@ function installedEntryFromManifest(
     sizeBytes: manifest.sizeBytes,
     verifiedSha256,
     installedAt: manifest.importedAt,
-    rejectionReasons: manifest.rejectionReasons
+    rejectionReasons: manifest.rejectionReasons,
+    runtimeFormat: manifest.runtimeFormat ?? "gguf"
   };
 }
 
@@ -434,7 +430,7 @@ function reconstructLibrary(): ChatModelLibrary {
   for (const entry of INSTALLED_DIR.list()) {
     if (!(entry instanceof Directory)) continue;
     const manifest = readManifest(new File(entry, "manifest.json"));
-    const model = new File(entry, "model.gguf");
+    const model = new File(entry, safeArtifactFileName(manifest?.storedName, manifest?.runtimeFormat === "litert-lm" ? "model.litertlm" : "model.gguf"));
     if (!manifest || !model.exists || manifest.uri !== model.uri) continue;
     const source: InstalledModelSource =
       manifest.source === "legacy-bundled"
@@ -507,62 +503,11 @@ function updateInstalledEntry(library: ChatModelLibrary, entry: InstalledChatMod
   };
 }
 
-function emitOperation(state: ModelOperationState | null): void {
-  const previousPhase = currentOperation?.phase ?? null;
-  currentOperation = state;
-  if (state && state.phase !== previousPhase) {
-    logger.ai.log("Managed model operation phase changed.", {
-      modelId: state.modelId,
-      operationId: state.operationId,
-      phase: state.phase
-    });
-  }
-  operationListeners.forEach((listener) => listener(state));
-}
-
-function patchOperation(patch: Partial<ModelOperationState>): ModelOperationState {
-  if (!currentOperation) throw new Error("No active model operation.");
-  const next = { ...currentOperation, ...patch, updatedAt: now() };
-  emitOperation(next);
-  return next;
-}
-
-function isBusyPhase(phase: ModelOperationPhase): boolean {
-  return !["paused", "completed", "failed", "canceled"].includes(phase);
-}
-
 function clearNativeDownloadTimer(): void {
   if (activeNativeDownloadTimer) {
     clearTimeout(activeNativeDownloadTimer);
     activeNativeDownloadTimer = null;
   }
-}
-
-function assertNoBusyOperation(): void {
-  if (currentOperation?.phase === "paused") {
-    throw new Error("Resume or discard the paused model download before starting another operation.");
-  }
-  if (currentOperation && isBusyPhase(currentOperation.phase)) {
-    throw new Error("Haki is already preparing a model. Wait for that operation to finish first.");
-  }
-}
-
-function operationFor(modelId: string, modelName: string, catalogId: string | null, phase: ModelOperationPhase): ModelOperationState {
-  const timestamp = now();
-  return {
-    operationId: `${normalizedId(modelId)}-${Date.now()}`,
-    phase,
-    modelId,
-    modelName,
-    catalogId,
-    progress: null,
-    bytesWritten: 0,
-    totalBytes: null,
-    startedAt: timestamp,
-    updatedAt: timestamp,
-    error: null,
-    resumable: false
-  };
 }
 
 function writeStagingRecord(record: StagedDownloadRecord): void {
@@ -616,6 +561,30 @@ function hasOnlyTemporarySafetyRejections(reasons: string[]): boolean {
   );
 }
 
+function modelMetadataFromCatalog(model: GgufDownloadConfig): LocalModelMetadata {
+  const modelFamily = /gemma/i.test(model.name) ? "gemma" as const : "unknown" as const;
+  return {
+    modelName: model.name,
+    modelParameterCountB: model.parameterCountB,
+    modelQuantization: model.runtimeFormat,
+    modelTier: model.tier,
+    chatTemplate: {
+      status: "supported",
+      modelFamily,
+      templateFamily: model.chatTemplateFamily ?? modelFamily,
+      reason: `${model.name} uses its catalog-declared chat format.`,
+      modelFamilySource: "model-name",
+      templateFamilySource: "unknown"
+    },
+    rawInfo: {
+      catalogId: model.id,
+      runtimeFormat: model.runtimeFormat,
+      artifactFileName: model.artifactFileName,
+      lifecycleChannel: model.lifecycleChannel
+    }
+  };
+}
+
 async function buildManifestForFile(input: {
   file: File;
   originalName: string;
@@ -625,13 +594,21 @@ async function buildManifestForFile(input: {
   sourceId?: string;
   downloadId?: string;
 }): Promise<LocalModelManifest> {
-  const llama = await loadLlamaRn();
-  const modelInfo = await llama.loadLlamaModelInfo(input.file.uri);
-  const metadata = deriveModelMetadata({ originalName: input.originalName, modelInfo });
-  const hardware = await getDeviceHardwareProfile();
   const catalogModel = GGUF_MODELS.find((model) => model.id === input.downloadId || model.id === input.sourceId);
+  const runtimeFormat = catalogModel?.runtimeFormat ?? "gguf";
+  const metadata = runtimeFormat === "gguf"
+    ? {
+        ...deriveModelMetadata({
+          originalName: input.originalName,
+          modelInfo: await (await loadLlamaRn()).loadLlamaModelInfo(input.file.uri)
+        }),
+        ...(catalogModel ? { modelTier: catalogModel.tier } : {})
+      }
+    : modelMetadataFromCatalog(catalogModel!);
+  const hardware = await getDeviceHardwareProfile();
   const role = input.role ?? "chat";
-  const modelTarget = role === "chat" ? installedModelFile(input.modelId) : embeddingFile(role);
+  const storedName = role === "chat" ? artifactFileNameForCatalogModel(catalogModel) : canonicalModelFileName(role);
+  const modelTarget = role === "chat" ? installedModelFile(input.modelId, storedName) : embeddingFile(role);
   const manifestTarget = role === "chat" ? installedManifestFile(input.modelId) : embeddingManifestFile(role);
   return buildLocalModelManifest({
     role,
@@ -639,7 +616,7 @@ async function buildManifestForFile(input: {
     sourceId: input.sourceId,
     downloadId: input.downloadId,
     originalName: input.originalName,
-    storedName: role === "chat" ? "model.gguf" : canonicalModelFileName(role),
+    storedName,
     uri: modelTarget.uri,
     manifestPath: manifestTarget.uri,
     sizeBytes: input.file.size,
@@ -647,9 +624,16 @@ async function buildManifestForFile(input: {
     metadata,
     hardware,
     now: now(),
+    runtimeFormat,
     generationPolicy: catalogModel?.generationPolicy,
+    evaluationStatus: runtimeFormat === "litert-lm" ? "pending" : "not_required",
+    activationPolicy: catalogModel?.activationPolicy ?? "auto-after-smoke-test",
     artifactSource: catalogModel?.artifactSource,
-    artifactLicense: catalogModel?.artifactLicense
+    artifactLicense: catalogModel?.artifactLicense,
+    minimumRamGB: catalogModel?.minimumRamGB,
+    minimumFreeStorageGB: catalogModel?.minimumFreeStorageGB,
+    defaultContextTokens: catalogModel?.defaultContextTokens,
+    maxContextTokens: catalogModel?.maxContextTokens
   });
 }
 
@@ -658,20 +642,35 @@ async function refreshInstalledManifest(entry: InstalledChatModel): Promise<Loca
   const manifest = readManifest(manifestFile);
   if (!manifest) throw new Error("Installed model manifest is missing or invalid.");
   const hardware = await getDeviceHardwareProfile();
+  const catalogModel = entry.catalogId ? GGUF_MODELS.find((model) => model.id === entry.catalogId) : undefined;
+  const runtimeFormat = catalogModel?.runtimeFormat ?? manifest.runtimeFormat ?? "gguf";
   const rejectionReasons = validateImportedModel({
     fileName: manifest.originalName,
     role: "chat",
     metadata: modelMetadataFromManifest(manifest),
     sizeBytes: manifest.sizeBytes,
-    hardware
+    hardware,
+    runtimeFormat,
+    ...(catalogModel?.minimumRamGB !== undefined ? { minimumRamGB: catalogModel.minimumRamGB } : {}),
+    ...(catalogModel?.minimumFreeStorageGB !== undefined ? { minimumFreeStorageGB: catalogModel.minimumFreeStorageGB } : {})
   });
-  const catalogModel = entry.catalogId ? GGUF_MODELS.find((model) => model.id === entry.catalogId) : undefined;
   const requiresNonThinking = /qwen\s*3|qwen3/i.test(`${manifest.modelName} ${manifest.originalName}`);
   const updated: LocalModelManifest = {
     ...manifest,
     validatedAt: now(),
     recommendedModelTier: recommendedDeviceModelTier(hardware),
     rejectionReasons,
+    runtimeFormat,
+    artifactEntrypointUri: manifest.artifactEntrypointUri ?? manifest.uri,
+    artifactFiles: manifest.artifactFiles ?? [manifest.uri],
+    evaluationStatus: manifest.evaluationStatus ?? (runtimeFormat === "litert-lm" ? "pending" : "not_required"),
+    activationPolicy: catalogModel?.activationPolicy ?? manifest.activationPolicy ?? "auto-after-smoke-test",
+    ...((catalogModel?.defaultContextTokens ?? manifest.defaultContextTokens) !== undefined
+      ? { defaultContextTokens: catalogModel?.defaultContextTokens ?? manifest.defaultContextTokens! }
+      : {}),
+    ...((catalogModel?.maxContextTokens ?? manifest.maxContextTokens) !== undefined
+      ? { maxContextTokens: catalogModel?.maxContextTokens ?? manifest.maxContextTokens! }
+      : {}),
     ...(catalogModel?.generationPolicy || requiresNonThinking
       ? { generationPolicy: catalogModel?.generationPolicy ?? { thinkingMode: "disabled" } }
       : {}),
@@ -689,39 +688,14 @@ async function refreshInstalledManifest(entry: InstalledChatModel): Promise<Loca
   return updated;
 }
 
-function signalInferenceIdle(): void {
-  if (activeInferenceCount !== 0) return;
-  inferenceIdleWaiters.forEach((resolve) => resolve());
-  inferenceIdleWaiters.clear();
-}
-
-async function waitForInferenceIdle(): Promise<void> {
-  if (activeInferenceCount === 0) return;
-  await new Promise<void>((resolve) => inferenceIdleWaiters.add(resolve));
-}
-
-function endModelMutation(): void {
-  mutationInProgress = false;
-  mutationWaiters.forEach((resolve) => resolve());
-  mutationWaiters.clear();
-}
-
-async function startModelMutation(operationId: string): Promise<void> {
-  mutationInProgress = true;
-  if (activeInferenceCount > 0 && currentOperation?.operationId === operationId) {
-    patchOperation({ phase: "waiting_for_chat" });
-  }
-  await waitForInferenceIdle();
-}
-
 async function benchmarkCandidate(
   manifest: LocalModelManifest,
   candidate: ExecutionCandidate,
   availableBackends: string[]
 ): Promise<NonNullable<LocalModelManifest["executionProfile"]>> {
   const llama = await loadLlamaRn();
-  const settings = getLlamaContextSettingsForTier(manifest.modelTier, false);
   const hardwareBefore = await getDeviceHardwareProfile(availableBackends);
+  const settings = getLlamaContextSettingsForTier(manifest.modelTier, false, hardwareBefore.cpuCoreCount);
   const loadStartedAt = Date.now();
   const context = await llama.initLlama({
     model: manifest.uri,
@@ -786,8 +760,8 @@ async function probeModelLoad(manifest: LocalModelManifest): Promise<LocalModelM
     return manifest;
   }
 
-  if (currentOperation) {
-    patchOperation({ phase: "optimizing" });
+  if (getModelOperation()) {
+    patchModelOperation({ phase: "optimizing" });
   }
   const llama = await loadLlamaRn();
   const backendInfo = await llama.getBackendDevicesInfo();
@@ -819,10 +793,82 @@ async function probeModelLoad(manifest: LocalModelManifest): Promise<LocalModelM
   return updated;
 }
 
+function filePathFromUri(uri: string): string {
+  return uri.startsWith("file://") ? decodeURIComponent(uri.slice("file://".length)) : uri;
+}
+
+function nativeSafeChatText(result: unknown): string {
+  if (typeof result === "string") return result.trim();
+  if (!result || typeof result !== "object") return "";
+  const record = result as { text?: unknown; answer?: unknown; response?: unknown; message?: unknown };
+  for (const value of [record.text, record.answer, record.response, record.message]) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const timer = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+  });
+  return Promise.race([promise, timer]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
+function writeEvaluation(manifest: LocalModelManifest, passed: boolean, failureReason: string | null): LocalModelManifest {
+  const updated: LocalModelManifest = {
+    ...manifest,
+    evaluationStatus: passed ? "passed" : "failed",
+    lastEvaluation: { evaluatedAt: now(), passed, failureReason }
+  };
+  new File(manifest.manifestPath).write(JSON.stringify(updated, null, 2));
+  return updated;
+}
+
+async function probeLiteRtLmActivation(manifest: LocalModelManifest): Promise<LocalModelManifest> {
+  const nativeModule = getLiteRtLmNativeModule();
+  const missingRuntime = "LiteRT-LM native runtime is unavailable. Install an updated Android build before using Gemma.";
+  try {
+    if (!nativeModule?.answerSafeChat) throw new Error(missingRuntime);
+    if (nativeModule.isRuntimeAvailable && (await nativeModule.isRuntimeAvailable()) !== true) {
+      throw new Error(missingRuntime);
+    }
+    const result = await withTimeout(
+      nativeModule.answerSafeChat({
+        modelPath: filePathFromUri(manifest.uri),
+        question: "Reply with exactly: Haki ready.",
+        instruction: "You are Haki. Answer in English only.",
+        appContext: "Local activation probe. Return a short confirmation only.",
+        conversationContext: [],
+        sourceContext: [],
+        sourceReliable: false,
+        taskContext: "This is a local LiteRT-LM model activation check.",
+        scenario: "student_admin"
+      }),
+      LITERT_ACTIVATION_PROBE_TIMEOUT_MS,
+      "LiteRT-LM activation probe timed out."
+    );
+    if (!nativeSafeChatText(result)) throw new Error("LiteRT-LM activation probe returned an empty response.");
+    return writeEvaluation(manifest, true, null);
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : "LiteRT-LM activation probe failed.";
+    const reason = /e4b|4b/i.test(`${manifest.modelName} ${manifest.originalName}`)
+      ? `${raw} Try Gemma 4 E2B or a smaller GGUF model.`
+      : raw;
+    writeEvaluation(manifest, false, reason);
+    const library = readLibrary();
+    const entry = library.installedModels.find((item) => item.manifestUri === manifest.manifestPath);
+    if (entry) writeLibrary(updateInstalledEntry(library, { ...entry, rejectionReasons: [reason] }));
+    throw new Error(reason);
+  }
+}
+
 async function activateInstalledModelInternal(modelId: string, operationId: string, ownsMutation = true): Promise<ImportedModelStatus> {
   if (ownsMutation) await startModelMutation(operationId);
   try {
-    if (currentOperation?.operationId === operationId) patchOperation({ phase: "activating" });
+    if (getModelOperation()?.operationId === operationId) patchModelOperation({ phase: "activating" });
     const library = readLibrary();
     const entry = library.installedModels.find((item) => item.id === modelId);
     if (!entry) throw new Error("The selected model is no longer installed.");
@@ -830,7 +876,11 @@ async function activateInstalledModelInternal(modelId: string, operationId: stri
     if (manifest.rejectionReasons.length > 0) {
       throw new Error(manifest.rejectionReasons[0] ?? "This phone cannot safely activate that model right now.");
     }
-    manifest = await probeModelLoad(manifest);
+    if ((manifest.runtimeFormat ?? "gguf") === "litert-lm") {
+      manifest = await probeLiteRtLmActivation(manifest);
+    } else {
+      manifest = await probeModelLoad(manifest);
+    }
     writeLibrary({ ...readLibrary(), activeModelId: modelId });
     return statusFromManifest(manifest);
   } finally {
@@ -840,24 +890,24 @@ async function activateInstalledModelInternal(modelId: string, operationId: stri
 
 async function installStagedModel(record: StagedDownloadRecord, verifiedSha256: string | null): Promise<ImportedModelStatus> {
   const stagedFile = new File(record.fileUri);
-  patchOperation({ phase: "validating", progress: null });
+  patchModelOperation({ phase: "validating", progress: null });
   const manifest = await buildManifestForFile({
     file: stagedFile,
-    originalName: decodeURIComponent(record.model.url.split("/").pop()?.split("?")[0] ?? `${record.model.id}.gguf`),
+    originalName: record.model.artifactFileName,
     modelId: record.operation.modelId,
     source: "downloaded",
     sourceId: record.model.id,
     downloadId: record.model.id
   });
-  if (currentOperation?.operationId === record.operation.operationId && currentOperation.phase === "canceled") {
+  if (getModelOperation()?.operationId === record.operation.operationId && getModelOperation()!.phase === "canceled") {
     throw new Error("Model operation canceled.");
   }
   if (manifest.rejectionReasons.length > 0 && !hasOnlyTemporarySafetyRejections(manifest.rejectionReasons)) {
-    throw new Error(manifest.rejectionReasons[0] ?? "The downloaded GGUF failed validation.");
+    throw new Error(manifest.rejectionReasons[0] ?? "The downloaded model failed validation.");
   }
   const directory = installedModelDirectory(record.operation.modelId);
   directory.create({ intermediates: true, idempotent: true });
-  const target = installedModelFile(record.operation.modelId);
+  const target = installedModelFile(record.operation.modelId, manifest.storedName);
   const manifestTarget = installedManifestFile(record.operation.modelId);
   safeDelete(target);
   stagedFile.move(target);
@@ -866,7 +916,7 @@ async function installStagedModel(record: StagedDownloadRecord, verifiedSha256: 
   writeLibrary(updateInstalledEntry(readLibrary(), entry));
   safeDelete(stagingRecordFile(record.operation.operationId));
 
-  if (manifest.rejectionReasons.length === 0) {
+  if (manifest.rejectionReasons.length === 0 && manifest.activationPolicy !== "manual") {
     return activateInstalledModelInternal(entry.id, record.operation.operationId);
   }
   return statusFromManifest(manifest);
@@ -875,9 +925,9 @@ async function installStagedModel(record: StagedDownloadRecord, verifiedSha256: 
 async function finishDownload(record: StagedDownloadRecord): Promise<{ success: boolean; status?: ImportedModelStatus }> {
   clearNativeDownloadTimer();
   const stagedFile = new File(record.fileUri);
-  patchOperation({ phase: "verifying", progress: null, bytesWritten: stagedFile.size, totalBytes: stagedFile.size });
+  patchModelOperation({ phase: "verifying", progress: null, bytesWritten: stagedFile.size, totalBytes: stagedFile.size });
   const got = await verifySha256(stagedFile, record.operation.operationId);
-  if (currentOperation?.operationId === record.operation.operationId && currentOperation.phase === "canceled") {
+  if (getModelOperation()?.operationId === record.operation.operationId && getModelOperation()!.phase === "canceled") {
     throw new Error("Model operation canceled.");
   }
   const expected = record.model.sha256Hex ? normalizeSha256Hex(record.model.sha256Hex) : null;
@@ -886,7 +936,7 @@ async function finishDownload(record: StagedDownloadRecord): Promise<{ success: 
   if (record.nativeTransfer) {
     await getDeviceInfoNativeModule()?.clearBackgroundDownloadRecord?.(record.operation.operationId).catch(() => undefined);
   }
-  patchOperation({
+  patchModelOperation({
     phase: "completed",
     progress: 1,
     resumable: false,
@@ -918,7 +968,7 @@ async function monitorNativeDownload(record: StagedDownloadRecord): Promise<{ su
 
   return new Promise((resolve, reject) => {
     const checkStatus = async () => {
-      if (currentOperation?.operationId !== record.operation.operationId || currentOperation.phase === "canceled") {
+      if (getModelOperation()?.operationId !== record.operation.operationId || getModelOperation()!.phase === "canceled") {
         resolve({ success: false });
         return;
       }
@@ -927,7 +977,7 @@ async function monitorNativeDownload(record: StagedDownloadRecord): Promise<{ su
         const status = await nativeModule.getBackgroundDownloadStatus(record.operation.operationId);
         if (status.phase === "queued" || status.phase === "downloading") {
           const progress = status.totalBytes ? clampProgress(status.bytesWritten, status.totalBytes) : null;
-          record.operation = patchOperation({
+          record.operation = patchModelOperation({
             phase: status.phase,
             bytesWritten: status.bytesWritten,
             totalBytes: status.totalBytes,
@@ -940,7 +990,7 @@ async function monitorNativeDownload(record: StagedDownloadRecord): Promise<{ su
         }
 
         if (status.phase === "completed") {
-          record.operation = patchOperation({
+          record.operation = patchModelOperation({
             phase: "downloading",
             bytesWritten: status.bytesWritten,
             totalBytes: status.totalBytes,
@@ -961,7 +1011,7 @@ async function monitorNativeDownload(record: StagedDownloadRecord): Promise<{ su
         }
         const message = error instanceof Error ? error.message : "Failed to complete the background model download.";
         removeStagingRecord(record);
-        patchOperation({ phase: "failed", error: message, resumable: false });
+        patchModelOperation({ phase: "failed", error: message, resumable: false });
         activeStagingRecord = null;
         reject(error);
       }
@@ -977,10 +1027,14 @@ async function runNativeBackgroundDownload(record: StagedDownloadRecord): Promis
     return runDownload(record, false, true);
   }
 
-  const started = await nativeModule.startBackgroundDownload(record.model.url, record.operation.operationId);
+  const started = await nativeModule.startBackgroundDownload(
+    record.model.url,
+    record.operation.operationId,
+    record.model.artifactFileName
+  );
   record.fileUri = started.fileUri;
   record.nativeTransfer = { downloadId: started.downloadId, platform: Platform.OS as "android" | "ios" };
-  record.operation = patchOperation({ phase: "queued", resumable: true });
+  record.operation = patchModelOperation({ phase: "queued", resumable: true });
   writeStagingRecord(record);
   return monitorNativeDownload(record);
 }
@@ -1000,9 +1054,9 @@ async function runDownload(
     file.uri,
     {},
     (progress) => {
-      if (currentOperation?.operationId !== record.operation.operationId) return;
+      if (getModelOperation()?.operationId !== record.operation.operationId) return;
       const progressValue = clampProgress(progress.totalBytesWritten, progress.totalBytesExpectedToWrite);
-      const next = patchOperation({
+      const next = patchModelOperation({
         phase: "downloading",
         progress: progressValue,
         bytesWritten: progress.totalBytesWritten,
@@ -1016,15 +1070,15 @@ async function runDownload(
   try {
     const result = resume ? await activeDownload.resumeAsync() : await activeDownload.downloadAsync();
     activeDownload = null;
-    if (currentOperation?.phase === "paused") return { success: false };
+    if (getModelOperation()?.phase === "paused") return { success: false };
     if (!result) throw new Error("Download canceled.");
     return finishDownload(record);
   } catch (error) {
     activeDownload = null;
-    if (currentOperation?.phase === "paused" || currentOperation?.phase === "canceled") return { success: false };
+    if (getModelOperation()?.phase === "paused" || getModelOperation()?.phase === "canceled") return { success: false };
     const message = error instanceof Error ? error.message : "Failed to prepare the downloaded model.";
     removeStagingRecord(record);
-    patchOperation({ phase: "failed", error: message, resumable: false });
+    patchModelOperation({ phase: "failed", error: message, resumable: false });
     activeStagingRecord = null;
     logger.ai.error("Managed GGUF download failed.", { error: message, modelId: record.model.id });
     throw error;
@@ -1033,12 +1087,11 @@ async function runDownload(
 
 export async function getCompatibleModelCatalog(): Promise<CompatibleModelCatalog> {
   const hardware = await getDeviceHardwareProfile();
+  const runtimeAvailability = await getManagedRuntimeAvailability();
   const library = readLibrary();
   const installedCatalogIds = new Set(library.installedModels.map((item) => item.catalogId).filter(Boolean));
-  const availableCatalog = GGUF_MODELS.filter(
-    (model) => model.lifecycleChannel === "supported" && !installedCatalogIds.has(model.id)
-  );
-  const compatibleModels = availableCatalog.filter((model) => catalogDownloadFitsHardware(model, hardware));
+  const availableCatalog = GGUF_MODELS.filter((model) => !installedCatalogIds.has(model.id));
+  const compatibleModels = availableCatalog.filter((model) => catalogDownloadFitsHardwareForDownload(model, hardware));
   const hiddenModels = availableCatalog.filter((model) => !compatibleModels.includes(model));
   const maximumTier = compatibleModels.at(-1)?.tier ?? recommendedDeviceModelTier(hardware);
   let unavailableReason: string | null = null;
@@ -1053,21 +1106,36 @@ export async function getCompatibleModelCatalog(): Promise<CompatibleModelCatalo
   } else if (availableCatalog.length > 0 && compatibleModels.length === 0) {
     unavailableReason = "There is not enough free storage for an additional compatible model right now. Free storage, then re-check.";
   }
-  return { compatibleModels, hiddenModels, hardware, maximumTier, unavailableReason };
+  return { compatibleModels, hiddenModels, hardware, maximumTier, runtimeAvailability, unavailableReason };
 }
 
-export function getModelOperation(): ModelOperationState | null {
-  return currentOperation;
-}
-
-export function subscribeModelOperation(listener: OperationListener): () => void {
-  operationListeners.add(listener);
-  listener(currentOperation);
-  return () => operationListeners.delete(listener);
+async function getManagedRuntimeAvailability(): Promise<RuntimeAvailability> {
+  const liteRtModule = getLiteRtLmNativeModule();
+  const liteRtAvailable = Platform.OS === "android" && Boolean(liteRtModule) && (
+    liteRtModule?.isRuntimeAvailable ? (await Promise.resolve(liteRtModule.isRuntimeAvailable()).catch(() => false)) === true : true
+  );
+  return { gguf: true, "litert-lm": liteRtAvailable };
 }
 
 export async function getChatModelLibrary(): Promise<ChatModelLibrary> {
-  return readLibrary();
+  const library = readLibrary();
+  const runtimeAvailability = await getManagedRuntimeAvailability();
+  return {
+    ...library,
+    installedModels: library.installedModels.map((entry) => {
+      const manifest = readManifest(new File(entry.manifestUri));
+      const runtimeFormat = manifest?.runtimeFormat ?? entry.runtimeFormat ?? "gguf";
+      return {
+        ...entry,
+        runtimeFormat,
+        filePresent: new File(entry.fileUri).exists,
+        manifestPresent: Boolean(manifest),
+        runtimeAvailable: runtimeAvailability[runtimeFormat] === true,
+        evaluationStatus: manifest?.evaluationStatus ?? (runtimeFormat === "gguf" ? "not_required" : "pending"),
+        activationFailureReason: manifest?.lastEvaluation?.failureReason ?? entry.rejectionReasons[0] ?? null
+      };
+    })
+  };
 }
 
 export async function getActiveChatModelStatus(): Promise<ImportedModelStatus> {
@@ -1080,6 +1148,25 @@ export async function getActiveChatModelStatus(): Promise<ImportedModelStatus> {
   if (!manifest || !new File(active.fileUri).exists) {
     writeLibrary({ ...library, activeModelId: null });
     return rejectedStatus("chat", "The active model file is missing or invalid. Choose another installed model.");
+  }
+  if (manifest.runtimeFormat === "litert-lm") {
+    if (manifest.evaluationStatus !== "passed") {
+      writeLibrary({ ...library, activeModelId: null });
+      return rejectedStatus(
+        "chat",
+        manifest.lastEvaluation?.failureReason ?? "The Gemma model is installed but has not passed its activation smoke test."
+      );
+    }
+    const nativeModule = getLiteRtLmNativeModule();
+    const runtimeAvailable = Boolean(nativeModule) && (
+      nativeModule?.isRuntimeAvailable
+        ? (await Promise.resolve(nativeModule.isRuntimeAvailable()).catch(() => false)) === true
+        : Boolean(nativeModule?.answerSafeChat)
+    );
+    if (!runtimeAvailable) {
+      writeLibrary({ ...library, activeModelId: null });
+      return rejectedStatus("chat", "The Gemma model is installed, but this Android build does not include the LiteRT-LM runtime.");
+    }
   }
   return statusFromManifest(manifest);
 }
@@ -1122,18 +1209,21 @@ export async function downloadCatalogModel(
   model: GgufDownloadConfig,
   onProgress?: (progress: number, detail?: GgufDownloadProgress) => void
 ): Promise<{ success: boolean; status?: ImportedModelStatus }> {
-  assertNoBusyOperation();
+  assertNoBusyModelOperation();
   const catalog = await getCompatibleModelCatalog();
   if (!catalog.compatibleModels.some((entry) => entry.id === model.id)) {
     throw new Error(catalog.unavailableReason ?? "This model is not compatible with the device or available storage.");
+  }
+  if (model.runtimeFormat === "litert-lm" && catalog.runtimeAvailability["litert-lm"] !== true) {
+    throw new Error("Install an updated Android build with the LiteRT-LM bridge before downloading Gemma 4.");
   }
   const modelId = normalizedId(model.id);
   if (readLibrary().installedModels.some((entry) => entry.id === modelId || entry.catalogId === model.id)) {
     throw new Error("This model is already installed.");
   }
-  const operation = operationFor(modelId, model.name, model.id, "downloading");
-  emitOperation(operation);
-  const staged = stagingModelFile(operation.operationId);
+  const operation = newModelOperation(modelId, model.name, model.id, "downloading");
+  emitModelOperation(operation);
+  const staged = stagingModelFile(operation.operationId, model.artifactFileName);
   safeDelete(staged);
   const record: StagedDownloadRecord = { version: 1, operation, model, fileUri: staged.uri };
   writeStagingRecord(record);
@@ -1169,17 +1259,17 @@ export async function downloadGgufModel(
 
 export async function pauseActiveModelDownload(): Promise<void> {
   if (activeStagingRecord?.nativeTransfer) return;
-  if (!activeDownload || !activeStagingRecord || currentOperation?.phase !== "downloading") return;
+  if (!activeDownload || !activeStagingRecord || getModelOperation()?.phase !== "downloading") return;
   const pauseState = await activeDownload.pauseAsync();
   activeStagingRecord.pauseState = pauseState;
-  activeStagingRecord.operation = patchOperation({ phase: "paused", resumable: true });
+  activeStagingRecord.operation = patchModelOperation({ phase: "paused", resumable: true });
   writeStagingRecord(activeStagingRecord);
   activeDownload = null;
 }
 
 export async function recoverInterruptedModelOperation(): Promise<ModelOperationState | null> {
   ensureLibraryDirectories();
-  if (currentOperation && isBusyPhase(currentOperation.phase)) return currentOperation;
+  if (getModelOperation() && isBusyModelOperationPhase(getModelOperation()!.phase)) return getModelOperation();
   const records = STAGING_DIR.list()
     .filter((entry): entry is File => entry instanceof File && entry.uri.endsWith(".json"))
     .map((file) => {
@@ -1196,7 +1286,7 @@ export async function recoverInterruptedModelOperation(): Promise<ModelOperation
   if (!record) return null;
   activeStagingRecord = record;
   if (record.nativeTransfer) {
-    emitOperation({
+    emitModelOperation({
       ...record.operation,
       phase: "queued",
       resumable: true,
@@ -1208,30 +1298,68 @@ export async function recoverInterruptedModelOperation(): Promise<ModelOperation
         error: error instanceof Error ? error.message : String(error)
       });
     });
-    return currentOperation;
+    return getModelOperation();
   }
-  emitOperation({
+  if (record.pauseState) {
+    // Auto-resume across app restarts when the remaining bytes still fit on
+    // the device; otherwise fall back to the manual paused chip.
+    let stagedBytes = 0;
+    try {
+      const stagedFile = new File(record.fileUri);
+      stagedBytes = stagedFile.exists ? stagedFile.size ?? 0 : 0;
+    } catch {
+      stagedBytes = 0;
+    }
+    const remainingBytes = Math.max(0, record.model.sizeMB * 1024 * 1024 - stagedBytes);
+    const hardware = await getDeviceHardwareProfile();
+    const headroomGB = 0.5;
+    const fitsStorage =
+      hardware.freeStorageGB !== null && hardware.freeStorageGB > remainingBytes / 1024 ** 3 + headroomGB;
+    if (fitsStorage) {
+      logger.ai.log("Auto-resuming interrupted model download.", {
+        modelName: record.model.name,
+        remainingMB: Math.round(remainingBytes / 1024 ** 2)
+      });
+      emitModelOperation({
+        ...record.operation,
+        phase: "downloading",
+        resumable: true,
+        error: null,
+        updatedAt: now()
+      });
+      void runDownload(record, true).catch((error) => {
+        logger.ai.warn("Auto-resume failed; download stays paused for manual retry.", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+        if (getModelOperation() && isBusyModelOperationPhase(getModelOperation()!.phase)) {
+          patchModelOperation({ phase: "paused", resumable: true, error: null });
+        }
+      });
+      return getModelOperation();
+    }
+  }
+  emitModelOperation({
     ...record.operation,
     phase: "paused",
     resumable: Boolean(record.pauseState),
     error: record.pauseState ? null : "This interrupted download cannot be resumed. Discard it and download again.",
     updatedAt: now()
   });
-  return currentOperation;
+  return getModelOperation();
 }
 
 export async function resumePausedModelDownload(): Promise<{ success: boolean; status?: ImportedModelStatus }> {
-  if (!activeStagingRecord || currentOperation?.phase !== "paused" || !activeStagingRecord.pauseState) {
+  if (!activeStagingRecord || getModelOperation()?.phase !== "paused" || !activeStagingRecord.pauseState) {
     throw new Error("This interrupted download cannot be resumed. Discard it and download again.");
   }
-  patchOperation({ phase: "downloading", error: null });
+  patchModelOperation({ phase: "downloading", error: null });
   return runDownload(activeStagingRecord, true);
 }
 
 export async function discardPausedModelDownload(): Promise<void> {
-  if (!activeStagingRecord || currentOperation?.phase !== "paused") return;
+  if (!activeStagingRecord || getModelOperation()?.phase !== "paused") return;
   removeStagingRecord(activeStagingRecord);
-  patchOperation({ phase: "canceled", resumable: false });
+  patchModelOperation({ phase: "canceled", resumable: false });
   activeStagingRecord = null;
 }
 
@@ -1249,7 +1377,7 @@ export async function cancelGgufDownload(): Promise<void> {
   removeStagingRecord(activeStagingRecord);
   activeDownload = null;
   activeStagingRecord = null;
-  if (currentOperation && isBusyPhase(currentOperation.phase)) patchOperation({ phase: "canceled", resumable: false });
+  if (getModelOperation() && isBusyModelOperationPhase(getModelOperation()!.phase)) patchModelOperation({ phase: "canceled", resumable: false });
 }
 
 export function cleanupPartialGgufDownloads(): void {
@@ -1265,7 +1393,7 @@ export function cleanupPartialGgufDownloads(): void {
         }
       } else {
         safeDelete(entry);
-        emitOperation({
+        emitModelOperation({
           ...record.operation,
           phase: "failed",
           error: "The interrupted download did not have a usable saved file. Please download the model again.",
@@ -1278,20 +1406,20 @@ export function cleanupPartialGgufDownloads(): void {
     }
   }
   for (const entry of STAGING_DIR.list()) {
-    if (entry instanceof File && entry.uri.endsWith(TEMP_DOWNLOAD_SUFFIX) && !protectedUris.has(entry.uri)) safeDelete(entry);
+    if (entry instanceof File && entry.name.includes(TEMP_DOWNLOAD_MARKER) && !protectedUris.has(entry.uri)) safeDelete(entry);
   }
 }
 
 export async function activateChatModel(modelId: string): Promise<ImportedModelStatus> {
-  assertNoBusyOperation();
+  assertNoBusyModelOperation();
   const library = readLibrary();
   const entry = library.installedModels.find((item) => item.id === modelId);
   if (!entry) throw new Error("The selected model is not installed.");
-  const operation = operationFor(modelId, entry.modelName, entry.catalogId, "activating");
-  emitOperation(operation);
+  const operation = newModelOperation(modelId, entry.modelName, entry.catalogId, "activating");
+  emitModelOperation(operation);
   try {
     const status = await activateInstalledModelInternal(modelId, operation.operationId);
-    patchOperation({
+    patchModelOperation({
       phase: "completed",
       progress: 1,
       error: status.state === "available" ? null : status.rejectionReasons[0] ?? "The model is installed but cannot be active right now."
@@ -1299,18 +1427,18 @@ export async function activateChatModel(modelId: string): Promise<ImportedModelS
     return status;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not activate the selected model.";
-    patchOperation({ phase: "failed", error: message });
+    patchModelOperation({ phase: "failed", error: message });
     throw error;
   }
 }
 
 export async function removeChatModel(modelId: string): Promise<ImportedModelStatus> {
-  assertNoBusyOperation();
+  assertNoBusyModelOperation();
   const library = readLibrary();
   const target = library.installedModels.find((item) => item.id === modelId);
   if (!target) throw new Error("The selected model is no longer installed.");
-  const operation = operationFor(modelId, target.modelName, target.catalogId, "removing");
-  emitOperation(operation);
+  const operation = newModelOperation(modelId, target.modelName, target.catalogId, "removing");
+  emitModelOperation(operation);
   await startModelMutation(operation.operationId);
   try {
     let nextLibrary = readLibrary();
@@ -1321,7 +1449,7 @@ export async function removeChatModel(modelId: string): Promise<ImportedModelSta
       let replacementActivated = false;
       for (const replacement of replacements) {
         try {
-          patchOperation({ phase: "activating", modelName: replacement.modelName });
+          patchModelOperation({ phase: "activating", modelName: replacement.modelName });
           await activateInstalledModelInternal(replacement.id, operation.operationId, false);
           replacementActivated = true;
           nextLibrary = readLibrary();
@@ -1338,7 +1466,7 @@ export async function removeChatModel(modelId: string): Promise<ImportedModelSta
         writeLibrary(nextLibrary);
       }
     }
-    patchOperation({ phase: "removing", modelName: target.modelName });
+    patchModelOperation({ phase: "removing", modelName: target.modelName });
     safeDelete(installedModelDirectory(modelId));
     nextLibrary = readLibrary();
     writeLibrary({
@@ -1346,11 +1474,11 @@ export async function removeChatModel(modelId: string): Promise<ImportedModelSta
       installedModels: nextLibrary.installedModels.filter((entry) => entry.id !== modelId),
       activeModelId: nextLibrary.activeModelId === modelId ? null : nextLibrary.activeModelId
     });
-    patchOperation({ phase: "completed", progress: 1, modelName: target.modelName });
+    patchModelOperation({ phase: "completed", progress: 1, modelName: target.modelName });
     return getActiveChatModelStatus();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not remove the selected model.";
-    patchOperation({ phase: "failed", error: message });
+    patchModelOperation({ phase: "failed", error: message });
     throw error;
   } finally {
     endModelMutation();
@@ -1370,11 +1498,11 @@ export async function removeImportedModel(role: LocalModelRole): Promise<Importe
 export async function pickAndImportGgufModel(role: LocalModelRole): Promise<PickAndImportModelResult> {
   const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: false, multiple: false });
   if (result.canceled || result.assets.length === 0 || !result.assets[0]) return { canceled: true };
-  assertNoBusyOperation();
+  assertNoBusyModelOperation();
   const asset = result.assets[0];
   const modelId = role === "chat" ? `admin-${Date.now()}` : "embedding";
-  const operation = operationFor(modelId, asset.name ?? "Imported GGUF", null, "validating");
-  emitOperation(operation);
+  const operation = newModelOperation(modelId, asset.name ?? "Imported GGUF", null, "validating");
+  emitModelOperation(operation);
   ensureLibraryDirectories();
   const source = new File(asset.uri);
   assertSafeImportPreflight({
@@ -1403,7 +1531,7 @@ export async function pickAndImportGgufModel(role: LocalModelRole): Promise<Pick
     }
 
     if (role === "embedding") {
-      patchOperation({ phase: "validating", progress: null, modelName: manifest.modelName });
+      patchModelOperation({ phase: "validating", progress: null, modelName: manifest.modelName });
       const embeddingDimension = await probeEmbeddingModel(staged, manifest);
       manifest = {
         ...manifest,
@@ -1415,7 +1543,7 @@ export async function pickAndImportGgufModel(role: LocalModelRole): Promise<Pick
       staged.move(embeddingFile(role));
       embeddingManifestFile(role).write(JSON.stringify(manifest, null, 2));
       const status = statusFromManifest(manifest);
-      patchOperation({
+      patchModelOperation({
         phase: "completed",
         progress: 1,
         error: status.state === "available" ? null : status.rejectionReasons[0] ?? "The embedding model is installed but cannot be used right now."
@@ -1431,7 +1559,7 @@ export async function pickAndImportGgufModel(role: LocalModelRole): Promise<Pick
     const status = manifest.rejectionReasons.length === 0
       ? await activateInstalledModelInternal(modelId, operation.operationId)
       : statusFromManifest(manifest);
-    patchOperation({
+    patchModelOperation({
       phase: "completed",
       progress: 1,
       error: status.state === "available" ? null : status.rejectionReasons[0] ?? "The model is installed but cannot be active right now."
@@ -1439,20 +1567,15 @@ export async function pickAndImportGgufModel(role: LocalModelRole): Promise<Pick
     return { canceled: false, status };
   } catch (error) {
     safeDelete(staged);
-    patchOperation({ phase: "failed", error: error instanceof Error ? error.message : "Import failed." });
+    patchModelOperation({ phase: "failed", error: error instanceof Error ? error.message : "Import failed." });
     throw error;
   }
 }
-
-export async function withLocalModelInferenceLease<T>(task: () => Promise<T>): Promise<T> {
-  while (mutationInProgress) {
-    await new Promise<void>((resolve) => mutationWaiters.add(resolve));
-  }
-  activeInferenceCount += 1;
-  try {
-    return await task();
-  } finally {
-    activeInferenceCount -= 1;
-    signalInferenceIdle();
-  }
-}
+export {
+  getModelOperation,
+  isLocalModelInferenceBusy,
+  subscribeModelOperation,
+  withLocalModelInferenceLease,
+  type ModelOperationPhase,
+  type ModelOperationState
+} from "./modelOperationCoordinator";
