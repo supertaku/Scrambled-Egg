@@ -42,6 +42,7 @@ import {
 import { createInferenceWatchdog, watchdogConfigForTier } from "./inferenceWatchdog";
 import { isCompletionStoppedDueToTokenLimit } from "./llamaStoppedLimit";
 import { executionOptionsForManifest } from "./localModelPerformance";
+import { RecoverableAsyncResource } from "./recoverableAsyncResource";
 import { logger } from "@/utils/logger";
 
 import type { LlamaContext, TokenData } from "llama.rn";
@@ -50,10 +51,8 @@ export class LlamaRnProvider implements LocalAIProvider {
   readonly id = "llama-rn" as const;
   readonly name = "llama.rn GGUF";
 
-  private chatContextPromise: Promise<LlamaContext> | null = null;
-  private embeddingContextPromise: Promise<LlamaContext> | null = null;
-  private chatModelKey: string | null = null;
-  private embeddingModelKey: string | null = null;
+  private readonly chatContext = new RecoverableAsyncResource<LlamaContext>();
+  private readonly embeddingContext = new RecoverableAsyncResource<LlamaContext>();
   private modelLoadTimeMs: number | null = null;
   private lastInferenceTimeMs: number | null = null;
 
@@ -272,7 +271,7 @@ export class LlamaRnProvider implements LocalAIProvider {
             primeMs: Date.now() - startedAt
           });
         } catch (error) {
-          // Priming is an optimization; a failure must not block the loaded model.
+          await this.chatContext.invalidate((pending) => this.releaseContext(pending));
           logger.ai.warn("llama.rn prewarm priming skipped.", {
             error: error instanceof Error ? error.message : String(error)
           });
@@ -292,27 +291,21 @@ export class LlamaRnProvider implements LocalAIProvider {
   async embedText(text: string): Promise<number[]> {
     return withLocalModelInferenceLease(async () => {
       const context = await this.ensureEmbeddingContext();
-      const result = await context.embedding(text, { embd_normalize: 1 });
-      return result.embedding;
+      try {
+        const result = await context.embedding(text, { embd_normalize: 1 });
+        return result.embedding;
+      } catch (error) {
+        await this.embeddingContext.invalidate((pending) => this.releaseContext(pending));
+        throw error;
+      }
     });
   }
 
   async dispose(): Promise<void> {
-    const contextPromises = [this.chatContextPromise, this.embeddingContextPromise];
-    this.chatContextPromise = null;
-    this.embeddingContextPromise = null;
-    this.chatModelKey = null;
-    this.embeddingModelKey = null;
-
-    await Promise.all(
-      contextPromises.map(async (contextPromise) => {
-        if (!contextPromise) {
-          return;
-        }
-
-        await this.releaseContext(contextPromise);
-      })
-    );
+    await Promise.all([
+      this.chatContext.invalidate((pending) => this.releaseContext(pending)),
+      this.embeddingContext.invalidate((pending) => this.releaseContext(pending))
+    ]);
   }
 
   private async runSafeChat(input: SafeChatInput, onToken?: (token: string) => void): Promise<SafeChatResult> {
@@ -619,6 +612,9 @@ export class LlamaRnProvider implements LocalAIProvider {
         providerId: this.id,
         providerName: this.name
       };
+    } catch (error) {
+      await this.chatContext.invalidate((pending) => this.releaseContext(pending));
+      throw error;
     } finally {
       if (signal) {
         signal.removeEventListener("abort", onAbort);
@@ -643,14 +639,11 @@ export class LlamaRnProvider implements LocalAIProvider {
       throw new Error(status.rejectionReasons[0] ?? "No active llama.rn GGUF chat model is available.");
     }
 
-    if (this.chatContextPromise && this.chatModelKey !== modelKey) {
-      await this.releaseContext(this.chatContextPromise);
-      this.chatContextPromise = null;
-    }
-
-    this.chatModelKey = modelKey;
-    this.chatContextPromise ??= this.createContext(status.manifest, false);
-    return this.chatContextPromise;
+    return this.chatContext.get(
+      modelKey,
+      () => this.createContext(status.manifest!, false),
+      (pending) => this.releaseContext(pending)
+    );
   }
 
   private async ensureEmbeddingContext(): Promise<LlamaContext> {
@@ -660,14 +653,11 @@ export class LlamaRnProvider implements LocalAIProvider {
       throw new Error(status.rejectionReasons[0] ?? "No imported llama.rn GGUF embedding model is available.");
     }
 
-    if (this.embeddingContextPromise && this.embeddingModelKey !== modelKey) {
-      await this.releaseContext(this.embeddingContextPromise);
-      this.embeddingContextPromise = null;
-    }
-
-    this.embeddingModelKey = modelKey;
-    this.embeddingContextPromise ??= this.createContext(status.manifest, true);
-    return this.embeddingContextPromise;
+    return this.embeddingContext.get(
+      modelKey,
+      () => this.createContext(status.manifest!, true),
+      (pending) => this.releaseContext(pending)
+    );
   }
 
   private modelKey(status: ImportedModelStatus): string | null {
