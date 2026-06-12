@@ -1,10 +1,13 @@
+import { useCallback } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 
-import { colors } from "@/theme/colors";
+import { HakiMascotCompat } from "@/mascot";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
+import { hapticTap } from "@/utils/haptics";
 import { AdminUnlockModal } from "./AdminUnlockModal";
-import { PixelHaki, SpriteHaki } from "./mascot/PixelHaki";
-import { pixelStateForMascotStatus, type MascotStatus } from "./mascot/mascotConfig";
+import type { MascotStatus } from "./mascot/mascotConfig";
 import { useMascotInteraction } from "./mascot/useMascotInteraction";
 
 export type { MascotStatus } from "./mascot/mascotConfig";
@@ -26,6 +29,8 @@ export function MascotHeader({
   status = "idle",
   useSpriteSheet = false
 }: MascotHeaderProps) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const interactionVisible = useIsFocused();
   const {
     bubbleScale,
@@ -40,6 +45,12 @@ export function MascotHeader({
   } = useMascotInteraction({ interactionVisible, message, onAdminRequest: onMascotPress, status });
   const showTriviaLabel = isTrivia && resolvedMessage === message;
   const compactDialogue = resolvedStatus === "sleepy" && Boolean(resolvedMessage);
+
+  const handlePressWithReaction = useCallback(() => {
+    hapticTap();
+    handleMascotPress();
+  }, [handleMascotPress]);
+
   return (
     <View style={styles.container}>
       <AdminUnlockModal onClose={closeAdminModal} visible={showAdminModal} />
@@ -48,16 +59,17 @@ export function MascotHeader({
         accessibilityRole="button"
         disabled={isGroggy}
         onLongPress={handleMascotLongPress}
-        onPress={handleMascotPress}
+        onPress={handlePressWithReaction}
         delayLongPress={450}
         style={styles.mascotWrap}
       >
         <Animated.View style={[styles.mascotImage, { transform: imageTransform }]}>
-          {useSpriteSheet ? (
-            <SpriteHaki height={178} state={pixelStateForMascotStatus(resolvedStatus)} />
-          ) : (
-            <PixelHaki height={178} state={pixelStateForMascotStatus(resolvedStatus)} width={114} />
-          )}
+          <HakiMascotCompat
+            animated={interactionVisible}
+            externalFloat
+            height={178}
+            status={resolvedStatus}
+          />
         </Animated.View>
       </Pressable>
 
@@ -84,7 +96,7 @@ export function MascotHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   container: {
     alignItems: "flex-start",
     height: 146,
@@ -124,7 +136,7 @@ const styles = StyleSheet.create({
     elevation: 6
   },
   speechBubble: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.ink,
     borderRadius: 18,
     borderTopLeftRadius: 8,

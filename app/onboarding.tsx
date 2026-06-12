@@ -32,7 +32,8 @@ import {
   saveStudentProfile,
   type StudentProfile
 } from "@/services/studentProfileService";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 type TextProfileField = "name" | "studentId" | "course" | "year" | "section";
 
@@ -54,6 +55,8 @@ const STEPS: SetupStep[] = [
 ];
 
 export default function OnboardingScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
   const { mode, returnTo } = useLocalSearchParams<{ mode?: string; returnTo?: string }>();
   const editing = mode === "edit";
@@ -298,7 +301,7 @@ export default function OnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   loading: {
     alignItems: "center",
     backgroundColor: colors.maroon,
@@ -353,7 +356,7 @@ const styles = StyleSheet.create({
     paddingTop: 10
   },
   formCard: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 22,
     borderWidth: 1,

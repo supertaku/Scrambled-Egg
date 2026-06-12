@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors } from "@/theme/colors";
-import { PixelHaki, type PixelHakiState } from "../mascot/PixelHaki";
+import { HakiMascotCompat, HD_ONBOARDING_IMAGES } from "@/mascot";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
+import type { MascotStatus } from "../mascot/mascotConfig";
 
 type Pose = "welcome" | "learning" | "celebration";
 
@@ -13,9 +15,9 @@ function poseForStep(step: number): Pose {
   return step >= 2 ? "learning" : "welcome";
 }
 
-function stateForPose(pose: Pose): PixelHakiState {
+function statusForPose(pose: Pose): MascotStatus {
   if (pose === "celebration") return "success";
-  if (pose === "learning") return "helping";
+  if (pose === "learning") return "teaching";
   return "idle";
 }
 
@@ -34,6 +36,8 @@ export function OnboardingHaki({
   step,
   onPress
 }: OnboardingHakiProps) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const translateY = useRef(new Animated.Value(0)).current;
   const rotate = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1)).current;
@@ -142,7 +146,14 @@ export function OnboardingHaki({
         style={styles.mascotPressable}
       >
         <Animated.View style={[styles.mascot, { transform: [{ translateY }, { rotate: rotation }, { scale }] }]}>
-          <PixelHaki animated={false} height={218} reducedMotion={reducedMotion} state={stateForPose(pose)} width={138} />
+          <HakiMascotCompat
+            externalFloat
+            height={218}
+            reducedMotion={reducedMotion}
+            source={HD_ONBOARDING_IMAGES[pose]}
+            status={statusForPose(pose)}
+            width={155}
+          />
         </Animated.View>
       </Pressable>
       <Animated.View style={[styles.bubble, { transform: [{ scale: bubbleScale }] }]}>
@@ -154,7 +165,7 @@ export function OnboardingHaki({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   container: {
     alignItems: "center",
     height: 272,
@@ -177,7 +188,7 @@ const styles = StyleSheet.create({
   },
   bubble: {
     alignSelf: "flex-end",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.borderStrong,
     borderRadius: 18,
     borderTopLeftRadius: 8,
@@ -194,7 +205,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10
   },
   tail: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderBottomColor: colors.borderStrong,
     borderLeftColor: colors.borderStrong,
     borderBottomWidth: 1,
