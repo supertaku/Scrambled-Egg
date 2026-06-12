@@ -1,6 +1,7 @@
 import { Directory, File } from "expo-file-system";
 
 import type { LocalModelTier } from "./LocalAIProvider";
+import { parseLocalModelManifest } from "./localModelManifestSchema";
 import type { ImportedModelStatus, LocalModelManifest, LocalModelRole } from "./localModelMetadata";
 import type { ModelRuntimeFormat } from "./modelDownloadConfig";
 import {
@@ -58,30 +59,10 @@ export interface ChatModelLibrary {
   installedModels: InstalledChatModel[];
 }
 
-function parseManifest(text: string): LocalModelManifest | null {
-  try {
-    const parsed = JSON.parse(text) as Partial<LocalModelManifest>;
-    if (
-      parsed.version !== 1 ||
-      !parsed.role ||
-      !parsed.uri ||
-      !parsed.storedName ||
-      !parsed.manifestPath ||
-      typeof parsed.sizeBytes !== "number" ||
-      !Array.isArray(parsed.rejectionReasons)
-    ) {
-      return null;
-    }
-    return parsed as LocalModelManifest;
-  } catch {
-    return null;
-  }
-}
-
 export function readManifest(file: File): LocalModelManifest | null {
   if (!file.exists) return null;
   try {
-    return parseManifest(file.textSync());
+    return parseLocalModelManifest(file.textSync());
   } catch {
     return null;
   }
