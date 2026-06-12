@@ -4,7 +4,8 @@ import { Database, FilePlus, LibraryBig } from "lucide-react-native";
 
 import type { DatabaseStats } from "@/db/documentRepository";
 import type { DocumentSummary } from "@/types/document";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 function formatDate(value: string | null | undefined): string {
   return value?.trim() || "No date";
@@ -23,6 +24,8 @@ export function SettingsDbSection({
   seedVersion: string | null;
   stats: DatabaseStats | null;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
 
   return (
@@ -78,9 +81,9 @@ export function SettingsDbSection({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,
@@ -105,7 +108,7 @@ const styles = StyleSheet.create({
   actionButton: {
     alignItems: "center",
     backgroundColor: colors.maroonSoft,
-    borderColor: "#E8C7D0",
+    borderColor: colors.maroonBorder,
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
@@ -126,7 +129,7 @@ const styles = StyleSheet.create({
   },
   documentRow: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderTopColor: colors.border,
     borderTopWidth: 1,
     flexDirection: "row",

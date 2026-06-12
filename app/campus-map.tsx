@@ -6,7 +6,6 @@ import {
   Image,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -15,7 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { PixelHaki } from "@/components/mascot/PixelHaki";
+import { HakiHdMascot } from "@/mascot";
 import {
   CAMPUS_MAP_CANVAS,
   getCampusMapDestination,
@@ -35,9 +34,18 @@ import {
   type CampusMapPoint,
   type CampusMapRect
 } from "@/data/campusMapGameplay";
+import {
+  allFeathersCollected,
+  campusFeathers,
+  findFeatherAt
+} from "@/data/campusMapCollectibles";
 import { useDebouncedQuery } from "@/hooks/useDebouncedQuery";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { loadCollectedFeathers, saveCollectedFeathers } from "@/services/campusFeatherService";
 import { colors } from "@/theme/colors";
+import { campusMapStyles as styles } from "@/components/campus-map/campusMapStyles";
+import { campusMapPalette } from "@/theme/featurePalettes";
+import { hapticSuccess, hapticTap } from "@/utils/haptics";
 
 interface MapFrame {
   height: number;
@@ -48,6 +56,8 @@ interface MapFrame {
 
 const SPRITE_WIDTH = 36;
 const SPRITE_HEIGHT = 36;
+const FEATHER_SIZE = 18;
+const FEATHER_IMAGE = require("../assets/images/mascot/pixel/haki-feather.png");
 const DIRECTION_IMAGE = {
   down: require("../assets/images/map/haki-map-down.png"),
   left: require("../assets/images/map/haki-map-left.png"),
@@ -107,7 +117,39 @@ export default function CampusMapScreen() {
   const [dialogDestinationId, setDialogDestinationId] = useState<string | null>(null);
   const [searchVisible, setSearchVisible] = useState(false);
   const [debugVisible, setDebugVisible] = useState(false);
+  const [collectedFeathers, setCollectedFeathers] = useState<ReadonlySet<string>>(new Set());
+  const [featherCelebration, setFeatherCelebration] = useState(false);
   const movementTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void loadCollectedFeathers().then((collected) => {
+      if (mounted) {
+        setCollectedFeathers(collected);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Feather Hunt: walking over a feather collects it.
+  useEffect(() => {
+    const found = findFeatherAt(playerPosition, collectedFeathers);
+    if (!found) {
+      return;
+    }
+    const next = new Set(collectedFeathers);
+    next.add(found.id);
+    setCollectedFeathers(next);
+    saveCollectedFeathers(next);
+    if (allFeathersCollected(next)) {
+      hapticSuccess();
+      setFeatherCelebration(true);
+    } else {
+      hapticTap();
+    }
+  }, [collectedFeathers, playerPosition]);
 
   const tapDestinations = useMemo(() => getCampusMapTapDestinations(), []);
   const searchResults = useMemo(() => searchCampusMapDestinations(debouncedQuery), [debouncedQuery]);
@@ -207,6 +249,21 @@ export default function CampusMapScreen() {
               />
             ))}
 
+            {campusFeathers
+              .filter((feather) => !collectedFeathers.has(feather.id))
+              .map((feather) => (
+                <Image
+                  accessibilityIgnoresInvertColors
+                  key={feather.id}
+                  resizeMode="contain"
+                  source={FEATHER_IMAGE}
+                  style={[
+                    styles.feather,
+                    { left: pct(feather.position.x), top: pct(feather.position.y) }
+                  ]}
+                />
+              ))}
+
             <PlayerSprite
               direction={direction}
               position={playerPosition}
@@ -230,9 +287,35 @@ export default function CampusMapScreen() {
           onPress={() => router.replace("/map" as never)}
           style={styles.backButton}
         >
-          <ChevronLeft color="#3B2022" size={18} strokeWidth={3} />
+          <ChevronLeft color={campusMapPalette.inkStrong} size={18} strokeWidth={3} />
           <Text style={styles.backText}>BACK</Text>
         </Pressable>
+
+        <View
+          accessibilityLabel={`Feathers collected: ${collectedFeathers.size} of ${campusFeathers.length}`}
+          style={styles.featherCounter}
+        >
+          <Image accessibilityIgnoresInvertColors resizeMode="contain" source={FEATHER_IMAGE} style={styles.featherCounterIcon} />
+          <Text style={styles.featherCounterText}>
+            {collectedFeathers.size}/{campusFeathers.length}
+          </Text>
+        </View>
+
+        {featherCelebration ? (
+          <View style={styles.featherBanner}>
+            <Text style={styles.featherBannerTitle}>FEATHER HUNT COMPLETE!</Text>
+            <Text style={styles.featherBannerText}>
+              You found all {campusFeathers.length} of Haki's lost feathers while exploring the campus. Nicely done, explorer!
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setFeatherCelebration(false)}
+              style={styles.featherBannerButton}
+            >
+              <Text style={styles.featherBannerButtonText}>HOOT! CONTINUE</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.searchArea}>
           <Pressable
@@ -244,7 +327,7 @@ export default function CampusMapScreen() {
             }}
             style={styles.searchToggle}
           >
-            {searchVisible ? <X color="#3B2022" size={19} strokeWidth={3} /> : <Search color="#3B2022" size={18} strokeWidth={3} />}
+            {searchVisible ? <X color={campusMapPalette.inkStrong} size={19} strokeWidth={3} /> : <Search color={campusMapPalette.inkStrong} size={18} strokeWidth={3} />}
           </Pressable>
           {__DEV__ ? (
             <Pressable
@@ -265,7 +348,7 @@ export default function CampusMapScreen() {
                   autoCorrect={false}
                   onChangeText={setQuery}
                   placeholder="Gym, OSA, Clinic, BAS..."
-                  placeholderTextColor="#766D60"
+                  placeholderTextColor={campusMapPalette.placeholder}
                   style={styles.searchInput}
                   value={query}
                 />
@@ -292,19 +375,19 @@ export default function CampusMapScreen() {
 
         <View pointerEvents={dialogDestination ? "none" : "auto"} style={[styles.dpad, dialogDestination ? styles.dimmedControls : undefined]}>
           <DirectionButton direction="up" onPressIn={startMovement} onPressOut={stopMovement}>
-            <ChevronUp color="#35252A" size={22} strokeWidth={3} />
+            <ChevronUp color={campusMapPalette.ink} size={22} strokeWidth={3} />
           </DirectionButton>
           <View style={styles.dpadMiddle}>
             <DirectionButton direction="left" onPressIn={startMovement} onPressOut={stopMovement}>
-              <ChevronLeft color="#35252A" size={22} strokeWidth={3} />
+              <ChevronLeft color={campusMapPalette.ink} size={22} strokeWidth={3} />
             </DirectionButton>
             <View style={styles.dpadCenter} />
             <DirectionButton direction="right" onPressIn={startMovement} onPressOut={stopMovement}>
-              <ChevronRight color="#35252A" size={22} strokeWidth={3} />
+              <ChevronRight color={campusMapPalette.ink} size={22} strokeWidth={3} />
             </DirectionButton>
           </View>
           <DirectionButton direction="down" onPressIn={startMovement} onPressOut={stopMovement}>
-            <ChevronDown color="#35252A" size={22} strokeWidth={3} />
+            <ChevronDown color={campusMapPalette.ink} size={22} strokeWidth={3} />
           </DirectionButton>
         </View>
 
@@ -449,7 +532,7 @@ function BuildingPrompt({
     >
       <Pressable accessibilityRole="button" onPress={onPress} style={styles.promptButton}>
         <Text numberOfLines={1} style={styles.promptText}>{destination.displayName}</Text>
-        <ChevronRight color="#FCE9A5" size={13} strokeWidth={3} />
+        <ChevronRight color={campusMapPalette.paleGold} size={13} strokeWidth={3} />
       </Pressable>
     </Animated.View>
   );
@@ -490,7 +573,7 @@ function DialogueBox({
     >
       <View style={styles.dialogueInner}>
         <View pointerEvents="none" style={styles.dialogueMascot}>
-          <PixelHaki animated={!reducedMotion} height={94} state="aha" width={68} />
+          <HakiHdMascot animated={!reducedMotion} height={94} status="idea" width={67} />
         </View>
         <View style={styles.dialogueHeader}>
           <View style={styles.dialogueTitleArea}>
@@ -498,7 +581,7 @@ function DialogueBox({
             <Text selectable style={styles.dialogueTitle}>{destination.displayName}</Text>
           </View>
           <Pressable accessibilityLabel="Close building information" onPress={onClose} style={styles.dialogueClose}>
-            <X color="#35252A" size={17} strokeWidth={3} />
+            <X color={campusMapPalette.ink} size={17} strokeWidth={3} />
           </Pressable>
         </View>
         <Text selectable style={styles.dialogueText}>{destination.orientation}</Text>
@@ -508,7 +591,7 @@ function DialogueBox({
         {destination.shortcut ? (
           <Pressable accessibilityRole="button" onPress={onAction} style={styles.dialogueAction}>
             <Text style={styles.dialogueActionText}>{destination.shortcut.label}</Text>
-            <ChevronRight color="#FEF1B5" size={17} strokeWidth={3} />
+            <ChevronRight color={campusMapPalette.paleGoldBright} size={17} strokeWidth={3} />
           </Pressable>
         ) : null}
       </View>
@@ -539,335 +622,3 @@ function DirectionButton({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    backgroundColor: "#17151C",
-    flex: 1
-  },
-  stage: {
-    backgroundColor: "#17151C",
-    flex: 1,
-    overflow: "hidden"
-  },
-  mapViewport: {
-    bottom: 8,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 58
-  },
-  mapCanvas: {
-    borderColor: "#2B2625",
-    borderWidth: 2,
-    overflow: "hidden",
-    position: "absolute"
-  },
-  mapImage: {
-    height: "100%",
-    width: "100%"
-  },
-  backButton: {
-    alignItems: "center",
-    backgroundColor: "#FFDA77",
-    borderBottomColor: "#4B2825",
-    borderBottomWidth: 4,
-    borderColor: "#F8EDB5",
-    borderLeftWidth: 3,
-    borderRightWidth: 3,
-    borderTopWidth: 3,
-    flexDirection: "row",
-    gap: 3,
-    left: 10,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
-    position: "absolute",
-    top: 9,
-    zIndex: 20
-  },
-  backText: {
-    color: "#3B2022",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 0.7
-  },
-  searchArea: {
-    alignItems: "flex-end",
-    position: "absolute",
-    right: 10,
-    top: 9,
-    zIndex: 20
-  },
-  searchToggle: {
-    alignItems: "center",
-    backgroundColor: "#FFDA77",
-    borderBottomColor: "#4B2825",
-    borderBottomWidth: 4,
-    borderColor: "#F8EDB5",
-    borderLeftWidth: 3,
-    borderRightWidth: 3,
-    borderTopWidth: 3,
-    height: 42,
-    justifyContent: "center",
-    width: 44
-  },
-  debugToggle: {
-    alignItems: "center",
-    backgroundColor: "#2C2830",
-    borderColor: "#FFDA77",
-    borderWidth: 1,
-    marginTop: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 5
-  },
-  debugToggleActive: {
-    backgroundColor: "#6B292B"
-  },
-  debugToggleText: {
-    color: "#FFDA77",
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 0.7
-  },
-  searchPanel: {
-    backgroundColor: "#FFF3BF",
-    borderColor: "#3B2022",
-    borderWidth: 3,
-    gap: 7,
-    marginTop: 6,
-    padding: 8,
-    width: 236
-  },
-  searchLabel: {
-    color: "#6B292B",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1
-  },
-  searchInputRow: {
-    backgroundColor: "#FFFBE4",
-    borderColor: "#735050",
-    borderWidth: 2,
-    paddingHorizontal: 7
-  },
-  searchInput: {
-    color: "#35252A",
-    fontSize: 12,
-    fontWeight: "700",
-    paddingVertical: 8
-  },
-  results: {
-    maxHeight: 155
-  },
-  resultButton: {
-    backgroundColor: "#F7DF91",
-    borderColor: "#7B3937",
-    borderWidth: 1,
-    marginBottom: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 8
-  },
-  resultText: {
-    color: "#35252A",
-    fontSize: 11,
-    fontWeight: "800"
-  },
-  noResults: {
-    color: "#654E48",
-    fontSize: 11,
-    fontWeight: "700",
-    paddingVertical: 5
-  },
-  searchHint: {
-    color: "#654E48",
-    fontSize: 10,
-    fontWeight: "700",
-    lineHeight: 14
-  },
-  highlight: {
-    backgroundColor: "rgba(255, 215, 91, 0.26)",
-    borderColor: "#FFD85E",
-    borderWidth: 3,
-    shadowColor: "#FFD85E",
-    shadowOffset: { height: 0, width: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 5
-  },
-  debugLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 4
-  },
-  debugWalkZone: {
-    backgroundColor: "rgba(29, 160, 75, 0.17)",
-    borderColor: "rgba(29, 160, 75, 0.72)",
-    borderWidth: 1
-  },
-  debugBuildingRegion: {
-    backgroundColor: "rgba(204, 32, 46, 0.22)",
-    borderColor: "rgba(224, 59, 69, 0.85)",
-    borderWidth: 1
-  },
-  debugInteractionZone: {
-    backgroundColor: "rgba(255, 215, 91, 0.24)",
-    borderColor: "#FFD85E",
-    borderWidth: 1
-  },
-  debugFootPoint: {
-    backgroundColor: "#50C8FF",
-    borderColor: "#0D2337",
-    borderRadius: 4,
-    borderWidth: 1,
-    height: 7,
-    marginLeft: -3,
-    marginTop: -3,
-    position: "absolute",
-    width: 7
-  },
-  spritePosition: {
-    height: SPRITE_HEIGHT,
-    position: "absolute",
-    width: SPRITE_WIDTH,
-    zIndex: 6
-  },
-  spriteImage: {
-    height: "100%",
-    width: "100%"
-  },
-  promptPosition: {
-    maxWidth: 185,
-    position: "absolute",
-    zIndex: 12
-  },
-  promptButton: {
-    alignItems: "center",
-    backgroundColor: "#6D1930",
-    borderColor: "#FCE9A5",
-    borderWidth: 2,
-    flexDirection: "row",
-    gap: 5,
-    maxWidth: 185,
-    paddingHorizontal: 8,
-    paddingVertical: 6
-  },
-  promptText: {
-    color: "#FFF3C7",
-    flexShrink: 1,
-    fontSize: 10,
-    fontWeight: "900"
-  },
-  dpad: {
-    alignItems: "center",
-    backgroundColor: "rgba(30, 22, 28, 0.7)",
-    borderColor: "rgba(255, 226, 140, 0.75)",
-    borderWidth: 2,
-    bottom: 13,
-    left: 12,
-    padding: 7,
-    position: "absolute",
-    zIndex: 18
-  },
-  dpadMiddle: {
-    flexDirection: "row"
-  },
-  dpadCenter: {
-    backgroundColor: "#4B3538",
-    height: 38,
-    width: 38
-  },
-  directionButton: {
-    alignItems: "center",
-    backgroundColor: "#F6D26F",
-    borderColor: "#533234",
-    borderWidth: 2,
-    height: 38,
-    justifyContent: "center",
-    width: 38
-  },
-  directionButtonPressed: {
-    backgroundColor: "#D7AE47"
-  },
-  dimmedControls: {
-    opacity: 0.32
-  },
-  dialogue: {
-    bottom: 12,
-    left: 10,
-    position: "absolute",
-    right: 10,
-    zIndex: 30
-  },
-  dialogueInner: {
-    backgroundColor: "#FFF3BF",
-    borderColor: "#3B2022",
-    borderWidth: 4,
-    gap: 8,
-    padding: 12,
-    shadowColor: "#000",
-    shadowOffset: { height: 4, width: 0 },
-    shadowOpacity: 0.38,
-    shadowRadius: 0
-  },
-  dialogueMascot: {
-    position: "absolute",
-    right: 35,
-    top: -72,
-    zIndex: 4
-  },
-  dialogueHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 10
-  },
-  dialogueTitleArea: {
-    flex: 1,
-    gap: 2
-  },
-  dialogueMarker: {
-    color: "#7A0019",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1
-  },
-  dialogueTitle: {
-    color: "#35252A",
-    fontSize: 16,
-    fontWeight: "900"
-  },
-  dialogueClose: {
-    alignItems: "center",
-    backgroundColor: "#F6D26F",
-    borderColor: "#533234",
-    borderWidth: 2,
-    height: 30,
-    justifyContent: "center",
-    width: 30
-  },
-  dialogueText: {
-    color: "#493E39",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 18
-  },
-  detailText: {
-    color: "#493E39",
-    fontSize: 11,
-    fontWeight: "700",
-    lineHeight: 17
-  },
-  dialogueAction: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: "#6D1930",
-    borderColor: "#C89E47",
-    borderWidth: 2,
-    flexDirection: "row",
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 9
-  },
-  dialogueActionText: {
-    color: "#FEF1B5",
-    fontSize: 11,
-    fontWeight: "900"
-  }
-});

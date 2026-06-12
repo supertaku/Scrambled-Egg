@@ -6,7 +6,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { CAMPUS_MAP_CANVAS } from "@/data/campusMapDestinations";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import { mapPreviewPalette } from "@/theme/featurePalettes";
+import type { Theme } from "@/theme/themes";
 
 interface PreviewImageFrame {
   height: number;
@@ -34,6 +36,8 @@ function focusedPreviewFrame(viewportWidth: number, viewportHeight: number): Pre
 }
 
 export default function MapScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
   const reducedMotion = useReducedMotion();
   const entrance = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
@@ -122,7 +126,7 @@ export default function MapScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   safeArea: {
     backgroundColor: colors.maroon,
     flex: 1
@@ -151,19 +155,19 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4
   },
   pixelFrame: {
-    backgroundColor: "#281B23",
+    backgroundColor: mapPreviewPalette.frame,
     borderColor: colors.gold,
     borderWidth: 4,
     flex: 1,
     padding: 5,
-    shadowColor: "#000000",
+    shadowColor: mapPreviewPalette.shadow,
     shadowOffset: { height: 8, width: 0 },
     shadowOpacity: 0.35,
     shadowRadius: 0
   },
   pixelFrameInner: {
     alignItems: "center",
-    borderColor: "#F0D786",
+    borderColor: mapPreviewPalette.frameHighlight,
     borderWidth: 2,
     flex: 1,
     justifyContent: "center",
@@ -180,7 +184,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.maroon,
     borderBottomColor: colors.maroonDark,
     borderBottomWidth: 5,
-    borderColor: "#F6D777",
+    borderColor: mapPreviewPalette.launchBorder,
     borderLeftWidth: 4,
     borderRightWidth: 4,
     borderTopWidth: 4,
@@ -188,8 +192,8 @@ const styles = StyleSheet.create({
   },
   launchInset: {
     alignItems: "center",
-    backgroundColor: "#FFDE82",
-    borderColor: "#3B2022",
+    backgroundColor: mapPreviewPalette.launchFill,
+    borderColor: mapPreviewPalette.launchInk,
     borderWidth: 2,
     flexDirection: "row",
     gap: 8,

@@ -6,9 +6,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getCanteenStoreById } from "@/data/canteenStores";
 import { useDebouncedQuery } from "@/hooks/useDebouncedQuery";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 export default function CanteenStoreScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
   const { storeId } = useLocalSearchParams<{ storeId: string }>();
   const store = getCanteenStoreById(storeId);
@@ -127,6 +130,8 @@ export default function CanteenStoreScreen() {
 }
 
 function BackButton({ onPress }: { onPress: () => void }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const scale = useRef(new Animated.Value(1)).current;
   const handlePressIn = () =>
     Animated.spring(scale, { toValue: 0.88, useNativeDriver: true, friction: 6, tension: 200 }).start();
@@ -149,6 +154,8 @@ function FoodCard({
   food: { id: string; name: string; description: string; price: number };
   index: number;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(14)).current;
 
@@ -185,7 +192,7 @@ function FoodCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   safeArea: {
     backgroundColor: colors.maroon,
     flex: 1
@@ -236,14 +243,14 @@ const styles = StyleSheet.create({
   },
   storeHeader: {
     alignItems: "flex-start",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: "row",
     gap: 14,
     padding: 16,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -295,7 +302,7 @@ const styles = StyleSheet.create({
   },
   searchBox: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 14,
     borderWidth: 1,
@@ -322,14 +329,14 @@ const styles = StyleSheet.create({
   },
   foodCard: {
     alignItems: "flex-start",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
     gap: 12,
     padding: 14,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -367,7 +374,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
-    borderColor: "#E8C7D0"
+    borderColor: colors.maroonBorder
   },
   foodPrice: {
     color: colors.maroon,

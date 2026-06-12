@@ -19,9 +19,12 @@ import { useRouter } from "expo-router";
 import { ArrowLeft, BookOpen, Calendar, ChevronRight, Cpu, GraduationCap, Hash, ImagePlus, Save, Sparkles, Trash2, User as UserIcon } from "lucide-react-native";
 
 import { clearStudentProfile, getStudentProfile, importStudentAvatar, saveStudentProfile } from "@/services/studentProfileService";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 export default function ProfileScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
 
   const [name, setName] = useState("");
@@ -243,7 +246,7 @@ export default function ProfileScreen() {
 
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Manage chat options"
+                accessibilityLabel="Manage Haki models"
                 onPress={() => router.push("/models" as never)}
                 style={styles.modelSettingsButton}
               >
@@ -251,7 +254,7 @@ export default function ProfileScreen() {
                   <Cpu color={colors.maroon} size={20} />
                 </View>
                 <View style={styles.modelSettingsText}>
-                  <Text style={styles.modelSettingsTitle}>Chat options</Text>
+                  <Text style={styles.modelSettingsTitle}>Haki Models</Text>
                   <Text style={styles.modelSettingsBody}>Download a model to unlock Friendly Haki modes.</Text>
                 </View>
                 <ChevronRight color={colors.muted} size={18} />
@@ -369,6 +372,8 @@ function FormField({
   editable: boolean;
   onChangeText: (text: string) => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const [focused, setFocused] = useState(false);
 
   return (
@@ -391,7 +396,7 @@ function FormField({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   safeArea: {
     backgroundColor: colors.maroon,
     flex: 1
@@ -451,7 +456,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden"
@@ -484,7 +489,7 @@ const styles = StyleSheet.create({
   },
   modelSettingsButton: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,
@@ -496,7 +501,7 @@ const styles = StyleSheet.create({
   hakiSetupButton: {
     alignItems: "center",
     backgroundColor: colors.goldSoft,
-    borderColor: "#E8D98B",
+    borderColor: colors.goldBorder,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -506,7 +511,7 @@ const styles = StyleSheet.create({
   },
   hakiSetupIcon: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderRadius: 11,
     height: 40,
     justifyContent: "center",
@@ -536,7 +541,7 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderRadius: 16,
     borderWidth: 1.5,
     borderColor: colors.border,
@@ -590,7 +595,7 @@ const styles = StyleSheet.create({
   deleteButton: {
     alignItems: "center",
     backgroundColor: colors.dangerSoft,
-    borderColor: "#FDA29B",
+    borderColor: colors.dangerBorder,
     borderRadius: 24,
     borderWidth: 1,
     flexDirection: "row",

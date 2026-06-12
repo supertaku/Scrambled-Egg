@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Lightbulb, Mail, Search, X } from "lucide-react-native";
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -6,31 +6,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useDebouncedQuery } from "@/hooks/useDebouncedQuery";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { studentTips, type StudentTip } from "@/data/studentTips";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import { bulletinPaperPalette, tipCategoryPalette } from "@/theme/featurePalettes";
+import type { Theme, ThemeColors } from "@/theme/themes";
 import { logger } from "@/utils/logger";
 
 const REVIEW_EMAIL = "hakiadmin@gmail.com";
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Printing: "#2E7DB2",
-  Documents: "#D4860A",
-  Enrollment: "#147A3D",
-  Routine: "#6B5FB5",
-  Study: "#0C7BB3",
-  Clearance: colors.maroon,
-  Food: "#C45A1B",
-  Files: "#9A6700",
-  Time: "#586474",
-  Review: "#147A3D",
-  Teamwork: "#2E7DB2",
-  "Campus Life": colors.maroon
-};
-
-function accentFor(category: string): string {
-  return CATEGORY_COLORS[category] ?? colors.maroon;
+function accentFor(category: string, colors: ThemeColors): string {
+  return tipCategoryPalette[category] ?? colors.maroon;
 }
 
 export default function TipsScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const { clearQuery, debouncedQuery, query, setQuery } = useDebouncedQuery();
   const [category, setCategory] = useState<string | null>(null);
@@ -155,7 +144,9 @@ export default function TipsScreen() {
 }
 
 function TapeFilter({ active, category, onPress }: { active: boolean; category: string; onPress: () => void }) {
-  const accent = accentFor(category);
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
+  const accent = accentFor(category, colors);
   return (
     <Pressable
       accessibilityRole="button"
@@ -169,7 +160,9 @@ function TapeFilter({ active, category, onPress }: { active: boolean; category: 
 }
 
 function FeaturedNote({ tip }: { tip: StudentTip }) {
-  const accent = accentFor(tip.category);
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
+  const accent = accentFor(tip.category, colors);
   return (
     <View style={styles.featuredNote}>
       <View style={[styles.noteTape, { backgroundColor: `${accent}35` }]} />
@@ -182,9 +175,11 @@ function FeaturedNote({ tip }: { tip: StudentTip }) {
 }
 
 function BoardNote({ index, reducedMotion, tip }: { index: number; reducedMotion: boolean; tip: StudentTip }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const opacity = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
   const translateY = useRef(new Animated.Value(reducedMotion ? 0 : 10)).current;
-  const accent = accentFor(tip.category);
+  const accent = accentFor(tip.category, colors);
 
   useEffect(() => {
     if (reducedMotion) {
@@ -213,44 +208,50 @@ function BoardNote({ index, reducedMotion, tip }: { index: number; reducedMotion
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors, mode }: Theme) => {
+  // Bulletin-board "paper" looks: warm cream in light mode, dark cork in
+  // dark mode so themed ink/muted text stays readable on the notes.
+  const paper = bulletinPaperPalette(mode);
+
+  return StyleSheet.create({
   safeArea: { backgroundColor: colors.maroon, flex: 1 },
   header: { gap: 2, paddingBottom: 15, paddingHorizontal: 20, paddingTop: 8 },
   headerLabel: { color: colors.goldLight, fontSize: 11, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
   headerTitle: { color: colors.white, fontSize: 24, fontWeight: "900", letterSpacing: -0.5 },
-  sheet: { backgroundColor: "#F5EFE6", borderTopLeftRadius: 30, borderTopRightRadius: 30, flex: 1, overflow: "hidden" },
+  sheet: { backgroundColor: paper.board, borderTopLeftRadius: 30, borderTopRightRadius: 30, flex: 1, overflow: "hidden" },
   content: { gap: 18, paddingBottom: 118, paddingHorizontal: 18, paddingTop: 20 },
-  boardIntro: { backgroundColor: "#FFF9F0", borderColor: "#E7D8C5", borderRadius: 22, borderWidth: 1, gap: 15, padding: 16 },
+  boardIntro: { backgroundColor: paper.noteSoft, borderColor: paper.border, borderRadius: 22, borderWidth: 1, gap: 15, padding: 16 },
   introTitleRow: { alignItems: "center", flexDirection: "row", gap: 12 },
   ideaCircle: { alignItems: "center", backgroundColor: colors.goldSoft, borderRadius: 14, height: 46, justifyContent: "center", width: 46 },
   introCopy: { flex: 1, gap: 3 },
   introTitle: { color: colors.ink, fontSize: 18, fontWeight: "900" },
   introText: { color: colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 17 },
-  search: { alignItems: "center", backgroundColor: colors.white, borderColor: "#E7D8C5", borderRadius: 15, borderWidth: 1, flexDirection: "row", gap: 8, height: 50, paddingHorizontal: 13 },
+  search: { alignItems: "center", backgroundColor: colors.card, borderColor: paper.border, borderRadius: 15, borderWidth: 1, flexDirection: "row", gap: 8, height: 50, paddingHorizontal: 13 },
   searchInput: { color: colors.ink, flex: 1, fontSize: 14, fontWeight: "600" },
   clear: { alignItems: "center", height: 44, justifyContent: "center", width: 36 },
   tapeRow: { gap: 8, paddingVertical: 2 },
-  tapeFilter: { backgroundColor: "#FFF4E3", borderRadius: 5, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 9, transform: [{ rotate: "-0.5deg" }] },
+  tapeFilter: { backgroundColor: paper.tape, borderRadius: 5, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 9, transform: [{ rotate: "-0.5deg" }] },
   tapeText: { fontSize: 12, fontWeight: "900" },
   featuredSection: { gap: 10 },
   boardLabel: { color: colors.maroon, fontSize: 11, fontWeight: "900", letterSpacing: 0.9, textTransform: "uppercase" },
-  featuredNote: { backgroundColor: "#FFF7D9", borderColor: "#E6D697", borderRadius: 9, borderWidth: 1, gap: 10, padding: 20, paddingTop: 25, position: "relative" },
+  featuredNote: { backgroundColor: paper.featured, borderColor: paper.featuredBorder, borderRadius: 9, borderWidth: 1, gap: 10, padding: 20, paddingTop: 25, position: "relative" },
   noteTape: { height: 17, left: "39%", position: "absolute", top: -8, transform: [{ rotate: "-2deg" }], width: 78 },
   pin: { backgroundColor: colors.maroon, borderColor: colors.white, borderRadius: 7, borderWidth: 2, height: 14, position: "absolute", right: 16, top: 15, width: 14 },
   noteCategory: { fontSize: 11, fontWeight: "900", letterSpacing: 0.7, textTransform: "uppercase" },
   featuredText: { color: colors.ink, fontSize: 16, fontWeight: "600", lineHeight: 24 },
   author: { color: colors.muted, fontSize: 11, fontWeight: "700" },
   noteSection: { gap: 11 },
-  boardNote: { backgroundColor: "#FFFCF6", borderColor: "#E7D8C5", borderRadius: 10, borderWidth: 1, gap: 10, padding: 16, paddingTop: 20, position: "relative" },
+  boardNote: { backgroundColor: paper.note, borderColor: paper.border, borderRadius: 10, borderWidth: 1, gap: 10, padding: 16, paddingTop: 20, position: "relative" },
   noteTapeSmall: { height: 13, left: 20, position: "absolute", top: -6, transform: [{ rotate: "-3deg" }], width: 52 },
   noteHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   noteText: { color: colors.ink, fontSize: 14, fontWeight: "500", lineHeight: 21 },
-  emptyNote: { backgroundColor: "#FFF9F0", borderColor: "#E7D8C5", borderRadius: 12, borderWidth: 1, gap: 6, padding: 20 },
+  emptyNote: { backgroundColor: paper.noteSoft, borderColor: paper.border, borderRadius: 12, borderWidth: 1, gap: 6, padding: 20 },
   emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "900" },
   emptyText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
-  submitNote: { alignItems: "center", backgroundColor: colors.maroonSoft, borderColor: "#E8C7D0", borderRadius: 12, borderWidth: 1, flexDirection: "row", gap: 13, minHeight: 84, padding: 16, position: "relative" },
+  submitNote: { alignItems: "center", backgroundColor: colors.maroonSoft, borderColor: paper.submitBorder, borderRadius: 12, borderWidth: 1, flexDirection: "row", gap: 13, minHeight: 84, padding: 16, position: "relative" },
   noteTapeGold: { backgroundColor: colors.goldSoft, height: 14, position: "absolute", right: 22, top: -7, transform: [{ rotate: "2deg" }], width: 58 },
   submitCopy: { flex: 1, gap: 4 },
-  submitTitle: { color: colors.maroonDark, fontSize: 16, fontWeight: "900" },
+  submitTitle: { color: mode === "dark" ? colors.ink : colors.maroonDark, fontSize: 16, fontWeight: "900" },
   submitText: { color: colors.maroon, fontSize: 12, fontWeight: "600", lineHeight: 17 }
-});
+  });
+};

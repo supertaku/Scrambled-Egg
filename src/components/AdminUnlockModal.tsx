@@ -3,8 +3,9 @@ import { LogOut, ShieldCheck } from "lucide-react-native";
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { disableAdminMode, getAdminMode, subscribeAdminMode, tryUnlockAdminMode } from "@/services/adminService";
-import { colors } from "@/theme/colors";
-import { PixelHaki } from "./mascot/PixelHaki";
+import { HakiHdMascot, HD_DETECTIVE_IMAGE } from "@/mascot";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 interface AdminUnlockModalProps {
   onClose: () => void;
@@ -12,6 +13,8 @@ interface AdminUnlockModalProps {
 }
 
 export function AdminUnlockModal({ onClose, visible }: AdminUnlockModalProps) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const [adminMode, setAdminMode] = useState(false);
   const [adminCode, setAdminCode] = useState("");
   const [adminError, setAdminError] = useState<string | null>(null);
@@ -74,7 +77,7 @@ export function AdminUnlockModal({ onClose, visible }: AdminUnlockModalProps) {
       <View style={styles.modalBackdrop}>
         <View style={styles.adminModal}>
           <View style={styles.interrogationFrame}>
-            <PixelHaki animated={false} height={100} state="detective" style={styles.interrogationMascot} width={68} />
+            <HakiHdMascot animated={false} height={100} source={HD_DETECTIVE_IMAGE} status="interrogating" style={styles.interrogationMascot} width={71} />
             <View style={styles.questionBubble}>
               <Text style={styles.questionBubbleText}>?</Text>
             </View>
@@ -131,7 +134,7 @@ export function AdminUnlockModal({ onClose, visible }: AdminUnlockModalProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   modalBackdrop: {
     alignItems: "center",
     backgroundColor: "rgba(31, 41, 51, 0.52)",
@@ -140,7 +143,7 @@ const styles = StyleSheet.create({
     padding: 20
   },
   adminModal: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderRadius: 18,
     gap: 12,
     maxWidth: 360,
@@ -151,7 +154,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "center",
     backgroundColor: colors.maroonSoft,
-    borderColor: "#E8C7D0",
+    borderColor: colors.maroonBorder,
     borderRadius: 18,
     borderWidth: 1,
     height: 118,
@@ -226,7 +229,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12
   },
   adminButtonSecondary: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.maroon,
     borderWidth: 1
   },

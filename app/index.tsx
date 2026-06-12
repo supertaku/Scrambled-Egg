@@ -29,7 +29,8 @@ import { MascotHeader } from "@/components/MascotHeader";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { getAdminMode, subscribeAdminMode } from "@/services/adminService";
 import { getSeedTriviaItems } from "@/services/triviaService";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme, ThemeColors } from "@/theme/themes";
 
 interface HomeDialogueLine {
   isTrivia: boolean;
@@ -63,13 +64,13 @@ const SAMPLE_QUESTIONS = [
   "What should I do if I lose my ID?"
 ];
 
-const REMINDERS = [
+const remindersFor = (colors: ThemeColors) => [
   { icon: <IdCard color={colors.maroon} size={20} />, text: "Bring your student ID or student number." },
   { icon: <ListChecks color={colors.maroon} size={20} />, text: "Prepare the details of your concern before lining up." },
   { icon: <Building2 color={colors.maroon} size={20} />, text: "If unsure, ask which office can help." }
 ];
 
-const FAB_MENU = [
+const fabMenuFor = (colors: ThemeColors) => [
   {
     label: "Food",
     icon: <Utensils color={colors.maroon} size={20} />,
@@ -85,6 +86,8 @@ const FAB_MENU = [
 // ─── Animated staggered card ────────────────────────────────────────────────
 
 function AnimatedCard({ children, delay, style }: { children: ReactNode; delay: number; style?: object }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(22)).current;
 
@@ -114,6 +117,8 @@ function PressableCard({
   style: object;
   children: ReactNode;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -140,6 +145,8 @@ function FabActionTray({ visible, onClose, onNavigate, reducedMotion }: {
   onNavigate: (route: string) => void;
   reducedMotion: boolean;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const [rendered, setRendered] = useState(visible);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(10)).current;
@@ -171,7 +178,7 @@ function FabActionTray({ visible, onClose, onNavigate, reducedMotion }: {
     <>
       <Pressable accessibilityLabel="Close quick actions" onPress={onClose} style={styles.trayDismiss} />
       <Animated.View style={[styles.actionTray, { opacity, transform: [{ translateY }] }]}>
-        {FAB_MENU.map((item) => (
+        {fabMenuFor(colors).map((item) => (
           <TrayAction
             key={item.route}
             icon={item.icon}
@@ -188,6 +195,8 @@ function FabActionTray({ visible, onClose, onNavigate, reducedMotion }: {
 }
 
 function TrayAction({ icon, label, onPress }: { icon: ReactNode; label: string; onPress: () => void }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const scale = useRef(new Animated.Value(1)).current;
   const handlePressIn = () =>
     Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, friction: 6, tension: 200 }).start();
@@ -207,6 +216,8 @@ function TrayAction({ icon, label, onPress }: { icon: ReactNode; label: string; 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
   const reducedMotion = useReducedMotion();
   const dialogueLines = useMemo(() => buildHomeDialogueLines(), []);
@@ -377,7 +388,7 @@ export default function HomeScreen() {
                 </View>
                 <Text style={styles.sectionTitle}>Before going to an office</Text>
                 <View style={styles.reminderList}>
-                  {REMINDERS.map((reminder, i) => (
+                  {remindersFor(colors).map((reminder, i) => (
                     <Reminder key={i} icon={reminder.icon} text={reminder.text} />
                   ))}
                 </View>
@@ -412,6 +423,8 @@ export default function HomeScreen() {
 }
 
 function QuestionRow({ question, onPress }: { question: string; onPress: () => void }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () =>
@@ -430,6 +443,8 @@ function QuestionRow({ question, onPress }: { question: string; onPress: () => v
 }
 
 function Reminder({ icon, text }: { icon: ReactNode; text: string }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.reminderRow}>
       <View style={styles.reminderIcon}>{icon}</View>
@@ -438,7 +453,7 @@ function Reminder({ icon, text }: { icon: ReactNode; text: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   safeArea: { backgroundColor: colors.maroon, flex: 1 },
   headerArea: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16 },
   headerTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
@@ -495,7 +510,7 @@ const styles = StyleSheet.create({
   primaryActionTitle: { color: colors.white, fontSize: 17, fontWeight: "900", lineHeight: 22, letterSpacing: -0.3 },
   primaryActionText: { color: "rgba(255,255,255,0.68)", fontSize: 12, fontWeight: "600", lineHeight: 17 },
   secondaryAction: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 22,
     borderWidth: 1,
@@ -503,7 +518,7 @@ const styles = StyleSheet.create({
     gap: 10,
     minHeight: 140,
     padding: 16,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -520,13 +535,13 @@ const styles = StyleSheet.create({
   secondaryActionTitle: { color: colors.ink, fontSize: 17, fontWeight: "900", lineHeight: 22, letterSpacing: -0.3 },
   secondaryActionText: { color: colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 17 },
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 22,
     borderWidth: 1,
     gap: 12,
     padding: 18,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -605,7 +620,7 @@ const styles = StyleSheet.create({
   },
   trayAction: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 24,
     borderWidth: 1,
@@ -614,7 +629,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 11,
     paddingVertical: 6,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
     shadowRadius: 8

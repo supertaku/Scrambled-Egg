@@ -20,10 +20,10 @@ import {
 } from "@/components/orgChart/orgChartLayout";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { orgChartColleges, type OrgNode } from "@/data/orgChart";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 const PAN_MARGIN = 30;
-const SHOW_UNVERIFIED_ORG_CHART = typeof __DEV__ !== "undefined" && __DEV__;
 
 function clampOffset(position: number, contentSize: number, viewportSize: number): number {
   "worklet";
@@ -39,6 +39,8 @@ function connectorPath(line: OrgConnector): string {
 }
 
 function NodeCard({ node, primary }: { node: OrgNode; primary: boolean }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={[styles.node, primary ? styles.nodePrimary : undefined]}>
       <Text selectable numberOfLines={2} style={[styles.nodeName, primary ? styles.nodeNamePrimary : undefined]}>{node.name}</Text>
@@ -48,27 +50,11 @@ function NodeCard({ node, primary }: { node: OrgNode; primary: boolean }) {
 }
 
 export default function OrgChartScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const [selectedCollege, setSelectedCollege] = useState(0);
   const [viewport, setViewport] = useState({ height: 0, width: 0 });
-
-  if (!SHOW_UNVERIFIED_ORG_CHART) {
-    return (
-      <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Org Chart</Text>
-          <Text style={styles.headerSubtitle}>Official organization data is not installed yet</Text>
-        </View>
-        <View style={styles.unavailablePanel}>
-          <Text style={styles.unavailableTitle}>Verified org chart unavailable</Text>
-          <Text style={styles.unavailableText}>
-            Haki will not show sample names as official campus information. Ask the relevant college office, organization adviser, or OSA for the current structure.
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   const college = orgChartColleges[selectedCollege]!;
   const chart = useMemo(() => createOrgChartLayout(college.data), [college.data]);
@@ -183,6 +169,9 @@ export default function OrgChartScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Org Chart</Text>
         <Text style={styles.headerSubtitle}>Pinch, pan, and inspect each college structure</Text>
+        <View style={styles.sampleBadge}>
+          <Text style={styles.sampleBadgeText}>SAMPLE DATA — official structure coming soon</Text>
+        </View>
       </View>
       <View style={styles.sheet}>
         <View style={styles.tabs}>
@@ -272,6 +261,8 @@ function Control({
   children: React.ReactNode;
   onPress: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   return (
     <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="button" onPress={onPress} style={styles.control}>
       {children}
@@ -279,11 +270,13 @@ function Control({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   safeArea: { backgroundColor: colors.maroon, flex: 1 },
   header: { gap: 3, paddingBottom: 14, paddingHorizontal: 20, paddingTop: 8 },
   headerTitle: { color: colors.white, fontSize: 22, fontWeight: "900", letterSpacing: -0.4 },
   headerSubtitle: { color: "rgba(255,255,255,0.68)", fontSize: 12, fontWeight: "600" },
+  sampleBadge: { alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.14)", borderRadius: 8, marginTop: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  sampleBadgeText: { color: colors.goldLight, fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 30,
@@ -299,7 +292,7 @@ const styles = StyleSheet.create({
     paddingTop: 14
   },
   tab: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 12,
     borderWidth: 1,
@@ -326,7 +319,7 @@ const styles = StyleSheet.create({
   controls: { flexDirection: "row", gap: 7 },
   control: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 12,
     borderWidth: 1,
@@ -346,7 +339,7 @@ const styles = StyleSheet.create({
   viewport: { backgroundColor: colors.surface, flex: 1, overflow: "hidden" },
   chartCanvas: { position: "absolute" },
   node: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 14,
     borderWidth: 1,
@@ -362,7 +355,7 @@ const styles = StyleSheet.create({
   nodeTitlePrimary: { color: "rgba(255,255,255,0.76)" },
   footer: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderTopColor: colors.border,
     borderTopWidth: 1,
     paddingBottom: 94,

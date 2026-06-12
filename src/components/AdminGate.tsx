@@ -3,7 +3,8 @@ import { LockKeyhole } from "lucide-react-native";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { getAdminMode, subscribeAdminMode } from "@/services/adminService";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 interface AdminGateProps {
   children: React.ReactNode;
@@ -11,6 +12,8 @@ interface AdminGateProps {
 }
 
 export function AdminGate({ children, label = "Only an administrator can open this section." }: AdminGateProps) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const [adminMode, setAdminMode] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -61,10 +64,10 @@ export function AdminGate({ children, label = "Only an administrator can open th
   return <>{children}</>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   card: {
     alignItems: "flex-start",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,

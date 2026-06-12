@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 export function SettingsPreferencesSection({
   autoSendVoice,
@@ -21,6 +22,8 @@ export function SettingsPreferencesSection({
   useProfileContext: boolean;
   useRelatedHistory: boolean;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Chat Preferences</Text>
@@ -96,9 +99,9 @@ export function SettingsPreferencesSection({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,
@@ -144,7 +147,7 @@ const styles = StyleSheet.create({
   clearButton: {
     alignItems: "center",
     backgroundColor: colors.dangerSoft,
-    borderColor: "#FDA29B",
+    borderColor: colors.dangerBorder,
     borderRadius: 12,
     borderWidth: 1,
     minHeight: 42,

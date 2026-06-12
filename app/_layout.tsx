@@ -23,8 +23,10 @@ import { cleanupPartialGgufDownloads, recoverInterruptedModelOperation } from "@
 import { disableAdminMode, subscribeAdminMode } from "@/services/adminService";
 import { getCurrentAIMode, releaseLocalAIForMemoryPressure } from "@/services/modeSelectionService";
 import { shouldPresentFirstRunOnboarding, subscribeOnboardingCompleted } from "@/services/onboardingService";
+import { ThemeProvider, useThemeColors } from "@/theme/ThemeProvider";
 import { colors } from "@/theme/colors";
 import { metrics } from "@/theme/metrics";
+import { hapticTap } from "@/utils/haptics";
 import { logger } from "@/utils/logger";
 
 const TAB_BAR_PADDING = 8;
@@ -64,6 +66,7 @@ interface TabItemProps {
 }
 
 function TabItem({ accessibilityLabel, focused, Icon, onPress }: TabItemProps) {
+  const themeColors = useThemeColors();
   const scale = useRef(new Animated.Value(focused ? 1.15 : 1)).current;
   const pressScale = useRef(new Animated.Value(1)).current;
 
@@ -106,7 +109,7 @@ function TabItem({ accessibilityLabel, focused, Icon, onPress }: TabItemProps) {
     >
       <Animated.View style={{ transform: [{ scale: Animated.multiply(scale, pressScale) }] }}>
         <Icon
-          color={focused ? colors.white : "rgba(255,255,255,0.38)"}
+          color={focused ? themeColors.white : "rgba(255,255,255,0.38)"}
           size={23}
           strokeWidth={focused ? 2.5 : 1.8}
         />
@@ -156,7 +159,7 @@ function TabsFrame({
         <Tabs.Screen name="tips" options={{ title: "Tips" }} />
         <Tabs.Screen name="profile" options={{ href: null }} />
         <Tabs.Screen name="onboarding" options={{ href: null }} />
-        <Tabs.Screen name="models" options={{ href: null, title: "Chat Options" }} />
+        <Tabs.Screen name="models" options={{ href: null, title: "Haki Models" }} />
         <Tabs.Screen name="organization" options={{ href: null, title: "Org" }} />
         <Tabs.Screen name="org-chart" options={{ href: null, title: "Org Chart" }} />
         <Tabs.Screen name="documents" options={{ href: null, title: "Docs" }} />
@@ -169,6 +172,7 @@ function TabsFrame({
 }
 
 function CustomTabBar({ state, navigation, adminMode }: CustomTabBarProps) {
+  const themeColors = useThemeColors();
   const { width } = useWindowDimensions();
   const tabBarWidth = Math.max(0, width - TAB_BAR_SIDE_MARGIN * 2);
   const contentWidth = Math.max(0, tabBarWidth - TAB_BAR_PADDING * 2);
@@ -210,11 +214,11 @@ function CustomTabBar({ state, navigation, adminMode }: CustomTabBarProps) {
   }
 
   const showIndicator = activeIndex !== -1;
-  const indicatorColor = adminMode ? colors.gold : colors.maroon;
+  const indicatorColor = adminMode ? themeColors.gold : themeColors.maroon;
 
   return (
     <View style={styles.tabBarContainer}>
-      <View style={[styles.tabBar, { width: tabBarWidth }]}>
+      <View style={[styles.tabBar, { backgroundColor: themeColors.tabBar, width: tabBarWidth }]}>
         {/* Pill indicator */}
         {showIndicator ? (
           <Animated.View
@@ -241,6 +245,7 @@ function CustomTabBar({ state, navigation, adminMode }: CustomTabBarProps) {
             });
 
             if (!isFocused && !event.defaultPrevented) {
+              hapticTap();
               navigation.navigate(route.name);
             }
           };
@@ -263,6 +268,15 @@ function CustomTabBar({ state, navigation, adminMode }: CustomTabBarProps) {
 }
 
 export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <RootLayoutContent />
+    </ThemeProvider>
+  );
+}
+
+function RootLayoutContent() {
+  const themeColors = useThemeColors();
   const [adminMode, setAdminMode] = useState(false);
   const [onboardingReady, setOnboardingReady] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
@@ -375,9 +389,9 @@ export default function RootLayout() {
 
   if (!onboardingReady || (needsOnboarding && !onboardingVisible)) {
     return (
-      <View style={styles.loading}>
+      <View style={[styles.loading, { backgroundColor: themeColors.maroon }]}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator color={colors.white} size="large" />
+        <ActivityIndicator color={themeColors.white} size="large" />
       </View>
     );
   }
@@ -400,7 +414,6 @@ const styles = StyleSheet.create({
   },
   loading: {
     alignItems: "center",
-    backgroundColor: colors.maroon,
     flex: 1,
     justifyContent: "center"
   },
@@ -413,7 +426,6 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: "row",
-    backgroundColor: colors.tabBar,
     borderRadius: 36,
     height: metrics.navigation.floatingTabBarHeight,
     paddingHorizontal: TAB_BAR_PADDING,
@@ -421,7 +433,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.08)",
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.45,
     shadowRadius: 28,

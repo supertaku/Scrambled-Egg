@@ -8,10 +8,13 @@ import { AdminGate } from "@/components/AdminGate";
 import { MascotHeader } from "@/components/MascotHeader";
 import { getAppDatabase } from "@/data/appRepository";
 import { getDocumentSummaries } from "@/db/documentRepository";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 import type { DocumentSummary } from "@/types/document";
 
 export default function DocumentsScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +107,8 @@ export default function DocumentsScreen() {
 }
 
 function Meta({ label, value }: { label: string; value: string | number | null }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   if (value === null || value === "") {
     return null;
   }
@@ -116,7 +121,7 @@ function Meta({ label, value }: { label: string; value: string | number | null }
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   safeArea: {
     backgroundColor: colors.maroon,
     flex: 1
@@ -148,7 +153,7 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 14,
     borderWidth: 1,
@@ -161,7 +166,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18
   },
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,
@@ -201,7 +206,7 @@ const styles = StyleSheet.create({
   },
   statusCard: {
     alignItems: "flex-start",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,
@@ -220,8 +225,8 @@ const styles = StyleSheet.create({
     lineHeight: 20
   },
   errorCard: {
-    backgroundColor: "#FFF1F0",
-    borderColor: "#FDA29B",
+    backgroundColor: colors.dangerSoft,
+    borderColor: colors.danger,
     borderRadius: 16,
     borderWidth: 1,
     marginHorizontal: 18,

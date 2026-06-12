@@ -20,14 +20,18 @@ import {
   setUseRelatedHistory
 } from "@/services/chatPrivacySettingsService";
 import { getVoiceAutoSend, setVoiceAutoSend } from "@/services/voiceSettingsService";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 import type { DocumentSummary } from "@/types/document";
 
+import { SettingsAppearanceSection } from "./SettingsAppearanceSection";
 import { SettingsCapabilitySection } from "./SettingsCapabilitySection";
 import { SettingsDbSection } from "./SettingsDbSection";
 import { SettingsPreferencesSection } from "./SettingsPreferencesSection";
 
 export default function SettingsScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
   const mountedRef = useRef(true);
   const [activeMode, setActiveMode] = useState<DeviceAIMode | null>(null);
@@ -159,6 +163,7 @@ export default function SettingsScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: 176 + insets.bottom }]}
         scrollIndicatorInsets={{ bottom: 132 + insets.bottom }}
       >
+        <SettingsAppearanceSection />
         <SettingsPreferencesSection
           autoSendVoice={autoSendVoice}
           clearingMemory={clearingMemory}
@@ -190,7 +195,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   safeArea: {
     backgroundColor: colors.maroon,
     flex: 1

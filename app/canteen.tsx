@@ -6,9 +6,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { canteenStores } from "@/data/canteenStores";
 import { useDebouncedQuery } from "@/hooks/useDebouncedQuery";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 export default function CanteenScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
   const { clearQuery, debouncedQuery, query, setQuery } = useDebouncedQuery();
   const filteredStores = useMemo(() => {
@@ -117,6 +120,8 @@ function StoreCard({
   index: number;
   onPress: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(16)).current;
   const pressScale = useRef(new Animated.Value(1)).current;
@@ -166,7 +171,7 @@ function StoreCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   safeArea: {
     backgroundColor: colors.maroon,
     flex: 1
@@ -239,7 +244,7 @@ const styles = StyleSheet.create({
   },
   searchBox: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 14,
     borderWidth: 1,
@@ -247,7 +252,7 @@ const styles = StyleSheet.create({
     gap: 8,
     minHeight: 46,
     paddingHorizontal: 13,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -271,14 +276,14 @@ const styles = StyleSheet.create({
   },
   storeCard: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: "row",
     gap: 14,
     padding: 16,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -331,7 +336,7 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   emptyState: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 18,
     borderWidth: 1,

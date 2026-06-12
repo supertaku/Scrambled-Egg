@@ -4,7 +4,8 @@ import { ChevronDown, ChevronRight, Cpu, RefreshCw } from "lucide-react-native";
 import type { DeviceCapabilityReport, ProviderCapabilityReport } from "@/ai/CapabilityDetector";
 import type { DeviceAIMode } from "@/ai/DeviceAIMode";
 import type { LocalModelEvaluationReport } from "@/ai/localModelEvaluation";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 function formatMs(value: number | null | undefined): string {
   return value === null || value === undefined ? "Not reported" : `${Math.round(value)}ms`;
@@ -15,6 +16,8 @@ function formatGB(value: number | null | undefined): string {
 }
 
 function Stat({ label, value }: { label: string; value: string | number }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.stat}>
       <Text style={styles.statLabel}>{label}</Text>
@@ -24,6 +27,8 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 function ProviderMeta({ label, value }: { label: string; value: string }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.providerMeta}>
       <Text style={styles.providerMetaLabel}>{label}</Text>
@@ -39,8 +44,10 @@ function ActiveLocalStatus({
   activeMode: DeviceAIMode | null;
   capabilityReport: DeviceCapabilityReport | null;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   if (!activeMode) {
-    return <Text selectable style={styles.cardText}>Haki has not finished checking chat options yet.</Text>;
+    return <Text selectable style={styles.cardText}>Haki has not finished checking local models yet.</Text>;
   }
 
   const capabilities = activeMode.capabilities;
@@ -104,6 +111,8 @@ function ProviderStatus({
   onToggle: () => void;
   provider: ProviderCapabilityReport;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const ChevronIcon = expanded ? ChevronDown : ChevronRight;
 
   return (
@@ -193,6 +202,8 @@ export function SettingsCapabilitySection({
   evaluatingModel: boolean;
   onEvaluateModel: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   return (
     <>
       <View style={styles.card}>
@@ -266,9 +277,9 @@ export function SettingsCapabilitySection({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,
@@ -297,7 +308,7 @@ const styles = StyleSheet.create({
   availableBadge: { backgroundColor: colors.success, color: colors.white },
   unavailableBadge: { backgroundColor: colors.goldSoft, color: colors.ink },
   providerMetaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  providerMeta: { backgroundColor: colors.white, borderColor: colors.border, borderRadius: 8, borderWidth: 1, minWidth: "45%", padding: 8 },
+  providerMeta: { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 8, borderWidth: 1, minWidth: "45%", padding: 8 },
   providerMetaLabel: { color: colors.muted, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
   providerMetaValue: { color: colors.ink, fontSize: 12, fontWeight: "800", marginTop: 2 },
   providerReason: { color: colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 17 },

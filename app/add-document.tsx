@@ -8,7 +8,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AdminGate } from "@/components/AdminGate";
 import { MascotHeader } from "@/components/MascotHeader";
 import { importDocumentsFromJson, validateImportText } from "@/services/documentImportService";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 import type { ImportResult, ValidationResult } from "@/types/document";
 
 const MAX_IMPORT_JSON_BYTES = 5 * 1024 * 1024;
@@ -40,6 +41,8 @@ const placeholderJson = `[
 ]`;
 
 export default function AddDocumentScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const [jsonText, setJsonText] = useState("");
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -203,7 +206,7 @@ export default function AddDocumentScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   safeArea: {
     backgroundColor: colors.maroon,
     flex: 1
@@ -215,7 +218,7 @@ const styles = StyleSheet.create({
   },
   introCard: {
     alignItems: "flex-start",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,
@@ -264,7 +267,7 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   textArea: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 16,
     borderWidth: 1,
@@ -291,7 +294,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12
   },
   secondaryButton: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.maroon,
     borderWidth: 1
   },
@@ -309,8 +312,8 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   successCard: {
-    backgroundColor: "#EFFCF4",
-    borderColor: "#A6F4C5",
+    backgroundColor: colors.successSoft,
+    borderColor: colors.success,
     borderRadius: 16,
     borderWidth: 1,
     gap: 7,
@@ -318,8 +321,8 @@ const styles = StyleSheet.create({
     padding: 16
   },
   errorCard: {
-    backgroundColor: "#FFF1F0",
-    borderColor: "#FDA29B",
+    backgroundColor: colors.dangerSoft,
+    borderColor: colors.danger,
     borderRadius: 16,
     borderWidth: 1,
     gap: 7,

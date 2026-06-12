@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     textAlign: "center"
   },
   errorBox: {
-    backgroundColor: "#FFF1F0",
+    backgroundColor: colors.dangerSoft,
     borderRadius: 12,
     marginTop: 8,
     padding: 12,
