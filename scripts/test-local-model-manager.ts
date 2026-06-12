@@ -494,10 +494,13 @@ assert.match(liteRtSummarySource, /requestId/);
 assert.match(liteRtSummarySource, /createLiteRtGenerationGuard/);
 
 const hakiStatusSource = readFileSync(new URL("../src/components/models/ModelOperationHaki.tsx", import.meta.url), "utf8");
-assert.match(hakiStatusSource, /The download is complete\. I'm checking the file before using it\./);
-assert.match(hakiStatusSource, /Campus Haki is still available\./);
-assert.match(hakiStatusSource, /interrupted download cannot be resumed/);
+assert.match(hakiStatusSource, /messageForModelOperation/);
 assert.match(hakiStatusSource, /HakiMascotCompat/);
+const hakiMessageSource = readFileSync(new URL("../src/components/models/modelOperationMessage.ts", import.meta.url), "utf8");
+assert.match(hakiMessageSource, /The download is complete\. I'm checking the file before using it\./);
+assert.match(hakiMessageSource, /Campus Haki is still available\./);
+assert.match(hakiMessageSource, /interrupted download cannot be resumed/);
+assert.match(hakiMessageSource, /operation\.error \?\?/);
 
 const apkInspectionSource = readFileSync(new URL("../scripts/inspect-apk-assets.ps1", import.meta.url), "utf8");
 assert.match(apkInspectionSource, /Production builds must let users download compatible models into app-private storage/);

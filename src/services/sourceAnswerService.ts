@@ -14,6 +14,7 @@ import { normalizeQuery, tokenizeQuery } from "@/retrieval/queryNormalizer";
 import type { SearchOptions, SearchResponse, SearchResult } from "@/types/search";
 import { getPreferredModelTier } from "@/utils/aiUtils";
 import { DEFAULT_RETRIEVAL_LIMIT, MAX_PROVIDER_RETRIES } from "@/utils/constants";
+import { logger } from "@/utils/logger";
 
 import {
   disableAIProviderForSession,
@@ -477,16 +478,22 @@ async function maybeSummarizeFromSources(
     };
   } catch (error) {
     const action = providerFailureAction(error, attempt, MAX_PROVIDER_RETRIES);
-    if (action === "disable_provider") {
-      await disableAIProviderForSession(summaryProvider.id, error);
-      if (attempt < MAX_PROVIDER_RETRIES) {
-        const fallbackSelection = await getSelectedAIMode();
-        return maybeSummarizeFromSources(question, fallbackSelection, results, attempt + 1);
+    try {
+      if (action === "disable_provider") {
+        await disableAIProviderForSession(summaryProvider.id, error);
+        if (attempt < MAX_PROVIDER_RETRIES) {
+          const fallbackSelection = await getSelectedAIMode();
+          return await maybeSummarizeFromSources(question, fallbackSelection, results, attempt + 1);
+        }
+      } else if (action === "retry_provider") {
+        await refreshDeviceCapabilities();
+        const retrySelection = await getSelectedAIMode();
+        return await maybeSummarizeFromSources(question, retrySelection, results, attempt + 1);
       }
-    } else if (action === "retry_provider") {
-      await refreshDeviceCapabilities();
-      const retrySelection = await getSelectedAIMode();
-      return maybeSummarizeFromSources(question, retrySelection, results, attempt + 1);
+    } catch (retryError) {
+      logger.ai.warn("Source summarization retry could not re-select a provider; using direct source answer.", {
+        error: retryError instanceof Error ? retryError.message : String(retryError)
+      });
     }
 
     return {

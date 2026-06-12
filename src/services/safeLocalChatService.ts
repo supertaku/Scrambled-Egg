@@ -208,16 +208,22 @@ async function runLocalSafeChat(
     }
 
     const action = providerFailureAction(error, attempt, MAX_PROVIDER_RETRIES);
-    if (action === "disable_provider") {
-      await disableAIProviderForSession(summaryProvider.id, error);
-      if (attempt < MAX_PROVIDER_RETRIES) {
-        const fallbackSelection = await getSelectedAIMode();
-        return runLocalSafeChat(question, fallbackSelection, retryOptionsWithoutStreaming(options), attempt + 1);
+    try {
+      if (action === "disable_provider") {
+        await disableAIProviderForSession(summaryProvider.id, error);
+        if (attempt < MAX_PROVIDER_RETRIES) {
+          const fallbackSelection = await getSelectedAIMode();
+          return await runLocalSafeChat(question, fallbackSelection, retryOptionsWithoutStreaming(options), attempt + 1);
+        }
+      } else if (action === "retry_provider") {
+        await refreshDeviceCapabilities();
+        const retrySelection = await getSelectedAIMode();
+        return await runLocalSafeChat(question, retrySelection, retryOptionsWithoutStreaming(options), attempt + 1);
       }
-    } else if (action === "retry_provider") {
-      await refreshDeviceCapabilities();
-      const retrySelection = await getSelectedAIMode();
-      return runLocalSafeChat(question, retrySelection, retryOptionsWithoutStreaming(options), attempt + 1);
+    } catch (retryError) {
+      logger.ai.warn("Local safe chat retry could not re-select a provider; using fallback response.", {
+        error: retryError instanceof Error ? retryError.message : String(retryError)
+      });
     }
 
     return {

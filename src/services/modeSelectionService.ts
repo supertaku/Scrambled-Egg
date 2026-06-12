@@ -5,7 +5,7 @@ import {
 import { DefaultCapabilityDetector, type DeviceCapabilityReport } from "@/ai/CapabilityDetector";
 import type { LocalAIProvider } from "@/ai/LocalAIProvider";
 import { createLocalAIProviderRegistry, type LocalAIProviderRegistry } from "@/ai/providerRegistry";
-import { disposeProviderRegistry, replaceProviderRegistry } from "@/ai/providerRegistryLifecycle";
+import { replaceProviderRegistry } from "@/ai/providerRegistryLifecycle";
 import { getActiveChatModelStatus } from "@/ai/localModelManager";
 import { getDatabase } from "@/db/database";
 import { assertFts5Available } from "@/db/ftsHealth";
@@ -103,10 +103,28 @@ function disposeActiveRegistry(reason: string): void {
   });
 }
 
-async function disposeActiveRegistryAndWait(reason: string): Promise<void> {
+/**
+ * Disposes the current registry and replaces the cached selection with a
+ * promise that waits for that disposal before creating the next registry.
+ * Publishing the promise synchronously means concurrent getSelectedAIMode
+ * callers also wait instead of racing a new native context against the old
+ * one's release. Rejections are not cached, so a transient selection failure
+ * does not disable local AI for the rest of the session.
+ */
+function selectAfterRegistryDisposal(reason: string): Promise<SelectedAIMode> {
   const registry = activeRegistry;
   activeRegistry = null;
-  await disposeProviderRegistry(registry, (error) => logRegistryCleanupFailure(reason, error));
+  capabilityReportPromise = null;
+  const next = replaceProviderRegistry(
+    registry,
+    createSelectedMode,
+    (error) => logRegistryCleanupFailure(reason, error)
+  );
+  selectedModePromise = next;
+  next.catch(() => {
+    if (selectedModePromise === next) selectedModePromise = null;
+  });
+  return next;
 }
 
 function logRegistryCleanupFailure(reason: string, error: unknown): void {
@@ -137,7 +155,11 @@ function releaseAllLlamaContextsBestEffort(): void {
 export async function getSelectedAIMode(): Promise<SelectedAIMode> {
   if (!selectedModePromise) {
     logger.ai.log("Detecting device AI capabilities...");
-    selectedModePromise = createSelectedMode();
+    const next = createSelectedMode();
+    selectedModePromise = next;
+    next.catch(() => {
+      if (selectedModePromise === next) selectedModePromise = null;
+    });
   }
 
   return selectedModePromise;
@@ -158,20 +180,11 @@ export async function getDeviceCapabilityReport(): Promise<DeviceCapabilityRepor
 
 export async function refreshDeviceCapabilities(): Promise<DeviceAIMode> {
   if (!capabilityRefreshPromise) {
-    capabilityRefreshPromise = (async () => {
-      const reason = "Refreshing device capabilities.";
-      const registry = activeRegistry;
-      activeRegistry = null;
-      clearCachedSelection();
-      const selected = await replaceProviderRegistry(
-        registry,
-        getSelectedAIMode,
-        (error) => logRegistryCleanupFailure(reason, error)
-      );
-      return selected.mode;
-    })().finally(() => {
-      capabilityRefreshPromise = null;
-    });
+    capabilityRefreshPromise = selectAfterRegistryDisposal("Refreshing device capabilities.")
+      .then((selected) => selected.mode)
+      .finally(() => {
+        capabilityRefreshPromise = null;
+      });
   }
   return capabilityRefreshPromise;
 }
@@ -188,11 +201,13 @@ export function releaseLocalAIForMemoryPressure(reason: string): void {
  */
 export async function disableAIProviderForSession(providerId: string, error: unknown): Promise<void> {
   disabledProviderIds.add(providerId);
-  clearCachedSelection();
-  await disposeActiveRegistryAndWait(`Provider disabled for session: ${providerId}`);
   logger.ai.warn(`Provider disabled for session: ${providerId}`, {
     error: error instanceof Error ? error.message : String(error)
   });
+  await selectAfterRegistryDisposal(`Provider disabled for session: ${providerId}`).then(
+    () => undefined,
+    () => undefined
+  );
 }
 
 export function forceFallbackModeForResponse(mode: DeviceAIMode, reason: string): DeviceAIMode {

@@ -613,7 +613,11 @@ export class LlamaRnProvider implements LocalAIProvider {
         providerName: this.name
       };
     } catch (error) {
-      await this.chatContext.invalidate((pending) => this.releaseContext(pending));
+      // An abort rejection comes from stopCompletion, not a damaged context;
+      // keep the loaded model so the next message avoids a full reload.
+      if (!signal?.aborted) {
+        await this.chatContext.invalidate((pending) => this.releaseContext(pending));
+      }
       throw error;
     } finally {
       if (signal) {
