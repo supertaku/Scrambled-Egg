@@ -1,5 +1,6 @@
 import type { AnswerProvenance, DeviceAIMode } from "@/ai/DeviceAIMode";
 import type { SafeChatResult } from "@/ai/LocalAIProvider";
+import { providerFailureAction } from "@/ai/providerFailurePolicy";
 import {
   FRIENDLY_BUDDY_LOCAL_CHAT_INSTRUCTION,
   HAKI_LOCAL_CHAT_INSTRUCTION,
@@ -205,10 +206,15 @@ async function runLocalSafeChat(
       };
     }
 
-    disableAIProviderForSession(summaryProvider.id, error);
-    if (attempt < MAX_PROVIDER_RETRIES) {
-      const fallbackSelection = await getSelectedAIMode();
-      return runLocalSafeChat(question, fallbackSelection, options, attempt + 1);
+    const action = providerFailureAction(error, attempt, MAX_PROVIDER_RETRIES);
+    if (action === "disable_provider") {
+      disableAIProviderForSession(summaryProvider.id, error);
+      if (attempt < MAX_PROVIDER_RETRIES) {
+        const fallbackSelection = await getSelectedAIMode();
+        return runLocalSafeChat(question, fallbackSelection, retryOptionsWithoutStreaming(options), attempt + 1);
+      }
+    } else if (action === "retry_provider") {
+      return runLocalSafeChat(question, selectedMode, retryOptionsWithoutStreaming(options), attempt + 1);
     }
 
     return {

@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 
 import { provenanceForSummaryProvider } from "@/ai/DeviceAIMode";
 import type { AnswerProvenance, DeviceAIMode } from "@/ai/DeviceAIMode";
+import { providerFailureAction } from "@/ai/providerFailurePolicy";
 import { MEDIUM_CONFIDENCE_NOTE, SAFE_FALLBACK_MESSAGE, STRICT_LOCAL_SUMMARIZATION_INSTRUCTION } from "@/ai/prompts";
 import { getDatabase } from "@/db/database";
 import { FTSRetriever } from "@/retrieval/FTSRetriever";
@@ -474,10 +475,15 @@ async function maybeSummarizeFromSources(
       mode
     };
   } catch (error) {
-    disableAIProviderForSession(summaryProvider.id, error);
-    if (attempt < MAX_PROVIDER_RETRIES) {
-      const fallbackSelection = await getSelectedAIMode();
-      return maybeSummarizeFromSources(question, fallbackSelection, results, attempt + 1);
+    const action = providerFailureAction(error, attempt, MAX_PROVIDER_RETRIES);
+    if (action === "disable_provider") {
+      disableAIProviderForSession(summaryProvider.id, error);
+      if (attempt < MAX_PROVIDER_RETRIES) {
+        const fallbackSelection = await getSelectedAIMode();
+        return maybeSummarizeFromSources(question, fallbackSelection, results, attempt + 1);
+      }
+    } else if (action === "retry_provider") {
+      return maybeSummarizeFromSources(question, selectedMode, results, attempt + 1);
     }
 
     return {

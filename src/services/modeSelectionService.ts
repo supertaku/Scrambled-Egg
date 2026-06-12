@@ -5,6 +5,7 @@ import {
 import { DefaultCapabilityDetector, type DeviceCapabilityReport } from "@/ai/CapabilityDetector";
 import type { LocalAIProvider } from "@/ai/LocalAIProvider";
 import { createLocalAIProviderRegistry, type LocalAIProviderRegistry } from "@/ai/providerRegistry";
+import { replaceProviderRegistry } from "@/ai/providerRegistryLifecycle";
 import { getActiveChatModelStatus } from "@/ai/localModelManager";
 import { getDatabase } from "@/db/database";
 import { assertFts5Available } from "@/db/ftsHealth";
@@ -102,6 +103,13 @@ function disposeActiveRegistry(reason: string): void {
   });
 }
 
+function logRegistryCleanupFailure(reason: string, error: unknown): void {
+  logger.ai.warn("Local AI provider cleanup failed.", {
+    reason,
+    error: error instanceof Error ? error.message : String(error)
+  });
+}
+
 function releaseAllLlamaContextsBestEffort(): void {
   void import("llama.rn")
     .then((mod) => {
@@ -145,9 +153,15 @@ export async function getDeviceCapabilityReport(): Promise<DeviceCapabilityRepor
 export async function refreshDeviceCapabilities(): Promise<DeviceAIMode> {
   if (!capabilityRefreshPromise) {
     capabilityRefreshPromise = (async () => {
-      disposeActiveRegistry("Refreshing device capabilities.");
+      const reason = "Refreshing device capabilities.";
+      const registry = activeRegistry;
+      activeRegistry = null;
       clearCachedSelection();
-      const selected = await getSelectedAIMode();
+      const selected = await replaceProviderRegistry(
+        registry,
+        getSelectedAIMode,
+        (error) => logRegistryCleanupFailure(reason, error)
+      );
       return selected.mode;
     })().finally(() => {
       capabilityRefreshPromise = null;
