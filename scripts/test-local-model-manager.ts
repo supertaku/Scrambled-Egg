@@ -420,15 +420,21 @@ assert.equal(teacherState.userGoal, "find contact information");
 assert.match(formatConversationState(teacherState), /Active actor\/entity: teacher/);
 
 const localModelManagerSource = readFileSync(new URL("../src/ai/localModelManager.ts", import.meta.url), "utf8");
+const modelStoragePathsSource = readFileSync(new URL("../src/ai/modelStoragePaths.ts", import.meta.url), "utf8");
+const modelLibraryStoreSource = readFileSync(new URL("../src/ai/modelLibraryStore.ts", import.meta.url), "utf8");
 const modelOperationCoordinatorSource = readFileSync(
   new URL("../src/ai/modelOperationCoordinator.ts", import.meta.url),
   "utf8"
 );
-assert.equal(/FileSystem\.makeDirectoryAsync|FileSystem\.copyAsync|FileSystem\.deleteAsync|FileSystem\.getInfoAsync/.test(localModelManagerSource), false);
+// The deprecated promise-based FileSystem API is banned across the whole
+// managed-model implementation (manager + extracted storage/library modules).
+for (const source of [localModelManagerSource, modelStoragePathsSource, modelLibraryStoreSource]) {
+  assert.equal(/FileSystem\.makeDirectoryAsync|FileSystem\.copyAsync|FileSystem\.deleteAsync|FileSystem\.getInfoAsync/.test(source), false);
+}
 assert.match(localModelManagerSource, /expo-file-system\/legacy/);
 assert.match(localModelManagerSource, /cleanupPartialGgufDownloads/);
-assert.match(localModelManagerSource, /library\.json/);
-assert.match(localModelManagerSource, /migrateLegacyChatModel/);
+assert.match(modelStoragePathsSource, /library\.json/);
+assert.match(modelLibraryStoreSource, /migrateLegacyChatModel/);
 assert.match(localModelManagerSource, /activateChatModel/);
 assert.match(localModelManagerSource, /recoverInterruptedModelOperation/);
 assert.match(localModelManagerSource, /phase: "verifying"/);

@@ -4,7 +4,6 @@ import type {
   LocalSummaryResult,
   SafeChatInput,
   SafeChatResult,
-  SourceChunkForSummary,
   SummarizeFromSourcesInput
 } from "./LocalAIProvider";
 import { getDeviceHardwareProfile } from "./deviceHardwareProfile";
@@ -13,6 +12,7 @@ import type { LocalModelManifest } from "./localModelMetadata";
 import { deviceCapabilityClassForTier } from "./localModelMetadata";
 import { getActiveChatModelStatus, withLocalModelInferenceLease } from "./localModelManager";
 import { liteRtLmRuntime } from "./nativeRuntimeAdapters";
+import { sourceBlock } from "./providerPromptShared";
 import { coerceNativeSafeChatResult, coerceNativeSummaryResult } from "./providerUtils";
 import { safeInputBudgetTokens, safeOutputTokens } from "./tokenBudget";
 
@@ -22,17 +22,6 @@ let nextRequestSequence = 0;
 function nextRequestId(): string {
   nextRequestSequence += 1;
   return `litert-${Date.now()}-${nextRequestSequence}`;
-}
-
-function sourceBlock(sources: SourceChunkForSummary[] | undefined): string {
-  if (!sources?.length) return "";
-  return [
-    "Saved university sources:",
-    ...sources.map((source) => {
-      const body = source.answer?.trim() || source.content.trim();
-      return `[${source.citationId}] ${source.documentTitle}${source.sectionTitle ? ` - ${source.sectionTitle}` : ""}: ${body}`;
-    })
-  ].join("\n");
 }
 
 function filePathFromUri(uri: string): string {

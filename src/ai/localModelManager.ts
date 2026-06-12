@@ -1,5 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
-import { Directory, File, Paths } from "expo-file-system";
+import { File } from "expo-file-system";
 import { createDownloadResumable, type DownloadPauseState } from "expo-file-system/legacy";
 import { NativeModules, Platform } from "react-native";
 
@@ -12,7 +12,6 @@ import {
   deriveModelMetadata,
   getLlamaContextSettingsForTier,
   isGgufFileName,
-  manifestFileName,
   recommendedDeviceModelTier,
   validateImportedModel,
   type DeviceHardwareProfile,
@@ -22,11 +21,44 @@ import {
   type LocalModelRole
 } from "./localModelMetadata";
 import {
+  installedEntryFromManifest,
+  missingStatus,
+  readLibrary,
+  readManifest,
+  rejectedStatus,
+  statusFromManifest,
+  updateInstalledEntry,
+  writeLibrary,
+  type ChatModelLibrary,
+  type InstalledChatModel
+} from "./modelLibraryStore";
+import {
+  CHAT_DIR,
+  MODELS_DIR,
+  STAGING_DIR,
+  TEMP_DOWNLOAD_MARKER,
+  artifactFileNameForCatalogModel,
+  clampProgress,
+  embeddingFile,
+  embeddingManifestFile,
+  ensureLibraryDirectories,
+  installedManifestFile,
+  installedModelDirectory,
+  installedModelFile,
+  libraryFile,
+  normalizedId,
+  now,
+  safeDelete,
+  safeFileHash,
+  stagingModelFile,
+  stagingRecordFile
+} from "./modelStoragePaths";
+import {
   buildLiteRtActivationProbeInput, cleanupLiteRtActivationProbe, evaluatedManifest,
   localFilePathFromUri, nativeSafeChatText, withActivationTimeout
 } from "./modelActivationProbe";
 import { catalogDownloadFitsHardwareForDownload } from "./modelCatalog";
-import { GGUF_MODELS, type GgufDownloadConfig, type ModelRuntimeFormat, type RuntimeAvailability } from "./modelDownloadConfig";
+import { GGUF_MODELS, type GgufDownloadConfig, type RuntimeAvailability } from "./modelDownloadConfig";
 import { getLiteRtLmNativeModule } from "./nativeModules";
 import {
   chooseExecutionProfile,
@@ -58,19 +90,15 @@ export type {
   LocalModelManifest,
   LocalModelRole
 } from "./localModelMetadata";
+export type {
+  ChatModelLibrary,
+  InstalledChatModel,
+  InstalledModelSource
+} from "./modelLibraryStore";
 
-const MODELS_DIR = new Directory(Paths.document, "models");
-const CHAT_DIR = new Directory(MODELS_DIR, "chat");
-const INSTALLED_DIR = new Directory(CHAT_DIR, "installed");
-const STAGING_DIR = new Directory(CHAT_DIR, "staging");
-const LIBRARY_VERSION = 2;
-const TEMP_DOWNLOAD_MARKER = ".partial.";
 const LITERT_ACTIVATION_PROBE_TIMEOUT_MS = 90_000;
-const MAX_SAFE_INLINE_HASH_BYTES = 64 * 1024 * 1024;
 const MAX_IMPORTED_CHAT_MODEL_BYTES = 10 * 1024 * 1024 * 1024;
 const MAX_IMPORTED_EMBEDDING_MODEL_BYTES = 2 * 1024 * 1024 * 1024;
-const LEGACY_CHAT_FILE = new File(MODELS_DIR, canonicalModelFileName("chat"));
-const LEGACY_CHAT_MANIFEST_FILE = new File(MODELS_DIR, manifestFileName("chat"));
 
 export interface GgufDownloadProgress {
   bytesWritten: number;
@@ -81,34 +109,6 @@ export interface GgufDownloadProgress {
 export interface PickAndImportModelResult {
   canceled: boolean;
   status?: ImportedModelStatus;
-}
-
-export type InstalledModelSource = "downloaded" | "legacy-bundled" | "admin-imported";
-
-export interface InstalledChatModel {
-  id: string;
-  catalogId: string | null;
-  source: InstalledModelSource;
-  fileUri: string;
-  manifestUri: string;
-  modelName: string;
-  modelTier: LocalModelTier;
-  sizeBytes: number;
-  verifiedSha256: string | null;
-  installedAt: string;
-  rejectionReasons: string[];
-  runtimeFormat?: ModelRuntimeFormat;
-  filePresent?: boolean;
-  manifestPresent?: boolean;
-  runtimeAvailable?: boolean;
-  evaluationStatus?: "not_required" | "pending" | "passed" | "failed";
-  activationFailureReason?: string | null;
-}
-
-export interface ChatModelLibrary {
-  version: 2;
-  activeModelId: string | null;
-  installedModels: InstalledChatModel[];
 }
 
 export interface CompatibleModelCatalog {
@@ -157,88 +157,6 @@ function getDeviceInfoNativeModule(): DeviceInfoNativeModule | null {
     return requireNativeModule("HakiDeviceInfo") as DeviceInfoNativeModule;
   } catch {
     return (NativeModules.HakiDeviceInfo as DeviceInfoNativeModule | undefined) ?? null;
-  }
-}
-
-function ensureModelsDirectory(): void {
-  MODELS_DIR.create({ intermediates: true, idempotent: true });
-}
-
-function ensureLibraryDirectories(): void {
-  ensureModelsDirectory();
-  CHAT_DIR.create({ intermediates: true, idempotent: true });
-  INSTALLED_DIR.create({ intermediates: true, idempotent: true });
-  STAGING_DIR.create({ intermediates: true, idempotent: true });
-}
-
-function embeddingFile(role: LocalModelRole): File {
-  return new File(MODELS_DIR, canonicalModelFileName(role));
-}
-
-function embeddingManifestFile(role: LocalModelRole): File {
-  return new File(MODELS_DIR, manifestFileName(role));
-}
-
-function installedModelDirectory(modelId: string): Directory {
-  return new Directory(INSTALLED_DIR, modelId);
-}
-
-function libraryFile(): File {
-  return new File(CHAT_DIR, "library.json");
-}
-
-function safeArtifactFileName(fileName: string | null | undefined, fallback = "model.gguf"): string {
-  const base = fileName?.trim().split(/[\\/]/).pop()?.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
-  return base || fallback;
-}
-
-function artifactFileNameForCatalogModel(model: GgufDownloadConfig | null | undefined): string {
-  return safeArtifactFileName(model?.artifactFileName, model?.runtimeFormat === "litert-lm" ? "model.litertlm" : "model.gguf");
-}
-
-function installedModelFile(modelId: string, artifactFileName = "model.gguf"): File {
-  return new File(installedModelDirectory(modelId), safeArtifactFileName(artifactFileName));
-}
-
-function installedManifestFile(modelId: string): File {
-  return new File(installedModelDirectory(modelId), "manifest.json");
-}
-
-function stagingModelFile(operationId: string, artifactFileName = "model.gguf"): File {
-  const extension = safeArtifactFileName(artifactFileName).split(".").pop() ?? "model";
-  return new File(STAGING_DIR, `${operationId}${TEMP_DOWNLOAD_MARKER}${extension}`);
-}
-
-function stagingRecordFile(operationId: string): File {
-  return new File(STAGING_DIR, `${operationId}.json`);
-}
-
-function safeDelete(fileOrDirectory: File | Directory): void {
-  try {
-    if (fileOrDirectory.exists) {
-      fileOrDirectory.delete();
-    }
-  } catch {
-    // Best-effort cleanup only.
-  }
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
-
-function normalizedId(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "model";
-}
-
-function safeFileHash(file: File): string | null {
-  try {
-    return file.size > MAX_SAFE_INLINE_HASH_BYTES ? null : file.md5;
-  } catch (error) {
-    logger.ai.warn("Skipping local model MD5 metadata because the filesystem hash read failed.", {
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return null;
   }
 }
 
@@ -300,211 +218,6 @@ async function probeEmbeddingModel(file: File, manifest: LocalModelManifest): Pr
       });
     });
   }
-}
-
-function clampProgress(bytesWritten: number, totalBytes: number): number {
-  if (!Number.isFinite(bytesWritten) || bytesWritten <= 0) return 0;
-  if (!Number.isFinite(totalBytes) || totalBytes <= 0) return 0;
-  return Math.max(0, Math.min(1, bytesWritten / totalBytes));
-}
-
-function parseManifest(text: string): LocalModelManifest | null {
-  try {
-    const parsed = JSON.parse(text) as Partial<LocalModelManifest>;
-    if (
-      parsed.version !== 1 ||
-      !parsed.role ||
-      !parsed.uri ||
-      !parsed.storedName ||
-      !parsed.manifestPath ||
-      typeof parsed.sizeBytes !== "number" ||
-      !Array.isArray(parsed.rejectionReasons)
-    ) {
-      return null;
-    }
-    return parsed as LocalModelManifest;
-  } catch {
-    return null;
-  }
-}
-
-function readManifest(file: File): LocalModelManifest | null {
-  if (!file.exists) return null;
-  try {
-    return parseManifest(file.textSync());
-  } catch {
-    return null;
-  }
-}
-
-function statusFromManifest(manifest: LocalModelManifest): ImportedModelStatus {
-  return {
-    role: manifest.role,
-    state: manifest.rejectionReasons.length > 0 ? "rejected" : "available",
-    modelDirectory: manifest.role === "chat" ? CHAT_DIR.uri : MODELS_DIR.uri,
-    manifestPath: manifest.manifestPath,
-    manifest,
-    rejectionReasons: manifest.rejectionReasons
-  };
-}
-
-function missingStatus(role: LocalModelRole, reason = "No active GGUF model selected."): ImportedModelStatus {
-  return {
-    role,
-    state: "missing",
-    modelDirectory: role === "chat" ? CHAT_DIR.uri : MODELS_DIR.uri,
-    manifestPath: role === "chat" ? libraryFile().uri : embeddingManifestFile(role).uri,
-    manifest: null,
-    rejectionReasons: [reason]
-  };
-}
-
-function rejectedStatus(role: LocalModelRole, reason: string, manifest: LocalModelManifest | null = null): ImportedModelStatus {
-  return {
-    role,
-    state: "rejected",
-    modelDirectory: role === "chat" ? CHAT_DIR.uri : MODELS_DIR.uri,
-    manifestPath: manifest?.manifestPath ?? (role === "chat" ? libraryFile().uri : embeddingManifestFile(role).uri),
-    manifest,
-    rejectionReasons: manifest?.rejectionReasons.length ? manifest.rejectionReasons : [reason]
-  };
-}
-
-function parseLibrary(text: string): ChatModelLibrary | null {
-  try {
-    const parsed = JSON.parse(text) as Partial<ChatModelLibrary>;
-    if (parsed.version !== LIBRARY_VERSION || !Array.isArray(parsed.installedModels)) return null;
-    return {
-      version: LIBRARY_VERSION,
-      activeModelId: typeof parsed.activeModelId === "string" ? parsed.activeModelId : null,
-      installedModels: parsed.installedModels.filter((entry): entry is InstalledChatModel => {
-        return Boolean(entry && typeof entry.id === "string" && typeof entry.fileUri === "string" && typeof entry.manifestUri === "string");
-      })
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeLibrary(library: ChatModelLibrary): void {
-  ensureLibraryDirectories();
-  const target = libraryFile();
-  const temporary = new File(CHAT_DIR, `library-${Date.now()}.json.tmp`);
-  const backup = new File(CHAT_DIR, `library-${Date.now()}.json.backup`);
-  safeDelete(temporary);
-  safeDelete(backup);
-  temporary.write(JSON.stringify(library, null, 2));
-  try {
-    if (target.exists) target.move(backup);
-    temporary.move(libraryFile());
-    safeDelete(backup);
-  } catch (error) {
-    safeDelete(libraryFile());
-    if (backup.exists) backup.move(libraryFile());
-    safeDelete(temporary);
-    throw error;
-  }
-}
-
-function installedEntryFromManifest(
-  id: string,
-  manifest: LocalModelManifest,
-  source: InstalledModelSource = "downloaded",
-  verifiedSha256: string | null = null
-): InstalledChatModel {
-  return {
-    id,
-    catalogId: manifest.downloadId ?? manifest.sourceId ?? null,
-    source,
-    fileUri: manifest.uri,
-    manifestUri: manifest.manifestPath,
-    modelName: manifest.modelName,
-    modelTier: manifest.modelTier,
-    sizeBytes: manifest.sizeBytes,
-    verifiedSha256,
-    installedAt: manifest.importedAt,
-    rejectionReasons: manifest.rejectionReasons,
-    runtimeFormat: manifest.runtimeFormat ?? "gguf"
-  };
-}
-
-function reconstructLibrary(): ChatModelLibrary {
-  ensureLibraryDirectories();
-  const installedModels: InstalledChatModel[] = [];
-  for (const entry of INSTALLED_DIR.list()) {
-    if (!(entry instanceof Directory)) continue;
-    const manifest = readManifest(new File(entry, "manifest.json"));
-    const model = new File(entry, safeArtifactFileName(manifest?.storedName, manifest?.runtimeFormat === "litert-lm" ? "model.litertlm" : "model.gguf"));
-    if (!manifest || !model.exists || manifest.uri !== model.uri) continue;
-    const source: InstalledModelSource =
-      manifest.source === "legacy-bundled"
-        ? "legacy-bundled"
-        : manifest.source === "admin-imported" || manifest.source === "imported"
-          ? "admin-imported"
-          : "downloaded";
-    installedModels.push(installedEntryFromManifest(entry.name, manifest, source));
-  }
-  return { version: LIBRARY_VERSION, activeModelId: null, installedModels };
-}
-
-function migrateLegacyChatModel(library: ChatModelLibrary): ChatModelLibrary {
-  if (!LEGACY_CHAT_FILE.exists || library.installedModels.some((item) => item.source === "legacy-bundled")) {
-    return library;
-  }
-  const legacyManifest = readManifest(LEGACY_CHAT_MANIFEST_FILE);
-  if (!legacyManifest) {
-    logger.ai.warn("A legacy chat model file exists without a readable manifest and was not activated.");
-    return library;
-  }
-
-  const catalogId = legacyManifest.downloadId ?? legacyManifest.sourceId ?? "legacy-model";
-  const modelId = `legacy-${normalizedId(catalogId)}`;
-  const directory = installedModelDirectory(modelId);
-  directory.create({ intermediates: true, idempotent: true });
-  const targetModel = installedModelFile(modelId);
-  const targetManifest = installedManifestFile(modelId);
-  if (!targetModel.exists) LEGACY_CHAT_FILE.move(targetModel);
-  const migratedManifest: LocalModelManifest = {
-    ...legacyManifest,
-    source: "legacy-bundled",
-    sourceId: catalogId,
-    storedName: "model.gguf",
-    uri: targetModel.uri,
-    manifestPath: targetManifest.uri
-  };
-  targetManifest.write(JSON.stringify(migratedManifest, null, 2));
-  safeDelete(LEGACY_CHAT_MANIFEST_FILE);
-  const installed = installedEntryFromManifest(modelId, migratedManifest, "legacy-bundled");
-  logger.ai.log("Migrated previously installed bundled chat model into the managed library.", { modelId });
-  return {
-    version: LIBRARY_VERSION,
-    activeModelId: migratedManifest.rejectionReasons.length === 0 ? modelId : library.activeModelId,
-    installedModels: [...library.installedModels.filter((entry) => entry.id !== modelId), installed]
-  };
-}
-
-function readLibrary(): ChatModelLibrary {
-  ensureLibraryDirectories();
-  const target = libraryFile();
-  const parsed = target.exists ? parseLibrary(target.textSync()) : null;
-  let library = parsed ?? reconstructLibrary();
-  const migrated = migrateLegacyChatModel(library);
-  if (!parsed || migrated !== library) {
-    library = migrated;
-    writeLibrary(library);
-  }
-  if (library.activeModelId && !library.installedModels.some((item) => item.id === library.activeModelId)) {
-    library = { ...library, activeModelId: null };
-    writeLibrary(library);
-  }
-  return library;
-}
-
-function updateInstalledEntry(library: ChatModelLibrary, entry: InstalledChatModel): ChatModelLibrary {
-  return {
-    ...library,
-    installedModels: [...library.installedModels.filter((item) => item.id !== entry.id), entry]
-  };
 }
 
 function clearNativeDownloadTimer(): void {
