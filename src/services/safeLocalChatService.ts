@@ -19,6 +19,7 @@ import {
   disableAIProviderForSession,
   forceFallbackModeForResponse,
   getSelectedAIMode,
+  refreshDeviceCapabilities,
   type SelectedAIMode
 } from "./modeSelectionService";
 import { buildSafeQuestionFallbackResponse } from "./chatCapabilityService";
@@ -208,13 +209,15 @@ async function runLocalSafeChat(
 
     const action = providerFailureAction(error, attempt, MAX_PROVIDER_RETRIES);
     if (action === "disable_provider") {
-      disableAIProviderForSession(summaryProvider.id, error);
+      await disableAIProviderForSession(summaryProvider.id, error);
       if (attempt < MAX_PROVIDER_RETRIES) {
         const fallbackSelection = await getSelectedAIMode();
         return runLocalSafeChat(question, fallbackSelection, retryOptionsWithoutStreaming(options), attempt + 1);
       }
     } else if (action === "retry_provider") {
-      return runLocalSafeChat(question, selectedMode, retryOptionsWithoutStreaming(options), attempt + 1);
+      await refreshDeviceCapabilities();
+      const retrySelection = await getSelectedAIMode();
+      return runLocalSafeChat(question, retrySelection, retryOptionsWithoutStreaming(options), attempt + 1);
     }
 
     return {

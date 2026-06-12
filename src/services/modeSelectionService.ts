@@ -5,7 +5,7 @@ import {
 import { DefaultCapabilityDetector, type DeviceCapabilityReport } from "@/ai/CapabilityDetector";
 import type { LocalAIProvider } from "@/ai/LocalAIProvider";
 import { createLocalAIProviderRegistry, type LocalAIProviderRegistry } from "@/ai/providerRegistry";
-import { replaceProviderRegistry } from "@/ai/providerRegistryLifecycle";
+import { disposeProviderRegistry, replaceProviderRegistry } from "@/ai/providerRegistryLifecycle";
 import { getActiveChatModelStatus } from "@/ai/localModelManager";
 import { getDatabase } from "@/db/database";
 import { assertFts5Available } from "@/db/ftsHealth";
@@ -103,6 +103,12 @@ function disposeActiveRegistry(reason: string): void {
   });
 }
 
+async function disposeActiveRegistryAndWait(reason: string): Promise<void> {
+  const registry = activeRegistry;
+  activeRegistry = null;
+  await disposeProviderRegistry(registry, (error) => logRegistryCleanupFailure(reason, error));
+}
+
 function logRegistryCleanupFailure(reason: string, error: unknown): void {
   logger.ai.warn("Local AI provider cleanup failed.", {
     reason,
@@ -180,10 +186,10 @@ export function releaseLocalAIForMemoryPressure(reason: string): void {
  * Marks a provider as failed for the remainder of the current app session,
  * clears the mode cache so the next call re-selects without it, and logs the error.
  */
-export function disableAIProviderForSession(providerId: string, error: unknown): void {
+export async function disableAIProviderForSession(providerId: string, error: unknown): Promise<void> {
   disabledProviderIds.add(providerId);
-  disposeActiveRegistry(`Provider disabled for session: ${providerId}`);
   clearCachedSelection();
+  await disposeActiveRegistryAndWait(`Provider disabled for session: ${providerId}`);
   logger.ai.warn(`Provider disabled for session: ${providerId}`, {
     error: error instanceof Error ? error.message : String(error)
   });

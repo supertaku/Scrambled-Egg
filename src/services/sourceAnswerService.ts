@@ -19,6 +19,7 @@ import {
   disableAIProviderForSession,
   forceFallbackModeForResponse,
   getSelectedAIMode,
+  refreshDeviceCapabilities,
   type SelectedAIMode
 } from "./modeSelectionService";
 import { LOST_ID_PATTERNS, matchesAny } from "./questionScenarioService";
@@ -477,13 +478,15 @@ async function maybeSummarizeFromSources(
   } catch (error) {
     const action = providerFailureAction(error, attempt, MAX_PROVIDER_RETRIES);
     if (action === "disable_provider") {
-      disableAIProviderForSession(summaryProvider.id, error);
+      await disableAIProviderForSession(summaryProvider.id, error);
       if (attempt < MAX_PROVIDER_RETRIES) {
         const fallbackSelection = await getSelectedAIMode();
         return maybeSummarizeFromSources(question, fallbackSelection, results, attempt + 1);
       }
     } else if (action === "retry_provider") {
-      return maybeSummarizeFromSources(question, selectedMode, results, attempt + 1);
+      await refreshDeviceCapabilities();
+      const retrySelection = await getSelectedAIMode();
+      return maybeSummarizeFromSources(question, retrySelection, results, attempt + 1);
     }
 
     return {
