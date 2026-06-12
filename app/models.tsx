@@ -55,8 +55,8 @@ export default function ModelsScreen() {
   const [selectedProviderId, setSelectedProviderId] = useState<LocalAIProviderId | null>(null);
   const terminalOperationRef = useRef<string | null>(null);
 
-  const load = useCallback(async (refreshMode = false) => {
-    setError(null);
+  const load = useCallback(async (refreshMode = false, preserveError = false) => {
+    if (!preserveError) setError(null);
     try {
       const mode = refreshMode ? await refreshDeviceCapabilities() : await getCurrentAIMode();
       setSelectedProviderId(mode.summaryProviderId);
@@ -69,7 +69,7 @@ export default function ModelsScreen() {
       setCatalog(nextCatalog);
       setEmbeddingStatus(nextEmbeddingStatus);
     } catch {
-      setError("Could not load Haki Models. Please try again.");
+      if (!preserveError) setError("Could not load Haki Models. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -84,7 +84,7 @@ export default function ModelsScreen() {
       setOperation(next);
       if (next && ["completed", "failed", "canceled"].includes(next.phase) && terminalOperationRef.current !== next.operationId) {
         terminalOperationRef.current = next.operationId;
-        void load(next.phase === "completed");
+        void load(next.phase === "completed", next.phase === "failed");
       }
     });
   }, [load]);
@@ -96,7 +96,7 @@ export default function ModelsScreen() {
       await load(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "That change did not finish. Please try again.");
-      await load();
+      await load(false, true);
     }
   }, [load]);
 

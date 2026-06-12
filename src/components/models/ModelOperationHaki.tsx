@@ -7,48 +7,7 @@ import type { ImageSourcePropType } from "react-native";
 import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
 import type { Theme } from "@/theme/themes";
 import type { MascotStatus } from "../mascot/mascotConfig";
-
-function formatPercent(progress: number | null): string {
-  return `${Math.round((progress ?? 0) * 100)}%`;
-}
-
-function messageForOperation(operation: ModelOperationState | null, activeModelName: string | null): string {
-  if (!operation) {
-    return activeModelName
-      ? "All Haki modes are ready."
-      : "Campus Haki is ready. Download a chat model to unlock supportive modes.";
-  }
-  switch (operation.phase) {
-    case "queued":
-      return "Your chat download is queued and may continue while you use another app.";
-    case "downloading":
-      return `I'm downloading the Haki model: ${formatPercent(operation.progress)} complete.`;
-    case "paused":
-      return operation.resumable
-        ? "The download is paused. Tap Resume when you're ready."
-        : "This interrupted download cannot be resumed. Discard it and try again.";
-    case "verifying":
-      return "The download is complete. I'm checking the file before using it.";
-    case "validating":
-      return "I'm checking whether this download will work on this phone.";
-    case "optimizing":
-      return "I'm checking the fastest safe way to run this Haki model.";
-    case "waiting_for_chat":
-      return "I'll use the new Haki model after I finish the current answer.";
-    case "activating":
-      return "I'm getting this Haki model ready. Campus Haki is still available.";
-    case "removing":
-      return "I'm removing this chat download.";
-    case "completed":
-      return operation.error
-        ? "The download was saved, but it cannot be used right now."
-        : "Ready. Your local AI option is set up.";
-    case "canceled":
-      return "The change was canceled. Your current setup was not changed.";
-    case "failed":
-      return "I could not finish setting up that Haki model. Please try again.";
-  }
-}
+import { messageForModelOperation } from "./modelOperationMessage";
 
 function statusForOperation(operation: ModelOperationState | null): MascotStatus {
   const phase = operation?.phase;
@@ -117,7 +76,7 @@ export function ModelOperationHaki({
         <View pointerEvents="none" style={styles.tailBorder} />
         <View pointerEvents="none" style={styles.tail} />
         <Text style={styles.name}>HAKI</Text>
-        <Text selectable style={styles.message}>{messageForOperation(operation, activeModelName)}</Text>
+        <Text selectable style={styles.message}>{messageForModelOperation(operation, activeModelName)}</Text>
         {operation && !["completed", "failed", "canceled"].includes(operation.phase) ? (
           <Text style={styles.elapsed}>Working for {Math.max(0, Math.round((Date.now() - Date.parse(operation.startedAt)) / 1000))}s</Text>
         ) : null}
