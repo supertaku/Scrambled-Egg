@@ -1,15 +1,38 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { AlertCircle, Flag, RefreshCw, ThumbsDown, ThumbsUp, User as UserIcon } from "lucide-react-native";
+import { AlertCircle, Bookmark, Flag, RefreshCw, Share2, ThumbsDown, ThumbsUp, User as UserIcon } from "lucide-react-native";
 
-import { colors } from "@/theme/colors";
+import { HakiHdAvatar } from "@/mascot";
+import { addBookmark, findBookmarkId, removeBookmark, type BookmarkCitation } from "@/services/bookmarkService";
+import { shareAnswer } from "@/services/shareAnswerService";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 import type { ChatFeedbackRating, ChatMessage } from "@/types/chat";
 import type { SuggestedModeAction } from "@/types/search";
-import { PixelHakiPortrait } from "../mascot/PixelHaki";
+import { hapticTap } from "@/utils/haptics";
+import { logger } from "@/utils/logger";
+import { ChatMarkdownText } from "./ChatMarkdownText";
 import { ChatSourceCard } from "./ChatSourceCard";
+
+function citationsForMessage(message: ChatMessage): BookmarkCitation[] {
+  const response = message.response;
+  if (!response) {
+    return [];
+  }
+  const used = new Set(response.citationsUsed);
+  const cited = response.results.filter((result) => used.size === 0 || used.has(result.chunkId));
+  const source = cited.length ? cited : response.topResult ? [response.topResult] : [];
+  return source.slice(0, 4).map((result) => ({
+    citationId: result.chunkId,
+    ...(result.citation ? { citation: result.citation } : {}),
+    documentTitle: result.documentTitle
+  }));
+}
 
 interface ChatMessageBubbleProps {
   message: ChatMessage;
+  /** Only the most recent Haki bubble should animate its avatar (blinks/glances). */
+  avatarAnimated?: boolean | undefined;
   userAvatarUri?: string | null;
   onContinue?: () => void;
   onFeedback?: (messageId: string, rating: ChatFeedbackRating) => void;
@@ -19,7 +42,9 @@ interface ChatMessageBubbleProps {
 }
 
 /** Renders a single chat message bubble with avatar and optional source card. */
-function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeedback, onHakiAvatarPress, onRetry, onSuggestedModeAction }: ChatMessageBubbleProps) {
+function ChatMessageBubbleComponent({ avatarAnimated = false, message, userAvatarUri, onContinue, onFeedback, onHakiAvatarPress, onRetry, onSuggestedModeAction }: ChatMessageBubbleProps) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const fromUser = message.sender === "user";
   const { response } = message;
   const result = message.result ?? response?.topResult ?? response?.results[0];
@@ -84,13 +109,16 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
               ]
             }}
           >
-            <PixelHakiPortrait size={34} style={styles.hakiAvatar} />
+            <HakiHdAvatar animated={avatarAnimated} size={34} style={styles.hakiAvatar} />
           </Animated.View>
         </Pressable>
       )}
 
       <View style={[styles.bubbleContent, fromUser ? styles.userBubbleContent : styles.hakiBubbleContent]}>
-        <View style={[styles.bubble, fromUser ? styles.userBubble : styles.hakiBubble]}>
+        <View
+          {...(fromUser ? {} : { accessibilityLiveRegion: "polite" as const })}
+          style={[styles.bubble, fromUser ? styles.userBubble : styles.hakiBubble]}
+        >
           {!fromUser ? (
             <>
               <View pointerEvents="none" style={styles.hakiBubbleTailBorder} />
@@ -98,9 +126,13 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
             </>
           ) : null}
           {!fromUser ? <Text style={styles.senderName}>Haki</Text> : null}
-          <Text selectable style={[styles.messageText, fromUser ? styles.userMessageText : styles.hakiMessageText]}>
-            {message.text}
-          </Text>
+          {fromUser ? (
+            <Text selectable style={[styles.messageText, styles.userMessageText]}>
+              {message.text}
+            </Text>
+          ) : (
+            <ChatMarkdownText style={[styles.messageText, styles.hakiMessageText]} text={message.text} />
+          )}
           {response && !fromUser ? (
             <ChatSourceCard response={response} result={result} />
           ) : null}
@@ -166,6 +198,7 @@ function ChatMessageBubbleComponent({ message, userAvatarUri, onContinue, onFeed
               onPress={() => onFeedback?.(message.id, "wrong")}
               icon={<ThumbsDown color={wrongSelected ? colors.maroon : colors.muted} size={13} />}
             />
+            <AnswerActions message={message} />
           </View>
         ) : null}
       </View>
@@ -196,6 +229,8 @@ function memoryNoticeText(response: NonNullable<ChatMessage["response"]>): strin
 }
 
 function ResponseNoticeStack({ response }: { response: NonNullable<ChatMessage["response"]> }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const notices = [
     response.verificationNote,
     response.factCheckNotice,
@@ -218,6 +253,77 @@ function ResponseNoticeStack({ response }: { response: NonNullable<ChatMessage["
   );
 }
 
+/** Save-for-later and share actions on completed Haki answers. */
+function AnswerActions({ message }: { message: ChatMessage }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
+  const [bookmarkId, setBookmarkId] = useState<number | null>(null);
+  const question = message.question ?? message.response?.question ?? null;
+
+  useEffect(() => {
+    let mounted = true;
+    void findBookmarkId(question, message.text).then((id) => {
+      if (mounted) {
+        setBookmarkId(id);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [message.text, question]);
+
+  const toggleBookmark = () => {
+    hapticTap();
+    if (bookmarkId !== null) {
+      const removedId = bookmarkId;
+      setBookmarkId(null);
+      void removeBookmark(removedId).catch((error) => {
+        setBookmarkId(removedId);
+        logger.ui.warn("Bookmark removal failed.", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+      return;
+    }
+    void addBookmark({ answerText: message.text, citations: citationsForMessage(message), question })
+      .then(setBookmarkId)
+      .catch((error) => {
+        logger.ui.warn("Bookmark save failed.", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+  };
+
+  const handleShare = () => {
+    hapticTap();
+    void shareAnswer({ answerText: message.text, citations: citationsForMessage(message), question }).catch(
+      (error) => {
+        logger.ui.warn("Answer share failed.", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    );
+  };
+
+  const saved = bookmarkId !== null;
+  return (
+    <>
+      <FeedbackButton
+        icon={<Bookmark color={saved ? colors.maroon : colors.muted} fill={saved ? colors.maroon : "transparent"} size={13} />}
+        label={saved ? "Remove this answer from saved answers" : "Save this answer for later"}
+        onPress={toggleBookmark}
+        selected={saved}
+      />
+      <FeedbackButton
+        icon={<Share2 color={colors.muted} size={13} />}
+        label="Share this answer"
+        onPress={handleShare}
+        selected={false}
+      />
+    </>
+  );
+}
+
 function FeedbackButton({
   label,
   selected,
@@ -229,6 +335,8 @@ function FeedbackButton({
   onPress: () => void;
   icon: React.ReactNode;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () =>
@@ -259,6 +367,8 @@ function FeedbackButton({
 }
 
 function ContinueButton({ onPress }: { onPress: () => void }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () =>
@@ -283,7 +393,7 @@ function ContinueButton({ onPress }: { onPress: () => void }) {
 
 export const ChatMessageBubble = memo(ChatMessageBubbleComponent);
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   messageRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -300,7 +410,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderWidth: 1.5,
     borderColor: colors.gold,
     alignItems: "center",
@@ -346,12 +456,12 @@ const styles = StyleSheet.create({
     position: "relative"
   },
   hakiBubble: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderBottomLeftRadius: 9,
     borderColor: colors.borderStrong,
     borderWidth: 1,
     alignSelf: "flex-start",
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -448,7 +558,7 @@ const styles = StyleSheet.create({
   },
   feedbackButtonSelected: {
     backgroundColor: colors.maroonSoft,
-    borderColor: "#E8C7D0"
+    borderColor: colors.maroonBorder
   },
   continueContainer: {
     marginTop: 12,
@@ -469,7 +579,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: "#E8C7D0"
+    borderColor: colors.maroonBorder
   },
   continueButtonText: {
     color: colors.maroon,
@@ -485,7 +595,7 @@ const styles = StyleSheet.create({
   },
   modeActionButton: {
     backgroundColor: colors.maroonSoft,
-    borderColor: "#E8C7D0",
+    borderColor: colors.maroonBorder,
     borderRadius: 12,
     borderWidth: 1,
     paddingHorizontal: 11,
@@ -525,7 +635,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "flex-start",
     backgroundColor: colors.maroonSoft,
-    borderColor: "#E8C7D0",
+    borderColor: colors.maroonBorder,
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",

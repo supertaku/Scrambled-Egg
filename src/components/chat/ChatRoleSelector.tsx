@@ -2,31 +2,32 @@ import { useEffect, useRef } from "react";
 import { Check, X } from "lucide-react-native";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 import type { ChatRole } from "@/types/search";
 
 const ROLE_OPTIONS: Array<{ description: string; label: string; requiresModel: boolean; value: ChatRole }> = [
   {
-    label: "Haki",
-    description: "Handles campus information, supportive guidance, and general facts. Campus answers always come from saved sources.",
+    label: "All-Around",
+    description: "Campus info plus everyday questions.",
     requiresModel: false,
     value: "haki"
   },
   {
-    label: "Information Officer",
-    description: "Answers only from saved campus information. Missing details can be reported to Haki's admin.",
+    label: "Campus Only",
+    description: "Strictly from saved campus sources.",
     requiresModel: false,
     value: "information_officer"
   },
   {
-    label: "Friendly Buddy",
-    description: "Offers empathetic personal support only. It is not a therapist and does not provide campus facts.",
+    label: "Listener",
+    description: "Kind support when you want to talk.",
     requiresModel: true,
     value: "friendly_buddy"
   },
   {
-    label: "Researcher",
-    description: "Discusses non-campus facts using local AI. Always verify important information because Haki can make mistakes.",
+    label: "Study Helper",
+    description: "General knowledge beyond campus. Double-check facts.",
     requiresModel: true,
     value: "researcher"
   }
@@ -51,6 +52,8 @@ export function ChatRoleSelector({
   onOpenModels,
   value
 }: ChatRoleSelectorProps) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.96)).current;
   const slide = useRef(new Animated.Value(-8)).current;
@@ -110,7 +113,7 @@ export function ChatRoleSelector({
       </View>
       {!modesAvailable ? (
         <View style={styles.availabilityRow}>
-          <Text style={styles.availabilityText}>Saved campus information is active. Download a chat model to unlock Friendly Buddy and Researcher.</Text>
+          <Text style={styles.availabilityText}>Saved campus information is active. Download a chat model to unlock Listener and Study Helper.</Text>
           <Pressable accessibilityRole="button" onPress={onOpenModels}>
             <Text style={styles.modelsLink}>Set up chat model</Text>
           </Pressable>
@@ -121,7 +124,7 @@ export function ChatRoleSelector({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   availabilityRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -135,14 +138,14 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   container: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.borderStrong,
     borderRadius: 16,
     borderWidth: 1,
     elevation: 8,
     gap: 9,
     padding: 12,
-    shadowColor: "#000000",
+    shadowColor: colors.shadow,
     shadowOffset: { height: 7, width: 0 },
     shadowOpacity: 0.18,
     shadowRadius: 12

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, RefreshCw, SendHorizontal, Square } from "lucide-react-native";
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from "react-native";
 
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 
 interface VoiceState {
   message: string | null;
@@ -48,6 +49,8 @@ export function ChatInputBar({
   bottomPadding,
   onLayout
 }: ChatInputBarProps) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   // Animated send button scale
   const sendScale = useRef(new Animated.Value(1)).current;
 
@@ -251,12 +254,12 @@ export function ChatInputBar({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   inputBarWrapper: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.06,
     shadowRadius: 10,
@@ -284,7 +287,7 @@ const styles = StyleSheet.create({
   errorBanner: {
     alignItems: "center",
     backgroundColor: colors.maroonSoft,
-    borderColor: "#E8C7D0",
+    borderColor: colors.maroonBorder,
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
@@ -300,7 +303,7 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 999,
     borderWidth: 1,
@@ -325,7 +328,7 @@ const styles = StyleSheet.create({
   cancelVoiceText: { color: colors.maroon, fontSize: 11, fontWeight: "800" },
   inputBar: {
     alignItems: "flex-end",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     flexDirection: "row",
     gap: 10,
     paddingHorizontal: 14,
@@ -349,7 +352,7 @@ const styles = StyleSheet.create({
   voiceButton: {
     alignItems: "center",
     backgroundColor: colors.maroonSoft,
-    borderColor: "#E8C7D0",
+    borderColor: colors.maroonBorder,
     borderRadius: 22,
     borderWidth: 1,
     height: 44,

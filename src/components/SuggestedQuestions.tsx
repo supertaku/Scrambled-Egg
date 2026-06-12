@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 import type { ChatRole } from "@/types/search";
 
 const suggestions: Record<ChatRole, string[]> = {
@@ -34,6 +35,8 @@ interface SuggestedQuestionsProps {
 }
 
 export function SuggestedQuestions({ chatRole, onSelect }: SuggestedQuestionsProps) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.container}>
       <Text style={styles.label}>Suggested questions</Text>
@@ -55,6 +58,8 @@ function ChipItem({
   index: number;
   onSelect: (q: string) => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(10)).current;
   const pressScale = useRef(new Animated.Value(1)).current;
@@ -91,7 +96,7 @@ function ChipItem({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   container: {
     gap: 10
   },
@@ -108,7 +113,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     backgroundColor: colors.maroonSoft,
-    borderColor: "#E8C7D0",
+    borderColor: colors.maroonBorder,
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 13,

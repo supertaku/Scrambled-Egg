@@ -1,8 +1,12 @@
 import { useState } from "react";
+import { useRouter } from "expo-router";
+import { ChevronRight } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import type { Theme } from "@/theme/themes";
 import type { SearchResponse, SearchResult } from "@/types/search";
+import { hapticTap } from "@/utils/haptics";
 
 interface ChatSourceCardProps {
   response: SearchResponse;
@@ -54,6 +58,9 @@ function sourceCitation(source: SearchResult): string | null {
 
 /** Collapsible source citation card shown below a Haki response. */
 export function ChatSourceCard({ response, result }: ChatSourceCardProps) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
+  const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const citedIds = new Set(response.citationsUsed);
   const sources = uniqueSources([
@@ -88,14 +95,29 @@ export function ChatSourceCard({ response, result }: ChatSourceCardProps) {
       {expanded ? (
         <View style={styles.sourcesList}>
           {sources.map((source) => (
-            <View key={`${source.documentId}:${source.chunkId}`} style={styles.sourceTitleRow}>
+            <Pressable
+              accessibilityHint="Opens the full procedure in the Service Desk."
+              accessibilityLabel={`Open ${source.documentTitle} in the Service Desk`}
+              accessibilityRole="button"
+              key={`${source.documentId}:${source.chunkId}`}
+              onPress={() => {
+                hapticTap();
+                router.push({
+                  pathname: "/library-topic/[chunkId]" as never,
+                  params: { chunkId: source.chunkId }
+                });
+              }}
+              style={({ pressed }) => [styles.sourceTitleRow, pressed ? styles.sourceRowPressed : undefined]}
+            >
               <View style={styles.sourceAccentBar} />
               <View style={styles.sourceContent}>
                 <Text selectable style={styles.sourceTitleText}>{source.documentTitle}</Text>
                 {sourceDetail(source) ? <Text selectable style={styles.sourceMetaText}>{sourceDetail(source)}</Text> : null}
                 {sourceCitation(source) ? <Text selectable style={styles.sourceCitationText}>{sourceCitation(source)}</Text> : null}
+                <Text style={styles.sourceOpenHint}>View full details</Text>
               </View>
-            </View>
+              <ChevronRight color={colors.maroon} size={16} style={styles.sourceChevron} />
+            </Pressable>
           ))}
         </View>
       ) : null}
@@ -103,7 +125,7 @@ export function ChatSourceCard({ response, result }: ChatSourceCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => StyleSheet.create({
   sourcesWrap: {
     gap: 6,
     marginTop: 10
@@ -118,7 +140,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   sourcesTogglePressed: {
-    backgroundColor: "#EFEFF0"
+    backgroundColor: colors.border
   },
   sourcesToggleRow: {
     flexDirection: "row",
@@ -162,11 +184,24 @@ const styles = StyleSheet.create({
     overflow: "hidden"
   },
   sourceTitleRow: {
+    alignItems: "center",
     borderTopColor: colors.border,
     borderTopWidth: 1,
     flexDirection: "row",
     gap: 0,
     overflow: "hidden"
+  },
+  sourceRowPressed: {
+    backgroundColor: colors.border
+  },
+  sourceOpenHint: {
+    color: colors.maroon,
+    fontSize: 10,
+    fontWeight: "900",
+    marginTop: 2
+  },
+  sourceChevron: {
+    marginRight: 8
   },
   sourceAccentBar: {
     width: 3,

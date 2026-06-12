@@ -9,6 +9,8 @@ import { normalizeQuery } from "@/retrieval/queryNormalizer";
 import type { ChatContextTurn, ChatRole, SearchResponse } from "@/types/search";
 import type { ChatMessage } from "@/types/chat";
 import { sanitizeAssistantDisplayText } from "@/ai/sanitizeAssistantText";
+import { hapticSuccess, hapticWarning } from "@/utils/haptics";
+import { logger } from "@/utils/logger";
 import { classifyStudentQuestionIntent } from "@/services/questionIntentService";
 import { buildConversationState } from "@/services/conversationStateService";
 import { buildArithmeticFollowUpAnswer } from "@/services/chatArithmeticShortcut";
@@ -265,11 +267,20 @@ export function useChatMessages(
       { id: userMessageId, sender: "user", status: "sent", text: question }
     ]);
 
-    void saveRecentQuestion(question).catch(() => undefined);
+    void saveRecentQuestion(question).catch((error) => {
+      logger.db.warn("Recent question could not be stored securely.", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
 
     try {
       const relatedConversationContext = useRelatedHistoryRef.current
-        ? await getRelatedConversationContext(intentQuestion, intent).catch(() => [])
+        ? await getRelatedConversationContext(intentQuestion, intent).catch((error) => {
+            logger.db.warn("Related conversation history could not be loaded.", {
+              error: error instanceof Error ? error.message : String(error)
+            });
+            return [];
+          })
         : [];
       const conversationContext = mergeChatContext(relatedConversationContext, localConversationContext);
       const arithmeticAnswer = buildArithmeticFollowUpAnswer(question, messageSnapshot);
@@ -381,7 +392,14 @@ export function useChatMessages(
         const withSentUser = current.map((m) => (m.id === userMessageId ? { ...m, status: "sent" as const } : m));
         return [...withSentUser, hakiMessage];
       });
-      void saveConversationMemory({ question, answer: answerText, intent }).catch(() => undefined);
+      hapticSuccess();
+      if (useRelatedHistoryRef.current) {
+        void saveConversationMemory({ question, answer: answerText, intent }).catch((error) => {
+          logger.db.warn("Conversation memory could not be stored securely.", {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      }
       void clearPendingChatRequest().catch(() => undefined);
       setStreamingMessage(null);
       streamedTextRef.current = "";
@@ -404,6 +422,7 @@ export function useChatMessages(
             void clearPendingChatRequest().catch(() => undefined);
           }
         } else {
+          hapticWarning();
           setError("Haki had trouble answering. Please try again.");
           setLastFailedQuestion(question);
           setMessages((current) => [

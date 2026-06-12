@@ -28,10 +28,10 @@ const LEGACY_INLINE_RESEARCHER_REMINDER =
 
 function action(mode: ChatRole): SuggestedModeAction {
   const names: Record<ChatRole, string> = {
-    haki: "Haki",
-    information_officer: "Information Officer",
-    friendly_buddy: "Friendly Buddy",
-    researcher: "Researcher"
+    haki: "All-Around",
+    information_officer: "Campus Only",
+    friendly_buddy: "Listener",
+    researcher: "Study Helper"
   };
   return {
     label: `Switch to ${names[mode]} and answer`,
@@ -130,7 +130,7 @@ export function buildGeneratedModeUnavailableResponse(
     confidence: "low",
     reliable: false,
     answerText:
-      "Saved campus information is available now, but this response needs a local chat model. Set up a chat model to unlock Friendly Buddy and Researcher help.",
+      "Saved campus information is available now, but this response needs a local chat model. Set up a chat model to unlock Listener and Study Helper help.",
     citationsUsed: [],
     provenance: "General chat unavailable without local AI",
     activeMode: mode

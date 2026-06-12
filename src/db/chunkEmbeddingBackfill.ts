@@ -1,6 +1,9 @@
+import { InteractionManager } from "react-native";
 import type { SQLiteDatabase } from "expo-sqlite";
 
+import { getDeviceHardwareProfile } from "@/ai/deviceHardwareProfile";
 import type { LocalAICapabilities } from "@/ai/LocalAIProvider";
+import { isLocalModelInferenceBusy } from "@/ai/localModelManager";
 import { getSelectedAIMode } from "@/services/modeSelectionService";
 import { logger } from "@/utils/logger";
 import { upsertSqliteVecEmbedding } from "./sqliteVec";
@@ -8,7 +11,22 @@ import { upsertSqliteVecEmbedding } from "./sqliteVec";
 const MAX_CHUNK_EMBED_CHARS = 12_000;
 const BATCH_SIZE = 8;
 /** Yield to the UI event loop between batches. */
-const BATCH_PAUSE_MS = 12;
+const BATCH_PAUSE_MS = 80;
+/** Extra cooldown between batches when the device is already warm. */
+const THERMAL_PAUSE_MS = 4_000;
+/** Re-check delay while a user-facing inference holds the model. */
+const INFERENCE_BUSY_PAUSE_MS = 2_000;
+/**
+ * Backfill is an optimization, never startup work: wait until the user has
+ * had the app open and idle for a while before touching the embed model.
+ */
+const SCHEDULE_DELAY_MS = 30_000;
+/** Re-check thermal state once per this many batches (native call). */
+const THERMAL_CHECK_EVERY_BATCHES = 4;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface ChunkRow {
   chunk_id: string;
@@ -61,7 +79,29 @@ export async function backfillChunkEmbeddingsIfNeeded(db: SQLiteDatabase): Promi
     const capabilities = await embedProvider.getCapabilities();
     const modelKey = storageModelName(capabilities, embedProvider.id);
 
+    let batchIndex = 0;
+    let thermalPause = false;
     for (;;) {
+      // User-facing chat/embedding requests always win: back off instead of
+      // queueing behind the inference lease.
+      if (isLocalModelInferenceBusy()) {
+        await sleep(INFERENCE_BUSY_PAUSE_MS);
+        continue;
+      }
+
+      if (batchIndex % THERMAL_CHECK_EVERY_BATCHES === 0) {
+        const profile = await getDeviceHardwareProfile();
+        if (profile.thermalState === "critical") {
+          logger.db.warn("Chunk embedding backfill paused: device thermal state is critical.");
+          return;
+        }
+        thermalPause = profile.thermalState === "serious" || profile.thermalState === "fair";
+      }
+      batchIndex += 1;
+
+      // Wait out any running animations/gestures before doing native work.
+      await InteractionManager.runAfterInteractions(() => undefined);
+
       const pending = await db.getAllAsync<ChunkRow>(
         `SELECT c.chunk_id, c.section_title, c.process_name, c.content, c.answer, c.tags
          FROM chunks c
@@ -136,7 +176,7 @@ export async function backfillChunkEmbeddingsIfNeeded(db: SQLiteDatabase): Promi
         }
       }
 
-      await new Promise((r) => setTimeout(r, BATCH_PAUSE_MS));
+      await sleep(thermalPause ? THERMAL_PAUSE_MS : BATCH_PAUSE_MS);
     }
 
     logger.db.log("Chunk embedding backfill finished or idle.", { modelKey });
@@ -147,8 +187,21 @@ export async function backfillChunkEmbeddingsIfNeeded(db: SQLiteDatabase): Promi
   }
 }
 
+let backfillTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Queue the backfill well off the startup critical path: it starts only
+ * after the app has been open for a while and the UI is idle. Re-calling
+ * resets the delay instead of stacking runs.
+ */
 export function scheduleChunkEmbeddingBackfill(db: SQLiteDatabase): void {
-  queueMicrotask(() => {
-    void backfillChunkEmbeddingsIfNeeded(db);
-  });
+  if (backfillTimer) {
+    clearTimeout(backfillTimer);
+  }
+  backfillTimer = setTimeout(() => {
+    backfillTimer = null;
+    void InteractionManager.runAfterInteractions(() => {
+      void backfillChunkEmbeddingsIfNeeded(db);
+    });
+  }, SCHEDULE_DELAY_MS);
 }

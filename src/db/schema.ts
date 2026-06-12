@@ -146,6 +146,16 @@ CREATE TABLE IF NOT EXISTS app_meta (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS bookmarks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question TEXT,
+  answer_text TEXT NOT NULL,
+  citations_json TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at);
+
 CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_office ON chunks(office);
 CREATE INDEX IF NOT EXISTS idx_chunks_category ON chunks(category);

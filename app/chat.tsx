@@ -9,7 +9,6 @@ import {
   NativeSyntheticEvent,
   Platform,
   Pressable,
-  StyleSheet,
   Text,
   useWindowDimensions,
   View
@@ -22,8 +21,9 @@ import { RefreshCw } from "lucide-react-native";
 import { FeatherLoader } from "@/components/chat/FeatherLoader";
 import { ChatMessageBubble } from "@/components/chat/ChatMessageBubble";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
+import { createChatScreenStyles } from "@/components/chat/chatScreenStyles";
 import { ChatRoleSelector } from "@/components/chat/ChatRoleSelector";
-import { PixelHakiPortrait, SpriteHaki } from "@/components/mascot/PixelHaki";
+import { HakiHdAvatar, HakiMascotCompat } from "@/mascot";
 import { SuggestedQuestions } from "@/components/SuggestedQuestions";
 import { getAppDatabase } from "@/data/appRepository";
 import { useChatMessages } from "@/hooks/useChatMessages";
@@ -40,7 +40,8 @@ import {
 import { getChatPrivacySettings } from "@/services/chatPrivacySettingsService";
 import { classifyStudentQuestionIntent } from "@/services/questionIntentService";
 import { getStudentAvatarUri, getStudentProfile, studentProfileToChatContext } from "@/services/studentProfileService";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import { chatListeningPalette } from "@/theme/featurePalettes";
 import { metrics } from "@/theme/metrics";
 import type { ChatMessage } from "@/types/chat";
 import type { ChatRole, SuggestedModeAction } from "@/types/search";
@@ -53,18 +54,18 @@ function getModelIndicator(mode: DeviceAIMode | null, _report: DeviceCapabilityR
 
 function getChatRoleSessionNotice(chatRole: ChatRole): string {
   if (chatRole === "information_officer") {
-    return "Information Officer answers only from saved campus information. Verify important details with the relevant office.";
+    return "Campus Only answers strictly from saved campus information. Verify important details with the relevant office.";
   }
 
   if (chatRole === "friendly_buddy") {
-    return "Friendly Buddy offers empathetic support only. It is not a therapist and does not provide campus facts.";
+    return "Listener offers kind support only. It is not a therapist and does not provide campus facts.";
   }
 
   if (chatRole === "researcher") {
-    return "Researcher discusses non-campus facts. Always verify important information because Haki can make mistakes.";
+    return "Study Helper covers non-campus topics. Always double-check important facts because Haki can make mistakes.";
   }
 
-  return "Haki uses saved sources for campus information. Verify important details because Haki can make mistakes.";
+  return "All-Around Haki uses saved sources for campus information. Verify important details because Haki can make mistakes.";
 }
 
 function getMemoryIndicatorText(messages: ChatMessage[]): string | null {
@@ -75,31 +76,27 @@ function getMemoryIndicatorText(messages: ChatMessage[]): string | null {
   return "Fresh memory";
 }
 
+// Original Haki "humming" lines (lyrics from real songs are copyrighted,
+// so these are house-made earworms in different moods).
 const HAKI_LOADING_LINES = [
-  "Ang mga ibon",
-  "Na lumilipad",
-  "Ay mahal ng Diyos",
-  "Hindi kumukupas",
-  "Ang mga ibon na lumilipad",
-  "Ay mahal ng Diyos 'di kumukupas",
-  "'Wag ka nang malungkot",
-  "Oh praise the Lord",
-  "Ang mga isda",
-  "Na lumalangoy",
-  "Ay mahal ng Diyos (ay mahal ng Diyos)",
-  "Hindi kumukupas (hindi kumukupas)",
-  "Ang mga isda na lumalangoy",
-  "Ay mahal ng Diyos 'di kumukupas",
-  "'Wag ka nang malungkot",
-  "Oh praise the Lord",
-  "Ang mga bata (ang mga bata)",
-  "Na naglalaro (na naglalaro)",
-  "Ay mahal ng Diyos",
-  "Hindi kumukupas",
-  "Ang mga bata na naglalaro",
-  "Ay mahal ng Diyos 'di kumukupas",
-  "'Wag ka nang malungkot",
-  "Oh praise the Lord"
+  "Hmm hmm hm-hmm...",
+  "Flipping through my notes...",
+  "La-la-la, looking it up...",
+  "Sweet answers coming up...",
+  "Doo-doo-doo, searching on...",
+  "Counting all the stars... I mean sources...",
+  "Once upon a time, in a library far away...",
+  "You're amazing, just hang on...",
+  "Whistling a study tune...",
+  "Little wings, big answers...",
+  "Turning pages, taking flight...",
+  "Feather by feather, almost there...",
+  "Hatching the perfect reply...",
+  "Soaring through the campus guide...",
+  "One more verse and it's ready...",
+  "Drumming my talons on the desk...",
+  "Shuffling my song of sources...",
+  "Hold my perch, found something..."
 ];
 
 const HELP_LISTENING_SCENARIOS = new Set([
@@ -123,6 +120,8 @@ function shouldShowHelpListeningHaki(question: string | null): boolean {
 }
 
 export default function ChatScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createChatScreenStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height: viewportHeight } = useWindowDimensions();
@@ -417,6 +416,7 @@ export default function ChatScreen() {
       const isFailedUserMessage = item.sender === "user" && item.status === "failed";
       return (
         <ChatMessageBubble
+          avatarAnimated={isLast && item.sender === "haki"}
           message={item}
           userAvatarUri={userAvatarUri}
           {...(showContinue ? { onContinue: () => handleContinue(item) } : {})}
@@ -467,7 +467,7 @@ export default function ChatScreen() {
             <Text style={styles.startFreshText}>Fresh</Text>
           </Pressable>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Manage chat options" onPress={() => router.push("/models" as never)} style={styles.modelIndicator}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Manage Haki models" onPress={() => router.push("/models" as never)} style={styles.modelIndicator}>
           <Text numberOfLines={1} style={styles.modelIndicatorText}>
             {getModelIndicator(aiMode, capabilityReport)}
           </Text>
@@ -496,11 +496,18 @@ export default function ChatScreen() {
                 </Text>
               </View>
               {memoryIndicatorText ? (
-                <View style={[
-                  styles.memoryIndicator,
-                  memoryIndicatorText === "Fresh memory" ? styles.memoryFresh : styles.memoryWarn
-                ]}>
-                  <Text style={styles.memoryIndicatorText}>{memoryIndicatorText}</Text>
+                <View
+                  accessibilityLabel={memoryIndicatorText}
+                  style={[
+                    styles.memoryIndicator,
+                    memoryIndicatorText === "Fresh memory" ? styles.memoryFresh : styles.memoryWarn
+                  ]}
+                >
+                  {memoryIndicatorText === "Fresh memory" ? (
+                    <RefreshCw color={colors.success} size={12} strokeWidth={2.5} />
+                  ) : (
+                    <Text style={styles.memoryIndicatorText}>{memoryIndicatorText}</Text>
+                  )}
                 </View>
               ) : null}
               {showHelpListeningHaki ? (
@@ -509,7 +516,7 @@ export default function ChatScreen() {
                     <View style={styles.branchLine} />
                     <View style={styles.branchOffshoot} />
                     <View style={styles.branchLeaf} />
-                    <SpriteHaki height={60} state="helping" style={styles.listeningMascot} />
+                    <HakiMascotCompat height={60} status="teaching" style={styles.listeningMascot} />
                   </View>
                   <View style={styles.listeningBubble}>
                     <View style={styles.listeningBubbleTailBorder} />
@@ -542,7 +549,7 @@ export default function ChatScreen() {
                     {loading && !streaming ? (
                       <View style={styles.hakiRow}>
                         <View style={styles.hakiAvatarContainer}>
-                          <PixelHakiPortrait size={34} style={styles.hakiAvatar} />
+                          <HakiHdAvatar animated size={34} style={styles.hakiAvatar} />
                         </View>
                         <View style={[styles.bubble, styles.hakiBubble, styles.typingBubble]}>
                           <View pointerEvents="none" style={styles.hakiBubbleTailBorder} />
@@ -597,310 +604,3 @@ export default function ChatScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: { backgroundColor: colors.maroon, flex: 1 },
-  headerArea: {
-    alignItems: "center",
-    backgroundColor: colors.maroon,
-    justifyContent: "center",
-    minHeight: 54,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12
-  },
-  headerTopRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%"
-  },
-  headerTitle: { color: colors.white, fontSize: 20, fontWeight: "900" },
-  headerGap: { width: 74 },
-  startFreshButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.16)",
-    borderColor: "rgba(255, 255, 255, 0.2)",
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 5,
-    minHeight: 34,
-    paddingHorizontal: 9
-  },
-  startFreshButtonPressed: {
-    opacity: 0.7
-  },
-  startFreshButtonDisabled: {
-    opacity: 0.45
-  },
-  startFreshText: {
-    color: colors.white,
-    fontSize: 11,
-    fontWeight: "900"
-  },
-  modelIndicator: {
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    maxWidth: "92%",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    marginTop: 4
-  },
-  modelIndicatorText: {
-    color: colors.white,
-    fontSize: 11,
-    fontWeight: "600",
-    opacity: 0.9,
-    textAlign: "center"
-  },
-  sheetContainer: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    flex: 1,
-    overflow: "hidden"
-  },
-  screen: { backgroundColor: "transparent", flex: 1 },
-  listAndStreamColumn: { flex: 1 },
-  roleDropdown: {
-    left: 14,
-    position: "absolute",
-    right: 54,
-    top: 12,
-    zIndex: 20
-  },
-  listeningPanel: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderBottomColor: "rgba(122,0,25,0.08)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 82,
-    paddingBottom: 6,
-    paddingHorizontal: 18,
-    paddingTop: 8
-  },
-  branchScene: {
-    height: 66,
-    justifyContent: "flex-end",
-    position: "relative",
-    width: 104
-  },
-  branchLine: {
-    backgroundColor: "#7B4E2D",
-    borderRadius: 999,
-    bottom: 12,
-    height: 8,
-    left: 4,
-    position: "absolute",
-    right: 2,
-    transform: [{ rotate: "-5deg" }]
-  },
-  branchOffshoot: {
-    backgroundColor: "#7B4E2D",
-    borderRadius: 999,
-    bottom: 22,
-    height: 6,
-    left: 65,
-    position: "absolute",
-    transform: [{ rotate: "-28deg" }],
-    width: 30
-  },
-  branchLeaf: {
-    backgroundColor: "#3E8A4B",
-    borderBottomLeftRadius: 12,
-    borderTopRightRadius: 12,
-    bottom: 36,
-    height: 14,
-    left: 88,
-    position: "absolute",
-    transform: [{ rotate: "18deg" }],
-    width: 20
-  },
-  listeningMascot: {
-    bottom: 9,
-    left: 30,
-    position: "absolute",
-  },
-  listeningBubble: {
-    backgroundColor: colors.white,
-    borderColor: colors.ink,
-    borderRadius: 18,
-    borderTopLeftRadius: 8,
-    borderWidth: 1.5,
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    position: "relative",
-    shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 0
-  },
-  listeningBubbleTailBorder: {
-    borderBottomColor: "transparent",
-    borderBottomWidth: 10,
-    borderRightColor: colors.ink,
-    borderRightWidth: 15,
-    borderTopColor: "transparent",
-    borderTopWidth: 10,
-    height: 0,
-    left: -15,
-    position: "absolute",
-    top: 25,
-    width: 0,
-    zIndex: 1
-  },
-  listeningBubbleTail: {
-    borderBottomColor: "transparent",
-    borderBottomWidth: 8,
-    borderRightColor: colors.white,
-    borderRightWidth: 13,
-    borderTopColor: "transparent",
-    borderTopWidth: 8,
-    height: 0,
-    left: -11,
-    position: "absolute",
-    top: 27,
-    width: 0,
-    zIndex: 2
-  },
-  listeningName: {
-    color: colors.maroon,
-    fontSize: 11,
-    fontWeight: "900",
-    textTransform: "uppercase"
-  },
-  listeningText: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "800",
-    marginTop: 2
-  },
-  messageList: { flex: 1 },
-  chatBackgroundWrapper: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: -1
-  },
-  chatBackground: {
-    width: 300,
-    height: 300,
-    opacity: 0.05
-  },
-  messages: { gap: 10, padding: 16, paddingTop: 24, paddingBottom: 160 },
-  suggestedQuestionsWrap: {
-    backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    elevation: 2,
-    marginLeft: 44,
-    padding: 14,
-    shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 0
-  },
-  sessionNotice: {
-    alignSelf: "center",
-    backgroundColor: colors.maroonSoft,
-    borderColor: "#E8C7D0",
-    borderRadius: 999,
-    borderWidth: 1,
-    marginBottom: 8,
-    marginHorizontal: 16,
-    marginTop: 14,
-    maxWidth: "92%",
-    paddingHorizontal: 12,
-    paddingVertical: 7
-  },
-  sessionNoticeText: {
-    color: colors.maroonDark,
-    fontSize: 11,
-    fontWeight: "800",
-    textAlign: "center"
-  },
-  memoryIndicator: {
-    alignSelf: "center",
-    borderRadius: 999,
-    borderWidth: 1,
-    marginBottom: 2,
-    marginTop: -2,
-    paddingHorizontal: 10,
-    paddingVertical: 5
-  },
-  memoryFresh: {
-    backgroundColor: colors.successSoft,
-    borderColor: "rgba(22, 163, 74, 0.22)"
-  },
-  memoryWarn: {
-    backgroundColor: colors.goldSoft,
-    borderColor: colors.gold
-  },
-  memoryIndicatorText: {
-    color: colors.ink,
-    fontSize: 10,
-    fontWeight: "900"
-  },
-  hakiRow: { justifyContent: "flex-start", flexDirection: "row", alignItems: "flex-end", marginBottom: 16, gap: 8 },
-  hakiAvatarContainer: {
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: colors.gold,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    height: 36,
-    justifyContent: "center",
-    overflow: "hidden",
-    width: 36
-  },
-  hakiAvatar: {
-    marginTop: 2
-  },
-  bubble: { borderRadius: 20, maxWidth: "82%", paddingHorizontal: 14, paddingVertical: 10, position: "relative" },
-  hakiBubble: {
-    backgroundColor: colors.white,
-    borderBottomLeftRadius: 9,
-    borderColor: colors.ink,
-    borderWidth: 1,
-    elevation: 1,
-    shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 0
-  },
-  hakiBubbleTailBorder: {
-    borderBottomColor: "transparent",
-    borderBottomWidth: 8,
-    borderRightColor: colors.ink,
-    borderRightWidth: 12,
-    borderTopColor: "transparent",
-    borderTopWidth: 8,
-    bottom: 9,
-    height: 0,
-    left: -12,
-    position: "absolute",
-    width: 0,
-    zIndex: 1
-  },
-  hakiBubbleTail: {
-    borderBottomColor: "transparent",
-    borderBottomWidth: 7,
-    borderRightColor: colors.white,
-    borderRightWidth: 10,
-    borderTopColor: "transparent",
-    borderTopWidth: 7,
-    bottom: 10,
-    height: 0,
-    left: -9,
-    position: "absolute",
-    width: 0,
-    zIndex: 2
-  },
-  typingBubble: { alignItems: "center", flexDirection: "row", gap: 8 },
-  typingText: { color: colors.muted, fontSize: 13, fontWeight: "700" }
-});
