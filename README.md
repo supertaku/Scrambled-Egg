@@ -55,6 +55,7 @@ Native GGUF (llama.rn) summary mode uses conservative mobile hardware tiers (RAM
 llama.rn / GGUF AI mode:
 
 - Android or iOS custom native build with the `llama.rn` Expo config plugin.
+- The plugin is configured with `enableOpenCLAndHexagon: true` in `app.json`. The `android/app/src/main/assets/ggml-hexagon/libggml-htp-*.so` files are the Qualcomm Hexagon (HTP/NPU) kernel libraries that the llama.rn runtime loads from app assets on supported Snapdragon devices; do not delete them. Haki's benchmark-based backend selection currently chooses between CPU, Metal (iOS), and OpenCL (Android) only — Hexagon-aware selection is future work.
 - Uses app-private GGUF files under the document `models/chat/installed/<model-id>/` directory.
 - New installations start with no chat GGUF; FTS5 source search remains available until a student activates a compatible download.
 - Embedding model filenames checked by default: `haki-embed.gguf`, `haki-embedding.gguf`, `haki-minilm-embed.gguf`.
@@ -325,10 +326,12 @@ npm run typecheck
 
 ## Roadmap
 
-- Representative-device validation for llama.rn acceleration and Apple Foundation Models behavior
-- Embedding-backed hybrid retrieval tuning
-- Hybrid vector search
-- Better reranking
-- Document update packages
-- Admin document-preprocessing tool
-- Official document verification workflow
+Content pipeline first: the retrieval and AI machinery is ready for a far larger corpus than the bundled seed data, so growing and maintaining verified content is the highest-leverage work.
+
+1. Admin document-preprocessing tool (turn official PDFs/posters into schema-valid chunk JSON)
+2. Official document verification workflow (office sign-off before content ships)
+3. Document update packages (signed static packages so installed apps can refresh content without an app-store release or per-device manual import)
+4. Representative-device validation for llama.rn acceleration and Apple Foundation Models behavior
+5. Embedding-backed hybrid retrieval tuning and hybrid vector search
+6. Better reranking
+7. Migrate intent classification onto local embeddings once an embedding model ships (see `docs/intent-classification-embedding-migration.md`)

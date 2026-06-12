@@ -228,6 +228,53 @@ export async function saveConversationMemory(input: {
   });
 }
 
+export interface UnansweredQuestionEntry {
+  question: string;
+  occurrences: number;
+  lastAskedAt: string | null;
+}
+
+// Distinctive fragments of the deterministic "no reliable saved answer"
+// replies (see SAFE_FALLBACK_MESSAGE in @/ai/prompts and the chat-hook
+// fallback). Keep in sync if those student-facing strings are reworded.
+const UNANSWERED_ANSWER_MARKERS = [
+  "I do not have enough saved TUP info for that yet",
+  "I don't have a solid saved answer for that yet",
+  "No reliable answer found"
+];
+
+/**
+ * Aggregates recent student questions that ended in a source-miss fallback,
+ * so administrators can see which topics the saved corpus is missing. Reads
+ * only the on-device conversation memory (capped at MAX_MEMORY_ROWS recent
+ * rows) — nothing leaves the phone, and the report reflects recent activity
+ * rather than all-time history.
+ */
+export async function getUnansweredQuestionReport(limit = 10): Promise<UnansweredQuestionEntry[]> {
+  const db = await getDatabase();
+  const markerClause = UNANSWERED_ANSWER_MARKERS.map(() => "m.answer LIKE ?").join(" OR ");
+  const rows = await db.getAllAsync<{ question: string; occurrences: number; last_asked_at: string | null }>(
+    `
+    SELECT
+      m.question AS question,
+      COUNT(*) AS occurrences,
+      MAX(m.created_at) AS last_asked_at
+    FROM conversation_memory m
+    WHERE ${markerClause}
+    GROUP BY lower(m.question)
+    ORDER BY occurrences DESC, last_asked_at DESC
+    LIMIT ?
+    `,
+    [...UNANSWERED_ANSWER_MARKERS.map((marker) => `%${marker}%`), limit]
+  );
+
+  return rows.map((row) => ({
+    question: row.question,
+    occurrences: row.occurrences,
+    lastAskedAt: row.last_asked_at
+  }));
+}
+
 export async function clearConversationMemory(): Promise<void> {
   const db = await getDatabase();
   await db.withTransactionAsync(async () => {

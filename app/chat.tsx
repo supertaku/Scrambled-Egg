@@ -28,7 +28,6 @@ import { SuggestedQuestions } from "@/components/SuggestedQuestions";
 import { getAppDatabase } from "@/data/appRepository";
 import { useChatMessages } from "@/hooks/useChatMessages";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
-import type { DeviceCapabilityReport } from "@/ai/CapabilityDetector";
 import type { DeviceAIMode } from "@/ai/DeviceAIMode";
 import { getActiveChatModelStatus } from "@/ai/localModelManager";
 import {
@@ -46,7 +45,7 @@ import type { ChatMessage } from "@/types/chat";
 import type { ChatRole, SuggestedModeAction } from "@/types/search";
 import { logger } from "@/utils/logger";
 
-function getModelIndicator(mode: DeviceAIMode | null, _report: DeviceCapabilityReport | null): string {
+function getModelIndicator(mode: DeviceAIMode | null): string {
   if (!mode) return "Getting ready...";
   return mode.capabilities.safeChat ? "All Haki modes ready" : "Campus information ready";
 }
@@ -75,31 +74,18 @@ function getMemoryIndicatorText(messages: ChatMessage[]): string | null {
   return "Fresh memory";
 }
 
+// Neutral, task-relevant status lines. Haki ships to a secular public state
+// university, so keep these free of religious, political, or song-lyric
+// content, and keep them in English to match the app's reply-language policy.
 const HAKI_LOADING_LINES = [
-  "Ang mga ibon",
-  "Na lumilipad",
-  "Ay mahal ng Diyos",
-  "Hindi kumukupas",
-  "Ang mga ibon na lumilipad",
-  "Ay mahal ng Diyos 'di kumukupas",
-  "'Wag ka nang malungkot",
-  "Oh praise the Lord",
-  "Ang mga isda",
-  "Na lumalangoy",
-  "Ay mahal ng Diyos (ay mahal ng Diyos)",
-  "Hindi kumukupas (hindi kumukupas)",
-  "Ang mga isda na lumalangoy",
-  "Ay mahal ng Diyos 'di kumukupas",
-  "'Wag ka nang malungkot",
-  "Oh praise the Lord",
-  "Ang mga bata (ang mga bata)",
-  "Na naglalaro (na naglalaro)",
-  "Ay mahal ng Diyos",
-  "Hindi kumukupas",
-  "Ang mga bata na naglalaro",
-  "Ay mahal ng Diyos 'di kumukupas",
-  "'Wag ka nang malungkot",
-  "Oh praise the Lord"
+  "Checking saved campus sources...",
+  "Reading the student handbook...",
+  "Looking through office procedures...",
+  "Matching your question to saved topics...",
+  "Sorting the most relevant sources...",
+  "Checking citations and page numbers...",
+  "Lining up the clearest answer...",
+  "Almost there, putting it together..."
 ];
 
 const HELP_LISTENING_SCENARIOS = new Set([
@@ -130,7 +116,6 @@ export default function ChatScreen() {
   const keyboardHeight = useKeyboardState((state) => state.height);
   const [draft, setDraft] = useState("");
   const [aiMode, setAiMode] = useState<DeviceAIMode | null>(null);
-  const [capabilityReport, setCapabilityReport] = useState<DeviceCapabilityReport | null>(null);
   const [userAvatarUri, setUserAvatarUri] = useState<string | null>(null);
   const [profileContext, setProfileContext] = useState<string | null>(null);
   const [useRelatedHistory, setUseRelatedHistory] = useState(false);
@@ -181,7 +166,6 @@ export default function ChatScreen() {
         const report = await getDeviceCapabilityReport();
         if (mountedRef.current) {
           setAiMode(report.selectedMode);
-          setCapabilityReport(report);
         }
         // Eagerly load the local model while the chat screen is mounting so
         // the first send doesn't pay the cold-start cost. Errors are swallowed
@@ -235,10 +219,8 @@ export default function ChatScreen() {
             mode = await refreshDeviceCapabilities();
             if (!active) return;
           }
-          const report = await getDeviceCapabilityReport();
           if (!active) return;
           setAiMode(mode);
-          setCapabilityReport(report);
           if (mode.capabilities.safeChat) {
             void prewarmLocalAIForChat();
           }
@@ -469,7 +451,7 @@ export default function ChatScreen() {
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Manage chat options" onPress={() => router.push("/models" as never)} style={styles.modelIndicator}>
           <Text numberOfLines={1} style={styles.modelIndicatorText}>
-            {getModelIndicator(aiMode, capabilityReport)}
+            {getModelIndicator(aiMode)}
           </Text>
         </Pressable>
       </View>

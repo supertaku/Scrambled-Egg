@@ -1,11 +1,7 @@
-import { Dimensions } from "react-native";
-
-const { width, height } = Dimensions.get("window");
-
+// Viewport size deliberately does NOT live here: a module-load Dimensions
+// snapshot goes stale on rotation, foldable posture changes, and split
+// screen. Use the useWindowDimensions hook inside components instead.
 export const metrics = {
-  screenWidth: width,
-  screenHeight: height,
-
   navigation: {
     floatingTabBarBottom: 28,
     floatingTabBarHeight: 62,

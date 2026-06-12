@@ -599,14 +599,30 @@ export async function answerStudentQuestion(
     return withRole(quickResponse, "haki", "safety_or_app_guidance");
   }
 
-  const campusResponse = domains.includes("campus_information")
+  const wantsCampus = domains.includes("campus_information");
+  const wantsFriendly = domains.includes("supportive_advice");
+  const wantsResearcher = domains.includes("external_fact");
+  // Stream tokens into the live chat bubble only when the answer is a single
+  // generative section. A multi-section composed answer is restructured by
+  // composeHakiResponse (section headings, deterministic campus text first),
+  // so streaming any individual generation would show the student text that
+  // does not match the final message. Multi-domain answers therefore render
+  // once, complete.
+  const sectionCount = Number(wantsCampus) + Number(wantsFriendly) + Number(wantsResearcher);
+  let generativeOptions = options;
+  if (sectionCount > 1 && options.onToken) {
+    const { onToken: _noStreamingForComposedAnswers, ...rest } = options;
+    generativeOptions = rest;
+  }
+
+  const campusResponse = wantsCampus
     ? withSourceRole(await answerWithSavedSources(question, intent, scopedOptions, selectedMode, true, retrievalQuestion), "haki")
     : undefined;
-  const friendlyResponse = domains.includes("supportive_advice")
-    ? await answerWithFriendlyGuidance(question, intent, contract, options, selectedMode, hasSafeLocalChat)
+  const friendlyResponse = wantsFriendly
+    ? await answerWithFriendlyGuidance(question, intent, contract, generativeOptions, selectedMode, hasSafeLocalChat)
     : undefined;
-  const researcherResponse = domains.includes("external_fact")
-    ? await answerWithResearcherFacts(question, intent, contract, options, selectedMode, hasSafeLocalChat, "haki")
+  const researcherResponse = wantsResearcher
+    ? await answerWithResearcherFacts(question, intent, contract, generativeOptions, selectedMode, hasSafeLocalChat, "haki")
     : undefined;
 
   return composeHakiResponse(question, campusResponse, friendlyResponse, researcherResponse);

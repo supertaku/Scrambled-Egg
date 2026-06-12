@@ -21,6 +21,12 @@ function deviceNamesMatching(hardware: DeviceHardwareProfile, pattern: RegExp): 
     .map((device) => device.split(":").at(-1)?.trim() || device);
 }
 
+// Benchmark candidates cover CPU, Metal, and OpenCL only. The Hexagon (HTP)
+// kernel libraries bundled under android assets (ggml-hexagon/) are loaded by
+// the llama.rn runtime itself when the app.json plugin flag
+// `enableOpenCLAndHexagon` is set; Hexagon-aware candidate selection is
+// deliberately not modeled here yet because it needs representative-device
+// benchmarks first.
 export function executionCandidatesForHardware(hardware: DeviceHardwareProfile): ExecutionCandidate[] {
   const candidates: ExecutionCandidate[] = [{ backend: "cpu", initOptions: { n_gpu_layers: 0 } }];
 

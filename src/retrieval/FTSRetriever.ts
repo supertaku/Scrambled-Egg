@@ -44,35 +44,28 @@ function normalizeOffice(value: string | null | undefined): string {
     .trim();
 }
 
-function officeAliases(office: string): string[] {
-  const normalized = normalizeOffice(office);
-  const aliases = new Set([office]);
+// Containment matching below only fires when the shorter normalized name is
+// at least this long, so a short generic scope like "office" cannot swallow
+// every office in the corpus. Exact normalized matches always count.
+const MIN_OFFICE_CONTAINMENT_LENGTH = 6;
 
-  if (normalized.includes("student affairs")) {
-    aliases.add("Office of the Student Affairs");
-    aliases.add("Student Affairs");
-  }
-  if (normalized.includes("clinic")) {
-    aliases.add("TUP-Taguig Clinic");
-    aliases.add("Clinic");
-  }
-  if (normalized.includes("guidance")) {
-    aliases.add("Guidance and Counselling Office");
-    aliases.add("Guidance");
-  }
+function officeNamesMatch(requested: string, candidate: string): boolean {
+  if (!requested || !candidate) return false;
+  if (requested === candidate) return true;
 
-  return Array.from(aliases);
+  const shorter = requested.length <= candidate.length ? requested : candidate;
+  if (shorter.length < MIN_OFFICE_CONTAINMENT_LENGTH) return false;
+  return requested.includes(candidate) || candidate.includes(requested);
 }
 
 function addOfficeScopeClause(
   whereClause: string,
   params: (string | number)[],
-  office: string | undefined
+  officeAliases: string[] | undefined
 ): string {
-  if (!office) return whereClause;
-  const aliases = officeAliases(office);
-  params.push(...aliases);
-  return `${whereClause} AND c.office IN (${aliases.map(() => "?").join(", ")})`;
+  if (!officeAliases?.length) return whereClause;
+  params.push(...officeAliases);
+  return `${whereClause} AND c.office IN (${officeAliases.map(() => "?").join(", ")})`;
 }
 
 export function safeStringArrayFromJson(value: string | null): string[] | null {
@@ -103,9 +96,11 @@ export class FTSRetriever implements Retriever {
       return [];
     }
 
+    const officeAliases = await this.resolveOfficeAliases(options.scope?.office);
+
     for (const ftsQuery of ftsQueries) {
       try {
-        const rows = await this.runFtsSearch(ftsQuery, limit, options);
+        const rows = await this.runFtsSearch(ftsQuery, limit, options, officeAliases);
         if (rows.length > 0) {
           return this.toRankedResults(rows, query).slice(0, limit);
         }
@@ -127,7 +122,7 @@ export class FTSRetriever implements Retriever {
       };
       for (const ftsQuery of ftsQueries) {
         try {
-          const rows = await this.runFtsSearch(ftsQuery, limit, relaxedOptions);
+          const rows = await this.runFtsSearch(ftsQuery, limit, relaxedOptions, undefined);
           if (rows.length > 0) {
             return this.toRankedResults(rows, query).slice(0, limit);
           }
@@ -137,14 +132,52 @@ export class FTSRetriever implements Retriever {
       }
     }
 
-    return this.fallbackLikeSearch(query, limit, options);
+    return this.fallbackLikeSearch(query, limit, options, officeAliases);
   }
 
-  private async runFtsSearch(ftsQuery: string, limit: number, options: SearchOptions): Promise<SearchRow[]> {
+  /**
+   * Expands a requested office scope into the matching office names that
+   * actually exist in the corpus, comparing normalized forms (so "Clinic"
+   * matches "TUP-Taguig Clinic" and "Student Affairs" matches "Office of the
+   * Student Affairs"). Data-derived on purpose: a hardcoded alias table goes
+   * silently stale as new documents and offices are imported, which turns
+   * into a recall bug for every unaliased office. Falls back to the exact
+   * requested value if the lookup fails, and search() relaxes the office
+   * filter entirely when the scoped query returns nothing.
+   */
+  private async resolveOfficeAliases(office: string | undefined): Promise<string[] | undefined> {
+    if (!office) return undefined;
+
+    const aliases = new Set([office]);
+    const requested = normalizeOffice(office);
+    if (!requested) return Array.from(aliases);
+
+    try {
+      const rows = await this.db.getAllAsync<{ office: string }>(
+        "SELECT DISTINCT office FROM chunks WHERE office IS NOT NULL AND office != ''"
+      );
+      for (const row of rows) {
+        if (officeNamesMatch(requested, normalizeOffice(row.office))) {
+          aliases.add(row.office);
+        }
+      }
+    } catch {
+      // Best-effort expansion only; the exact requested office still applies.
+    }
+
+    return Array.from(aliases);
+  }
+
+  private async runFtsSearch(
+    ftsQuery: string,
+    limit: number,
+    options: SearchOptions,
+    officeAliases: string[] | undefined
+  ): Promise<SearchRow[]> {
     let whereClause = "chunks_fts MATCH ?";
     const params: (string | number)[] = [ftsQuery];
 
-    whereClause = addOfficeScopeClause(whereClause, params, options.scope?.office);
+    whereClause = addOfficeScopeClause(whereClause, params, options.scope?.office ? officeAliases : undefined);
     if (options.scope?.category) {
       whereClause += " AND c.category = ?";
       params.push(options.scope.category);
@@ -194,7 +227,12 @@ export class FTSRetriever implements Retriever {
     );
   }
 
-  private async fallbackLikeSearch(query: string, limit: number, options: SearchOptions): Promise<SearchResult[]> {
+  private async fallbackLikeSearch(
+    query: string,
+    limit: number,
+    options: SearchOptions,
+    officeAliases: string[] | undefined
+  ): Promise<SearchResult[]> {
     const tokens = tokenizeQuery(query);
     if (tokens.length === 0) {
       return [];
@@ -229,7 +267,7 @@ export class FTSRetriever implements Retriever {
       .join(" OR ");
     let whereClause = `(${orClause})`;
 
-    whereClause = addOfficeScopeClause(whereClause, params, options.scope?.office);
+    whereClause = addOfficeScopeClause(whereClause, params, options.scope?.office ? officeAliases : undefined);
     if (options.scope?.category) {
       whereClause += " AND c.category = ?";
       params.push(options.scope.category);

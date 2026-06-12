@@ -10,6 +10,7 @@ import {
   Pressable,
   StatusBar,
   StyleSheet,
+  Text,
   useWindowDimensions,
   View
 } from "react-native";
@@ -60,10 +61,11 @@ interface TabItemProps {
   accessibilityLabel: string;
   focused: boolean;
   Icon: LucideIcon;
+  label: string;
   onPress: () => void;
 }
 
-function TabItem({ accessibilityLabel, focused, Icon, onPress }: TabItemProps) {
+function TabItem({ accessibilityLabel, focused, Icon, label, onPress }: TabItemProps) {
   const scale = useRef(new Animated.Value(focused ? 1.15 : 1)).current;
   const pressScale = useRef(new Animated.Value(1)).current;
 
@@ -107,10 +109,17 @@ function TabItem({ accessibilityLabel, focused, Icon, onPress }: TabItemProps) {
       <Animated.View style={{ transform: [{ scale: Animated.multiply(scale, pressScale) }] }}>
         <Icon
           color={focused ? colors.white : "rgba(255,255,255,0.38)"}
-          size={23}
+          size={focused ? 20 : 23}
           strokeWidth={focused ? 2.5 : 1.8}
         />
       </Animated.View>
+      {/* Icon-only navigation makes first-time users guess what "Tips" or
+          "Library" is; the focused tab names itself without crowding the bar. */}
+      {focused ? (
+        <Text allowFontScaling={false} numberOfLines={1} style={styles.tabLabel}>
+          {label}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -253,6 +262,7 @@ function CustomTabBar({ state, navigation, adminMode }: CustomTabBarProps) {
               accessibilityLabel={TAB_LABEL_BY_ROUTE[route.name as UserRouteName]}
               focused={isFocused}
               Icon={Icon}
+              label={TAB_LABEL_BY_ROUTE[route.name as UserRouteName]}
               onPress={onPress}
             />
           );
@@ -432,6 +442,13 @@ const styles = StyleSheet.create({
     height: "100%",
     alignItems: "center",
     justifyContent: "center"
+  },
+  tabLabel: {
+    color: colors.white,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    marginTop: 2
   },
   indicator: {
     position: "absolute",

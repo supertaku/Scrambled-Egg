@@ -8,6 +8,20 @@ import { STORAGE_KEYS } from "@/utils/constants";
 //   PowerShell: [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes("YOUR_CODE"))) -replace '-',''
 //   Node:       require('crypto').createHash('sha256').update('YOUR_CODE').digest('hex')
 // and replace the constant below.
+//
+// THREAT MODEL — read before changing this gate.
+// What it protects: convenience gating of admin-only screens (document
+// import, capability diagnostics) on the user's OWN device. Haki has no
+// backend; an "attacker" who defeats this gate can only modify the local
+// SQLite corpus on their own phone, which never affects any other student.
+// What it does NOT protect against: anyone who extracts the JS bundle gets
+// this unsalted hash and can brute-force it OFFLINE, where the attempt
+// lockout below does not apply. Therefore the admin code MUST be a long
+// passphrase (recommend 4+ random words / 20+ characters), never a PIN or a
+// dictionary word. The lockout + constant-time compare only harden the
+// on-device guessing path. Data integrity for students ultimately rests on
+// the bundled seed (SEED_VERSION) and the curated, hash-pinned model
+// catalog — not on this gate.
 const ADMIN_CODE_HASH = "ed8effff543751d1751f3f6886821b67daf6d4847f337da3b8e5fb8eabce327d";
 
 const ATTEMPTS_KEY = "tupt_wiki_admin_attempts";
