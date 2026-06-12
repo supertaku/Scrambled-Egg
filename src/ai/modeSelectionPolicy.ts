@@ -353,6 +353,7 @@ function buildFtsOnlyMode(input: ModeSelectionInput): ModeSelectionResult {
 
 export function selectDeviceAIMode(input: ModeSelectionInput): ModeSelectionResult {
   const appleProbe = findProbe(input.reportProbes, "apple-foundation-models");
+  const liteRtProbe = findProbe(input.reportProbes, "litert-lm");
   const llamaProbe = findProbe(input.reportProbes, "llama-rn");
 
   if (input.platform === "ios") {
@@ -374,6 +375,9 @@ export function selectDeviceAIMode(input: ModeSelectionInput): ModeSelectionResu
   }
 
   if (input.platform === "android") {
+    if (liteRtProbe && isUsableSummaryProbe(liteRtProbe)) {
+      return buildLocalSummaryMode(input, liteRtProbe);
+    }
     if (llamaProbe && isUsableSummaryProbe(llamaProbe) && isUsableEmbeddingProbe(llamaProbe)) {
       return buildHybridMode(input, llamaProbe);
     }

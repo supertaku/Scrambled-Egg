@@ -45,6 +45,7 @@ class HakiDeviceInfoModule(
       profile.putInt("memoryClassMb", activityManager.memoryClass)
       profile.putInt("largeMemoryClassMb", activityManager.largeMemoryClass)
       profile.putBoolean("lowMemory", memoryInfo.lowMemory)
+      profile.putInt("cpuCoreCount", Runtime.getRuntime().availableProcessors())
       val thermalState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val powerManager = reactContext.getSystemService(Context.POWER_SERVICE) as PowerManager
         when (powerManager.currentThermalStatus) {
@@ -111,12 +112,16 @@ class HakiDeviceInfoModule(
   }
 
   @ReactMethod
-  fun startBackgroundDownload(url: String, operationId: String, promise: Promise) {
+  fun startBackgroundDownload(url: String, operationId: String, artifactFileName: String, promise: Promise) {
     try {
       val directory = reactContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
         ?: throw IllegalStateException("External model staging directory is unavailable.")
       if (!directory.exists()) directory.mkdirs()
-      val target = File(directory, "$operationId.partial.gguf")
+      val extension = artifactFileName
+        .substringAfterLast('.', "model")
+        .replace(Regex("[^a-zA-Z0-9_-]"), "")
+        .ifBlank { "model" }
+      val target = File(directory, "$operationId.partial.$extension")
       if (target.exists()) target.delete()
 
       val request = DownloadManager.Request(Uri.parse(url))

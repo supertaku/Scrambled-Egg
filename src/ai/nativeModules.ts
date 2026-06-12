@@ -10,6 +10,7 @@ import type {
 } from "./LocalAIProvider";
 
 export interface HakiLocalAIModule {
+  isRuntimeAvailable?: () => Promise<boolean> | boolean;
   isAvailable?: () => Promise<boolean> | boolean;
   getCapabilities?: () => Promise<Partial<{
     summary: boolean;
@@ -33,12 +34,13 @@ export interface HakiLocalAIModule {
     memoryClass: string;
     unavailableReasons: string[];
   }>>;
-  summarizeFromSources?: (input: SummarizeFromSourcesInput) => Promise<Partial<LocalSummaryResult> | string>;
-  answerSafeChat?: (input: SafeChatInput) => Promise<Partial<SafeChatResult> | string>;
+  summarizeFromSources?: (input: SummarizeFromSourcesInput & { modelPath?: string; requestId?: string }) => Promise<Partial<LocalSummaryResult> | string>;
+  answerSafeChat?: (input: Omit<SafeChatInput, "abortSignal"> & { modelPath?: string; requestId?: string }) => Promise<Partial<SafeChatResult> | string>;
   streamSafeChat?: (
-    input: SafeChatInput,
+    input: Omit<SafeChatInput, "abortSignal"> & { modelPath?: string; requestId?: string },
     streamIdOrTokenCallback: string | ((token: string) => void)
   ) => Promise<Partial<SafeChatResult> | string>;
+  cancelGeneration?: (requestId: string) => Promise<boolean>;
   embedText?: (text: string) => Promise<number[]>;
   isModelTierDownloaded?: (tier: string) => Promise<boolean>;
   release?: () => Promise<void> | void;
@@ -50,5 +52,14 @@ export function getAppleFoundationModelsNativeModule(): HakiLocalAIModule | null
     return requireNativeModule("HakiAppleFoundationModels") as HakiLocalAIModule;
   } catch (error) {
     return (NativeModules.HakiAppleFoundationModels as HakiLocalAIModule | undefined) ?? null;
+  }
+}
+
+export function getLiteRtLmNativeModule(): HakiLocalAIModule | null {
+  try {
+    const { requireNativeModule } = require("expo-modules-core");
+    return requireNativeModule("HakiLiteRtLm") as HakiLocalAIModule;
+  } catch {
+    return (NativeModules.HakiLiteRtLm as HakiLocalAIModule | undefined) ?? null;
   }
 }

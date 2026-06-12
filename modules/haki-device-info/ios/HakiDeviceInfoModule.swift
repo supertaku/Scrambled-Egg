@@ -21,6 +21,7 @@ public class HakiDeviceInfoModule: Module, URLSessionDownloadDelegate {
         "supportedAbis": ["arm64"],
         "totalMemoryBytes": Double(ProcessInfo.processInfo.physicalMemory),
         "lowMemory": false,
+        "cpuCoreCount": ProcessInfo.processInfo.activeProcessorCount,
         "thermalState": self.thermalStateName(ProcessInfo.processInfo.thermalState)
       ]
     }

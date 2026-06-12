@@ -20,6 +20,7 @@ const disabledProviderIds = new Set<string>();
 let selectedModePromise: Promise<SelectedAIMode> | null = null;
 let capabilityReportPromise: Promise<DeviceCapabilityReport> | null = null;
 let activeRegistry: LocalAIProviderRegistry | null = null;
+let capabilityRefreshPromise: Promise<DeviceAIMode> | null = null;
 
 async function verifyFts5Baseline(): Promise<void> {
   const db = await getDatabase();
@@ -108,7 +109,11 @@ function releaseAllLlamaContextsBestEffort(): void {
         return mod.releaseAllLlama();
       }
     })
-    .catch(() => undefined);
+    .catch((error) => {
+      logger.ai.warn("Global llama.rn cleanup failed.", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
 }
 
 /**
@@ -131,20 +136,24 @@ export async function getCurrentAIMode(): Promise<DeviceAIMode> {
 
 export async function getDeviceCapabilityReport(): Promise<DeviceCapabilityReport> {
   if (!capabilityReportPromise) {
-    await verifyFts5Baseline();
-    const registry = createLocalAIProviderRegistry();
-    const detector = new DefaultCapabilityDetector(registry, disabledProviderIds);
-    capabilityReportPromise = detector.getCapabilityReport();
+    await getSelectedAIMode();
   }
 
-  return capabilityReportPromise;
+  return capabilityReportPromise!;
 }
 
 export async function refreshDeviceCapabilities(): Promise<DeviceAIMode> {
-  disposeActiveRegistry("Refreshing device capabilities.");
-  clearCachedSelection();
-  const selected = await getSelectedAIMode();
-  return selected.mode;
+  if (!capabilityRefreshPromise) {
+    capabilityRefreshPromise = (async () => {
+      disposeActiveRegistry("Refreshing device capabilities.");
+      clearCachedSelection();
+      const selected = await getSelectedAIMode();
+      return selected.mode;
+    })().finally(() => {
+      capabilityRefreshPromise = null;
+    });
+  }
+  return capabilityRefreshPromise;
 }
 
 export function releaseLocalAIForMemoryPressure(reason: string): void {
@@ -194,6 +203,7 @@ export async function prewarmLocalAIForChat(): Promise<void> {
 
 export function resetModeSelectionForTests(): void {
   disabledProviderIds.clear();
+  capabilityRefreshPromise = null;
   disposeActiveRegistry("Resetting mode selection for tests.");
   clearCachedSelection();
 }

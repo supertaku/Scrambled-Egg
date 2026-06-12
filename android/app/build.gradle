@@ -9,6 +9,11 @@ def hakiReleaseStorePassword = findProperty("HAKI_RELEASE_STORE_PASSWORD") ?: Sy
 def hakiReleaseKeyAlias = findProperty("HAKI_RELEASE_KEY_ALIAS") ?: System.getenv("HAKI_RELEASE_KEY_ALIAS")
 def hakiReleaseKeyPassword = findProperty("HAKI_RELEASE_KEY_PASSWORD") ?: System.getenv("HAKI_RELEASE_KEY_PASSWORD")
 def hasHakiReleaseSigning = hakiReleaseStoreFile && hakiReleaseStorePassword && hakiReleaseKeyAlias && hakiReleaseKeyPassword
+// EAS/CI builders sign with EAS-managed credentials (injected signing
+// properties), so the local HAKI_RELEASE_* guard must not fire there.
+def isEasBuild = System.getenv("EAS_BUILD") == "true" ||
+    System.getenv("EAS_BUILD_ID") != null ||
+    System.getenv("EAS_BUILD_PLATFORM") != null
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -116,6 +121,16 @@ android {
                 storePassword hakiReleaseStorePassword
                 keyAlias hakiReleaseKeyAlias
                 keyPassword hakiReleaseKeyPassword
+            } else {
+                // Fallback so release builds always have a signing config.
+                // On EAS, managed credentials override this via injected
+                // signing properties; locally this yields a debug-signed,
+                // installable test APK (the projectsEvaluated guard below
+                // still blocks accidental local production releases).
+                storeFile file('debug.keystore')
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
             }
         }
     }
@@ -124,7 +139,7 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig hasHakiReleaseSigning ? signingConfigs.release : null
+            signingConfig signingConfigs.release
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
@@ -149,7 +164,7 @@ android {
 
 gradle.projectsEvaluated {
     def requestedRelease = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
-    if (requestedRelease && !hasHakiReleaseSigning) {
+    if (requestedRelease && !hasHakiReleaseSigning && !isEasBuild) {
         throw new GradleException("Release signing is not configured. Set HAKI_RELEASE_STORE_FILE, HAKI_RELEASE_STORE_PASSWORD, HAKI_RELEASE_KEY_ALIAS, and HAKI_RELEASE_KEY_PASSWORD before building a production release.")
     }
 }
@@ -177,6 +192,7 @@ gradle.projectsEvaluated {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    runtimeOnly("com.google.ai.edge.litertlm:litertlm-android:0.10.2")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";

@@ -7,7 +7,10 @@ import com.facebook.react.uimanager.ViewManager
 
 class HakiDeviceInfoPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-    return listOf(HakiDeviceInfoModule(reactContext))
+    return listOf(
+      HakiDeviceInfoModule(reactContext),
+      HakiLiteRtLmModule(reactContext)
+    )
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {

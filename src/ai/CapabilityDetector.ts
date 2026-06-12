@@ -71,6 +71,7 @@ export interface DeviceCapabilityReport {
   osVersion: string;
   baseFtsAvailable: boolean;
   appleFoundationModelsAvailable: boolean;
+  liteRtLmAvailable: boolean;
   llamaRnAvailable: boolean;
   embeddingsAvailable: boolean;
   safeChatAvailable: boolean;
@@ -106,7 +107,7 @@ export class DefaultCapabilityDetector implements CapabilityDetector {
 
   async getCapabilityReport(): Promise<DeviceCapabilityReport> {
     const fallbackCapabilities = await this.registry.fallback.getCapabilities();
-    const reportOrder = [this.registry.appleFoundationModels, this.registry.llamaRn];
+    const reportOrder = [this.registry.appleFoundationModels, this.registry.liteRtLm, this.registry.llamaRn];
     const device = getDeviceCapabilitySnapshot();
     const hardware = await getDeviceHardwareProfile();
 
@@ -147,6 +148,9 @@ export class DefaultCapabilityDetector implements CapabilityDetector {
       baseFtsAvailable: true,
       appleFoundationModelsAvailable: providerReports.some(
         (provider) => provider.id === "apple-foundation-models" && provider.runtimeAvailable
+      ),
+      liteRtLmAvailable: providerReports.some(
+        (provider) => provider.id === "litert-lm" && provider.runtimeAvailable
       ),
       llamaRnAvailable: providerReports.some(
         (provider) => provider.id === "llama-rn" && provider.runtimeAvailable
