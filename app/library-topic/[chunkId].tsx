@@ -23,7 +23,9 @@ import {
 } from "lucide-react-native";
 
 import { getTopicById } from "@/data/libraryTopics";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
+import { serviceDeskPalette } from "@/theme/featurePalettes";
+import type { Theme, ThemeColors } from "@/theme/themes";
 
 // ─── Category config (same as list screen) ───────────────────────────────────
 
@@ -34,17 +36,16 @@ interface CatConfig {
   icon: typeof BookOpen;
 }
 
-const CATEGORY_CONFIG: Record<string, CatConfig> = {
-  "Student Services":  { bg: "#E8F5E9", border: "#A5D6A7", text: "#2E7D32", icon: Shield },
-  "Campus Safety":     { bg: "#FFF3E0", border: "#FFCC80", text: "#E65100", icon: Zap },
-  "Student Welfare":   { bg: "#E3F2FD", border: "#90CAF9", text: "#1565C0", icon: Info },
-  "Campus Guidelines": { bg: colors.maroonSoft, border: "#E8C7D0", text: colors.maroon, icon: BookOpen },
-  Offices:             { bg: "#EFEAFB", border: "#CEBDF3", text: "#6B5FB5", icon: Building }
-};
-const DEFAULT_CAT: CatConfig = { bg: colors.surface, border: colors.border, text: colors.muted, icon: BookOpen };
-
-function getCat(category: string): CatConfig {
-  return CATEGORY_CONFIG[category] ?? DEFAULT_CAT;
+function getCat(category: string, colors: ThemeColors): CatConfig {
+  const palette = serviceDeskPalette(colors);
+  const config: Record<string, CatConfig> = {
+    "Student Services":  { bg: palette.offices.background, border: palette.offices.border, text: palette.offices.accent, icon: Shield },
+    "Campus Safety":     { bg: palette.safety.background, border: palette.safety.border, text: palette.safety.accent, icon: Zap },
+    "Student Welfare":   { bg: palette.welfare.background, border: palette.welfare.border, text: palette.welfare.accent, icon: Info },
+    "Campus Guidelines": { bg: palette.campusGuidelines.background, border: palette.campusGuidelines.border, text: palette.campusGuidelines.accent, icon: BookOpen },
+    Offices:             { bg: palette.otherOffice.background, border: palette.otherOffice.border, text: palette.otherOffice.accent, icon: Building }
+  };
+  return config[category] ?? { bg: colors.surface, border: colors.border, text: colors.muted, icon: BookOpen };
 }
 
 // ─── Parse contact info into structured lines ─────────────────────────────────
@@ -69,6 +70,8 @@ function parseContactInfo(raw: string): ContactEntry[] {
 // ─── Step card ────────────────────────────────────────────────────────────────
 
 function StepCard({ step, index }: { step: string; index: number }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(12)).current;
 
@@ -110,6 +113,8 @@ function StepCard({ step, index }: { step: string; index: number }) {
 // ─── Main detail screen ───────────────────────────────────────────────────────
 
 export default function LibraryTopicScreen() {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const { chunkId } = useLocalSearchParams<{ chunkId: string }>();
   const router = useRouter();
   const topic = getTopicById(chunkId ?? "");
@@ -148,7 +153,7 @@ export default function LibraryTopicScreen() {
     );
   }
 
-  const cat = getCat(topic.category);
+  const cat = getCat(topic.category, colors);
   const CatIcon = cat.icon;
   const contacts = parseContactInfo(topic.contactInfo);
   const hasSteps = topic.steps.length > 0;
@@ -295,6 +300,8 @@ export default function LibraryTopicScreen() {
 }
 
 function BackButton({ onPress }: { onPress: () => void }) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () =>
@@ -317,7 +324,9 @@ function BackButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ colors }: Theme) => {
+  const palette = serviceDeskPalette(colors);
+  return StyleSheet.create({
   safeArea: { backgroundColor: colors.maroon, flex: 1 },
 
   headerArea: {
@@ -365,13 +374,13 @@ const styles = StyleSheet.create({
 
   // Hero card
   heroCard: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 22,
     borderWidth: 1,
     gap: 10,
     padding: 18,
-    shadowColor: "#000",
+    shadowColor: palette.detail.shadow,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.06,
     shadowRadius: 10,
@@ -409,7 +418,7 @@ const styles = StyleSheet.create({
   // Summary
   summaryCard: {
     backgroundColor: colors.goldSoft,
-    borderColor: "#E8D98B",
+    borderColor: palette.detail.warmBorder,
     borderRadius: 18,
     borderWidth: 1,
     gap: 6,
@@ -424,15 +433,15 @@ const styles = StyleSheet.create({
   },
   summaryText: { color: colors.ink, fontSize: 14, fontWeight: "500", lineHeight: 21 },
   pendingCard: {
-    backgroundColor: "#FFF3E0",
-    borderColor: "#FFCC80",
+    backgroundColor: colors.warningSoft,
+    borderColor: colors.warning,
     borderRadius: 18,
     borderWidth: 1,
     gap: 6,
     padding: 16
   },
   pendingLabel: {
-    color: "#E65100",
+    color: palette.detail.safetyText,
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.8,
@@ -455,14 +464,14 @@ const styles = StyleSheet.create({
   stepsList: { gap: 10 },
   stepCard: {
     alignItems: "flex-start",
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
     gap: 12,
     padding: 14,
-    shadowColor: "#000",
+    shadowColor: palette.detail.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -485,7 +494,7 @@ const styles = StyleSheet.create({
 
   // Content (non-step)
   contentCard: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 18,
     borderWidth: 1,
@@ -495,7 +504,7 @@ const styles = StyleSheet.create({
 
   // Contact
   contactCard: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderColor: colors.border,
     borderRadius: 18,
     borderWidth: 1,
@@ -521,4 +530,5 @@ const styles = StyleSheet.create({
   notFound: { alignItems: "center", flex: 1, gap: 10, justifyContent: "center", paddingHorizontal: 30 },
   notFoundTitle: { color: colors.ink, fontSize: 18, fontWeight: "900" },
   notFoundText: { color: colors.muted, fontSize: 14, fontWeight: "500", lineHeight: 20, textAlign: "center" }
-});
+  });
+};

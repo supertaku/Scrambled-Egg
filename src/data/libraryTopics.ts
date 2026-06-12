@@ -25,6 +25,13 @@ export interface LibraryTopic {
   verificationStatus: "pending" | "verified";
 }
 
+export type ServiceDeskCounter = "Offices" | "Safety" | "Campus Guidelines" | "Map Directory";
+
+export interface OfficeFilter {
+  key: string;
+  label: string;
+}
+
 interface RawChunk {
   chunk_id: string;
   section_title: string;
@@ -49,6 +56,17 @@ interface RawDocument {
 }
 
 const documents = rawDocuments as RawDocument[];
+const SERVICE_DESK_COUNTERS: ServiceDeskCounter[] = ["Offices", "Safety", "Campus Guidelines", "Map Directory"];
+const BASE_OFFICE_FILTERS = [
+  "All",
+  "OSA",
+  "Registrar",
+  "Medical Clinic",
+  "Dental Clinic",
+  "Guidance",
+  "Public Assistance / QA",
+  "Security / Admin"
+] as const;
 
 // Build flat topic list once at module load
 const verifiedLibraryTopics: LibraryTopic[] = documents.flatMap((doc) =>
@@ -72,64 +90,7 @@ const verifiedLibraryTopics: LibraryTopic[] = documents.flatMap((doc) =>
   }))
 );
 
-const pendingServiceDeskTopics: LibraryTopic[] = [
-  {
-    chunkId: "placeholder_student_insurance_policy",
-    sectionTitle: "Student Insurance Policy",
-    processName: "Student Insurance Policy",
-    category: "Offices",
-    documentId: "placeholder_student_insurance_policy",
-    documentTitle: "Provisional Student Insurance Policy Card",
-    documentType: "placeholder",
-    office: "To be confirmed",
-    officeLocation: "To be confirmed",
-    contactInfo: "",
-    content:
-      "Provisional information for scenario testing only. Draft insurance amount: PHP 25. Example incident scope supplied for this draft: scratches from animals. Eligibility, distance from the university, claim procedure, responsible office, exclusions, and final coverage are to be confirmed.",
-    steps: [
-      "Insurance amount: PHP 25 (provisional draft value).",
-      "Example incident scope: scratches from animals (provisional draft example).",
-      "Distance requirement for eligibility: To be confirmed.",
-      "Claim period and required evidence: To be confirmed.",
-      "Processing office, exclusions, and emergency guidance: To be confirmed."
-    ],
-    answer: "",
-    tags: ["insurance", "student insurance", "placeholder", "pending confirmation"],
-    lastUpdated: "Pending confirmation",
-    verificationStatus: "pending"
-  },
-  {
-    chunkId: "placeholder_motor_parking",
-    sectionTitle: "Motor Parking",
-    processName: "Motor Parking",
-    category: "Offices",
-    documentId: "placeholder_motor_parking",
-    documentTitle: "Provisional Motor Parking Card",
-    documentType: "placeholder",
-    office: "To be confirmed",
-    officeLocation: "To be confirmed",
-    contactInfo: "",
-    content:
-      "Provisional placeholder for a university motor-parking service. Eligibility, registration documents, sticker or permit fee, parking areas, access hours, enforcement rules, replacement process, and responsible office are to be confirmed.",
-    steps: [
-      "Eligible students and vehicles: To be confirmed.",
-      "Registration documents and permit or sticker fee: To be confirmed.",
-      "Approved parking areas and operating hours: To be confirmed.",
-      "Violations, lost-sticker process, and responsible office: To be confirmed."
-    ],
-    answer: "",
-    tags: ["parking", "motor parking", "sticker", "placeholder", "pending confirmation"],
-    lastUpdated: "Pending confirmation",
-    verificationStatus: "pending"
-  }
-];
-
-// Pending placeholders are shown in Service Desk only. Retrieval continues to
-// seed exclusively from seed-documents.json, which contains verified content.
-const includePendingServiceDeskTopics = typeof __DEV__ !== "undefined" && __DEV__;
-export const libraryTopics: LibraryTopic[] = includePendingServiceDeskTopics
-  ? [...verifiedLibraryTopics, ...pendingServiceDeskTopics]
-  : verifiedLibraryTopics;
+export const libraryTopics: LibraryTopic[] = verifiedLibraryTopics;
 
 // O(1) lookup by chunkId
 const topicMap = new Map<string, LibraryTopic>(
@@ -142,7 +103,11 @@ export function getTopicById(chunkId: string): LibraryTopic | undefined {
 
 // Grouping helpers
 export function getCategories(): string[] {
-  return [...new Set([...libraryTopics.map((t) => t.category), "Offices"])];
+  return getServiceDeskCounters();
+}
+
+export function getServiceDeskCounters(): ServiceDeskCounter[] {
+  return [...SERVICE_DESK_COUNTERS];
 }
 
 export function getTopicsByCategory(category: string): LibraryTopic[] {
@@ -150,10 +115,72 @@ export function getTopicsByCategory(category: string): LibraryTopic[] {
 }
 
 export function topicMatchesCategory(topic: LibraryTopic, category: string): boolean {
-  if (category === "Offices") {
-    return Boolean(topic.office || topic.officeLocation || topic.category === "Offices");
+  if ((SERVICE_DESK_COUNTERS as readonly string[]).includes(category)) {
+    return serviceDeskCounterForTopic(topic) === category;
   }
   return topic.category === category;
+}
+
+export function serviceDeskCounterForTopic(topic: LibraryTopic): ServiceDeskCounter {
+  switch (topic.category) {
+    case "Campus Safety":
+      return "Safety";
+    case "Campus Guidelines":
+      return "Campus Guidelines";
+    case "Campus Locations":
+      return "Map Directory";
+    default:
+      return "Offices";
+  }
+}
+
+function searchableOfficeText(topic: LibraryTopic): string {
+  return [
+    topic.sectionTitle,
+    topic.processName,
+    topic.documentTitle,
+    topic.office,
+    topic.officeLocation,
+    topic.content,
+    topic.answer,
+    ...topic.tags
+  ].join(" ").toLowerCase();
+}
+
+export function officeLabelsForTopic(topic: LibraryTopic): string[] {
+  const haystack = searchableOfficeText(topic);
+  const labels = new Set<string>();
+  const dentalMatch = /\bdental\b|campus dental clinic/.test(haystack);
+
+  if (dentalMatch) labels.add("Dental Clinic");
+  if (
+    /\bmedical\b|health services|health assessment|first aid|teleconsult/.test(haystack) ||
+    (!dentalMatch && /\bclinic\b/.test(haystack))
+  ) {
+    labels.add("Medical Clinic");
+  }
+  if (/guidance|counselling|counseling/.test(haystack)) labels.add("Guidance");
+  if (/office of (the )?student affairs|\bosa\b|student affairs/.test(haystack)) labels.add("OSA");
+  if (/registrar/.test(haystack)) labels.add("Registrar");
+  if (/quality assurance|public assistance|customer feedback|complaints desk|complaint/.test(haystack)) {
+    labels.add("Public Assistance / QA");
+  }
+  if (/security|admin building|administrative|\badmin\b/.test(haystack)) labels.add("Security / Admin");
+
+  if (labels.size === 0) {
+    const fallback = (topic.office || topic.officeLocation).trim().replace(/\s+/g, " ");
+    if (fallback) labels.add(fallback);
+  }
+
+  return [...labels];
+}
+
+export function getOfficeFilters(_topics: LibraryTopic[] = getTopicsByCategory("Offices")): OfficeFilter[] {
+  return BASE_OFFICE_FILTERS.map((label) => ({ key: label, label }));
+}
+
+export function topicMatchesOfficeFilter(topic: LibraryTopic, filter: string): boolean {
+  return filter === "All" || officeLabelsForTopic(topic).includes(filter);
 }
 
 // Search across all text fields
