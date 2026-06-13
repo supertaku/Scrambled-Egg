@@ -75,27 +75,30 @@ function getMemoryIndicatorText(messages: ChatMessage[]): string | null {
   return "Fresh memory";
 }
 
-// Original Haki "humming" lines (lyrics from real songs are copyrighted,
-// so these are house-made earworms in different moods).
+// Loading phrases shown while Haki prepares a response. One is picked at
+// random when loading starts, then they cycle line by line. Each opens with
+// an elevated verb to keep the offline-first, student-assistant tone.
 const HAKI_LOADING_LINES = [
-  "Hmm hmm hm-hmm...",
-  "Flipping through my notes...",
-  "La-la-la, looking it up...",
-  "Sweet answers coming up...",
-  "Doo-doo-doo, searching on...",
-  "Counting all the stars... I mean sources...",
-  "Once upon a time, in a library far away...",
-  "You're amazing, just hang on...",
-  "Whistling a study tune...",
-  "Little wings, big answers...",
-  "Turning pages, taking flight...",
-  "Feather by feather, almost there...",
-  "Hatching the perfect reply...",
-  "Soaring through the campus guide...",
-  "One more verse and it's ready...",
-  "Drumming my talons on the desk...",
-  "Shuffling my song of sources...",
-  "Hold my perch, found something..."
+  "Assembling your campus companion...",
+  "Curating university insights offline...",
+  "Synthesizing answers from saved resources...",
+  "Marshalling your student assistant...",
+  "Collating campus details for you...",
+  "Distilling university knowledge offline...",
+  "Compiling your offline knowledge base...",
+  "Orchestrating quick campus answers...",
+  "Consolidating saved academic resources...",
+  "Retrieving student-ready information...",
+  "Illuminating relevant campus details...",
+  "Calibrating your academic companion...",
+  "Aggregating university information securely...",
+  "Provisioning your offline AI helper...",
+  "Surveying saved campus resources...",
+  "Refining answers for student needs...",
+  "Harnessing your offline knowledge base...",
+  "Unlocking quick access to university info...",
+  "Cultivating helpful campus insights...",
+  "Summoning your university assistant..."
 ];
 
 const HELP_LISTENING_SCENARIOS = new Set([
@@ -292,6 +295,9 @@ export default function ChatScreen() {
       return;
     }
 
+    // Start on a random phrase each time so the loading text varies per
+    // request, then advance line by line while we wait.
+    setLoadingLineIndex(Math.floor(Math.random() * HAKI_LOADING_LINES.length));
     const intervalId = setInterval(() => {
       setLoadingLineIndex((current) => (current + 1) % HAKI_LOADING_LINES.length);
     }, 2000);
