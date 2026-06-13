@@ -22,7 +22,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ModelOperationBadge } from "@/components/models/ModelOperationBadge";
 import { cleanupPartialGgufDownloads, recoverInterruptedModelOperation } from "@/ai/localModelManager";
 import { disableAdminMode, subscribeAdminMode } from "@/services/adminService";
-import { getCurrentAIMode, releaseLocalAIForMemoryPressure } from "@/services/modeSelectionService";
+import { getCurrentAIMode, prewarmLocalAIForChat, releaseLocalAIForMemoryPressure } from "@/services/modeSelectionService";
 import { shouldPresentFirstRunOnboarding, subscribeOnboardingCompleted } from "@/services/onboardingService";
 import { ThemeProvider, useThemeColors } from "@/theme/ThemeProvider";
 import { colors } from "@/theme/colors";
@@ -329,7 +329,15 @@ function RootLayoutContent() {
   useEffect(() => {
     let mounted = true;
     cleanupPartialGgufDownloads();
-    void recoverInterruptedModelOperation();
+    void recoverInterruptedModelOperation()
+      .then((operation) => {
+        if (operation?.phase === "completed") void prewarmLocalAIForChat();
+      })
+      .catch((error) => {
+        logger.ai.warn("Startup model recovery failed", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
     void getCurrentAIMode().catch((error) => {
       logger.ai.warn("Startup capability detection failed", { error: error instanceof Error ? error.message : String(error) });
     });

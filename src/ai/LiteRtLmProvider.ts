@@ -271,10 +271,10 @@ export class LiteRtLmProvider implements LocalAIProvider {
 
   async prewarm(): Promise<void> {
     const manifest = await this.getActiveManifest();
-    const capabilities = liteRtLmRuntime.getModule()?.getCapabilities;
-    if (!manifest || !capabilities) return;
+    const prepareModel = liteRtLmRuntime.getModule()?.prepareModel;
+    if (!manifest || !prepareModel) return;
     const startedAt = Date.now();
-    await capabilities().catch(() => undefined);
+    await prepareModel(filePathFromUri(manifest.uri));
     this.modelLoadTimeMs ??= Date.now() - startedAt;
   }
 

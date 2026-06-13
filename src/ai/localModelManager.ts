@@ -54,12 +54,10 @@ import {
   stagingRecordFile
 } from "./modelStoragePaths";
 import { normalizeGgufActivationManifest, prepareManifestForActivation } from "./modelActivationPolicy";
-import {
-  buildLiteRtActivationProbeInput, cleanupLiteRtActivationProbe, evaluatedManifest,
-  localFilePathFromUri, nativeSafeChatText, withActivationTimeout
-} from "./modelActivationProbe";
+import { evaluatedManifest, localFilePathFromUri } from "./modelActivationProbe";
 import { catalogDownloadFitsHardwareForDownload } from "./modelCatalog";
 import { GGUF_MODELS, type GgufDownloadConfig, type RuntimeAvailability } from "./modelDownloadConfig";
+import { selectInstalledModelRecoveryCandidate } from "./modelRecoveryPolicy";
 import { getLiteRtLmNativeModule } from "./nativeModules";
 import { loadLlamaRn } from "./llamaRnRuntime";
 import {
@@ -90,7 +88,6 @@ export type {
   InstalledModelSource
 } from "./modelLibraryStore";
 
-const LITERT_ACTIVATION_PROBE_TIMEOUT_MS = 90_000;
 const MAX_IMPORTED_CHAT_MODEL_BYTES = 10 * 1024 * 1024 * 1024;
 const MAX_IMPORTED_EMBEDDING_MODEL_BYTES = 2 * 1024 * 1024 * 1024;
 
@@ -436,30 +433,20 @@ function writeEvaluation(
   return updated;
 }
 
-async function probeLiteRtLmActivation(manifest: LocalModelManifest): Promise<LocalModelManifest> {
+async function validateLiteRtLmActivation(manifest: LocalModelManifest): Promise<void> {
   const startedAt = Date.now();
   const nativeModule = getLiteRtLmNativeModule();
   const missingRuntime = "LiteRT-LM native runtime is unavailable. Install an updated Android build before using Gemma.";
-  let requestId: string | null = null;
   try {
-    if (!nativeModule?.answerSafeChat) throw new Error(missingRuntime);
+    if (!nativeModule?.validateModelConfiguration) throw new Error(missingRuntime);
     if (nativeModule.isRuntimeAvailable && (await nativeModule.isRuntimeAvailable()) !== true) {
       throw new Error(missingRuntime);
     }
-    requestId = `litert-activation-${Date.now()}`;
-    const result = await withActivationTimeout(
-      nativeModule.answerSafeChat(buildLiteRtActivationProbeInput(
-        localFilePathFromUri(manifest.uri),
-        requestId
-      )),
-      LITERT_ACTIVATION_PROBE_TIMEOUT_MS,
-      "LiteRT-LM activation probe timed out."
-    );
-    if (!nativeSafeChatText(result)) throw new Error("LiteRT-LM activation probe returned an empty response.");
-    return writeEvaluation(manifest, true, null, startedAt);
+    if ((await nativeModule.validateModelConfiguration(localFilePathFromUri(manifest.uri))) !== true) {
+      throw new Error("LiteRT-LM model configuration validation failed.");
+    }
   } catch (error) {
-    await cleanupLiteRtActivationProbe(nativeModule, requestId);
-    const raw = error instanceof Error ? error.message : "LiteRT-LM activation probe failed.";
+    const raw = error instanceof Error ? error.message : "LiteRT-LM activation validation failed.";
     const reason = /e4b|4b/i.test(`${manifest.modelName} ${manifest.originalName}`)
       ? `${raw} Try Gemma 4 E2B or a smaller GGUF model.`
       : raw;
@@ -482,7 +469,7 @@ async function activateInstalledModelInternal(modelId: string, operationId: stri
     if (manifest.rejectionReasons.length > 0) {
       throw new Error(manifest.rejectionReasons[0] ?? "This phone cannot safely activate that model right now.");
     }
-    manifest = await prepareManifestForActivation(manifest, probeLiteRtLmActivation);
+    manifest = await prepareManifestForActivation(manifest, validateLiteRtLmActivation);
     new File(manifest.manifestPath).write(JSON.stringify(manifest, null, 2));
     writeLibrary({ ...readLibrary(), activeModelId: modelId });
     return statusFromManifest(manifest);
@@ -890,7 +877,79 @@ export async function recoverInterruptedModelOperation(): Promise<ModelOperation
       record?.fileUri && (record.nativeTransfer || new File(record.fileUri).exists)
     ));
   const record = records[0];
-  if (!record) return null;
+  if (!record) {
+    const library = readLibrary();
+    const hardware = await getDeviceHardwareProfile();
+    const candidate = selectInstalledModelRecoveryCandidate(
+      library.activeModelId,
+      library.installedModels.map((entry) => {
+        const manifest = readManifest(new File(entry.manifestUri));
+        const catalogModel = entry.catalogId
+          ? GGUF_MODELS.find((model) => model.id === entry.catalogId)
+          : undefined;
+        const currentRejectionReasons = manifest && catalogModel
+          ? validateImportedModel({
+            fileName: manifest.originalName,
+            role: "chat",
+            metadata: modelMetadataFromManifest(manifest),
+            sizeBytes: manifest.sizeBytes,
+            hardware,
+            runtimeFormat: catalogModel.runtimeFormat,
+            minimumRamGB: catalogModel.minimumRamGB,
+            minimumFreeStorageGB: catalogModel.minimumFreeStorageGB
+          })
+          : [];
+        let filePresent = false;
+        try {
+          filePresent = new File(entry.fileUri).exists;
+        } catch {
+          filePresent = false;
+        }
+        return {
+          entry,
+          id: entry.id,
+          source: entry.source,
+          installedAt: entry.installedAt,
+          runtimeFormat: manifest?.runtimeFormat ?? entry.runtimeFormat ?? "gguf",
+          filePresent,
+          manifestPresent: manifest !== null,
+          manifestRejectionReasons: currentRejectionReasons,
+          activationPolicy: catalogModel?.activationPolicy ?? manifest?.activationPolicy ?? "auto-after-smoke-test",
+          hardwareCompatible: Boolean(manifest && catalogModel && currentRejectionReasons.length === 0),
+          verifiedSha256: entry.verifiedSha256,
+          expectedSha256: catalogModel?.sha256Hex ?? null,
+          evaluationFailureCategory: manifest?.lastEvaluation?.failureCategory ?? null
+        };
+      })
+    );
+    if (!candidate) return null;
+
+    const operation = newModelOperation(
+      candidate.entry.id,
+      candidate.entry.modelName,
+      candidate.entry.catalogId,
+      "activating"
+    );
+    emitModelOperation(operation);
+    try {
+      const status = await activateInstalledModelInternal(candidate.entry.id, operation.operationId);
+      patchModelOperation({
+        phase: "completed",
+        progress: 1,
+        error: status.state === "available"
+          ? null
+          : status.rejectionReasons[0] ?? "The installed model could not be recovered."
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The installed model could not be recovered.";
+      patchModelOperation({ phase: "failed", error: message });
+      logger.ai.warn("Installed LiteRT-LM model recovery failed.", {
+        modelId: candidate.entry.id,
+        error: message
+      });
+    }
+    return getModelOperation();
+  }
   activeStagingRecord = record;
   if (record.nativeTransfer) {
     emitModelOperation({

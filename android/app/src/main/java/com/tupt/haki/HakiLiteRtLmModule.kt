@@ -10,6 +10,7 @@ import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.io.File
 import java.lang.reflect.Proxy
+import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
 
 class HakiLiteRtLmModule(
@@ -19,6 +20,7 @@ class HakiLiteRtLmModule(
   private val inferenceExecutor = Executors.newSingleThreadExecutor()
   private var engine: AutoCloseable? = null
   private var engineModelPath: String? = null
+  private var engineRevision = 0L
   private var modelLoadTimeMs: Long? = null
   private var lastInferenceTimeMs: Long? = null
   private var activeGeneration: ActiveGeneration? = null
@@ -66,6 +68,46 @@ class HakiLiteRtLmModule(
     result.putString("memoryClass", null)
     result.putArray("unavailableReasons", Arguments.createArray())
     promise.resolve(result)
+  }
+
+  @ReactMethod
+  fun validateModelConfiguration(modelPath: String, promise: Promise) {
+    try {
+      validateModelConfiguration(requireModelPath(modelPath))
+      promise.resolve(true)
+    } catch (error: Throwable) {
+      promise.reject(
+        "E_HAKI_LITERT_CONFIGURATION",
+        error.message ?: "LiteRT-LM model configuration validation failed.",
+        error
+      )
+    }
+  }
+
+  @ReactMethod
+  fun prepareModel(modelPath: String, promise: Promise) {
+    val validatedPath = try {
+      requireModelPath(modelPath).also(::validateModelConfiguration)
+    } catch (error: Throwable) {
+      promise.reject(
+        "E_HAKI_LITERT_CONFIGURATION",
+        error.message ?: "LiteRT-LM model configuration validation failed.",
+        error
+      )
+      return
+    }
+    inferenceExecutor.execute {
+      try {
+        engineFor(validatedPath)
+        promise.resolve(null)
+      } catch (error: Throwable) {
+        promise.reject(
+          "E_HAKI_LITERT_PREPARE",
+          error.message ?: "LiteRT-LM model preparation failed.",
+          error
+        )
+      }
+    }
   }
 
   @ReactMethod
@@ -124,13 +166,16 @@ class HakiLiteRtLmModule(
   @ReactMethod
   fun release(promise: Promise) {
     cancelActiveGeneration(null)
-    synchronized(lock) {
-      closeQuietly(engine)
+    val detachedEngine = synchronized(lock) {
+      engineRevision += 1
+      val current = engine
       engine = null
       engineModelPath = null
       modelLoadTimeMs = null
       lastInferenceTimeMs = null
+      current
     }
+    closeQuietly(detachedEngine)
     promise.resolve(null)
   }
 
@@ -169,12 +214,15 @@ class HakiLiteRtLmModule(
   }
 
   private fun requireModelPath(input: ReadableMap): String {
-    val modelPath = stringValue(input, "modelPath")
+    return requireModelPath(stringValue(input, "modelPath"))
+  }
+
+  private fun requireModelPath(modelPath: String): String {
     if (modelPath.isBlank()) {
       throw IllegalArgumentException("LiteRT-LM modelPath is required.")
     }
     val modelFile = File(modelPath)
-    if (!modelFile.exists()) {
+    if (!modelFile.exists() || !modelFile.isFile) {
       throw IllegalArgumentException("LiteRT-LM model file is missing.")
     }
     if (!modelFile.name.lowercase().endsWith(".litertlm")) {
@@ -184,25 +232,48 @@ class HakiLiteRtLmModule(
   }
 
   private fun engineFor(modelPath: String): AutoCloseable {
-    synchronized(lock) {
+    var previous: AutoCloseable? = null
+    val revision = synchronized(lock) {
       val current = engine
       if (current != null && engineModelPath == modelPath) {
         return current
       }
 
-      closeQuietly(current)
-      setNativeMinLogSeverityError()
-      val startedAt = System.currentTimeMillis()
-      val next = Class
-        .forName(ENGINE_CLASS)
-        .getConstructor(Class.forName(ENGINE_CONFIG_CLASS))
-        .newInstance(newEngineConfig(modelPath)) as AutoCloseable
-      next.javaClass.getMethod("initialize").invoke(next)
-      engine = next
-      engineModelPath = modelPath
-      modelLoadTimeMs = System.currentTimeMillis() - startedAt
-      return next
+      previous = current
+      engine = null
+      engineModelPath = null
+      modelLoadTimeMs = null
+      engineRevision += 1
+      engineRevision
     }
+    closeQuietly(previous)
+    setNativeMinLogSeverityError()
+    val startedAt = System.currentTimeMillis()
+    val next = Class
+      .forName(ENGINE_CLASS)
+      .getConstructor(Class.forName(ENGINE_CONFIG_CLASS))
+      .newInstance(newEngineConfig(modelPath)) as AutoCloseable
+    try {
+      next.javaClass.getMethod("initialize").invoke(next)
+    } catch (error: Throwable) {
+      closeQuietly(next)
+      throw error
+    }
+    val accepted = synchronized(lock) {
+      if (engineRevision != revision) {
+        false
+      } else {
+        engine = next
+        engineModelPath = modelPath
+        modelLoadTimeMs = System.currentTimeMillis() - startedAt
+        true
+      }
+    }
+    if (!accepted) {
+      closeQuietly(next)
+      throw CancellationException("LiteRT-LM model preparation was canceled.")
+    }
+    return next
   }
 
   private fun generateAsync(
@@ -366,6 +437,58 @@ class HakiLiteRtLmModule(
       .invoke(engine, newConversationConfig(systemInstruction)) as AutoCloseable
   }
 
+  private fun validateModelConfiguration(modelPath: String) {
+    val backendClass = Class.forName(BACKEND_CLASS)
+    val engineConfigClass = Class.forName(ENGINE_CONFIG_CLASS)
+    val conversationConfigClass = Class.forName(CONVERSATION_CONFIG_CLASS)
+    val samplerConfigClass = Class.forName(SAMPLER_CONFIG_CLASS)
+    val contentsClass = Class.forName(CONTENTS_CLASS)
+    val callbackClass = Class.forName(MESSAGE_CALLBACK_CLASS)
+    val engineClass = Class.forName(ENGINE_CLASS)
+    val conversationClass = Class.forName(CONVERSATION_CLASS)
+
+    Class.forName(BACKEND_CPU_CLASS).getConstructor()
+    engineConfigClass.getConstructor(
+      String::class.java,
+      backendClass,
+      backendClass,
+      backendClass,
+      java.lang.Integer::class.java,
+      java.lang.Integer::class.java,
+      String::class.java
+    )
+    samplerConfigClass.getConstructor(
+      java.lang.Integer.TYPE,
+      java.lang.Double.TYPE,
+      java.lang.Double.TYPE,
+      java.lang.Integer.TYPE
+    )
+    conversationConfigClass.getConstructor(
+      contentsClass,
+      java.util.List::class.java,
+      java.util.List::class.java,
+      samplerConfigClass,
+      java.lang.Boolean.TYPE
+    )
+    engineClass.getConstructor(engineConfigClass)
+    engineClass.getMethod("initialize")
+    engineClass.getMethod("createConversation", conversationConfigClass)
+    conversationClass.getMethod(
+      "sendMessageAsync",
+      String::class.java,
+      callbackClass,
+      java.util.Map::class.java
+    )
+    conversationClass.getMethod("cancelProcess")
+    if (!AutoCloseable::class.java.isAssignableFrom(engineClass) ||
+      !AutoCloseable::class.java.isAssignableFrom(conversationClass)
+    ) {
+      throw IllegalStateException("LiteRT-LM engine lifecycle APIs are incompatible.")
+    }
+    newEngineConfig(modelPath)
+    newConversationConfig("You are Haki. Answer in English only.")
+  }
+
   private fun newEngineConfig(modelPath: String): Any {
     val backendClass = Class.forName(BACKEND_CLASS)
     val cpuBackend = Class.forName(BACKEND_CPU_CLASS).getConstructor().newInstance()
@@ -495,6 +618,7 @@ class HakiLiteRtLmModule(
     private const val BACKEND_CPU_CLASS = "com.google.ai.edge.litertlm.Backend\$CPU"
     private const val CONTENT_TEXT_CLASS = "com.google.ai.edge.litertlm.Content\$Text"
     private const val CONTENTS_CLASS = "com.google.ai.edge.litertlm.Contents"
+    private const val CONVERSATION_CLASS = "com.google.ai.edge.litertlm.Conversation"
     private const val CONVERSATION_CONFIG_CLASS = "com.google.ai.edge.litertlm.ConversationConfig"
     private const val ENGINE_CLASS = "com.google.ai.edge.litertlm.Engine"
     private const val ENGINE_CONFIG_CLASS = "com.google.ai.edge.litertlm.EngineConfig"
@@ -506,6 +630,7 @@ class HakiLiteRtLmModule(
       BACKEND_CPU_CLASS,
       CONTENT_TEXT_CLASS,
       CONTENTS_CLASS,
+      CONVERSATION_CLASS,
       CONVERSATION_CONFIG_CLASS,
       ENGINE_CLASS,
       ENGINE_CONFIG_CLASS,

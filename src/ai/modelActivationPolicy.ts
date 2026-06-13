@@ -1,6 +1,7 @@
 import type { LocalModelManifest } from "./localModelMetadata";
+import { evaluatedManifest } from "./modelActivationProbe";
 
-export type LiteRtActivationProbe = (manifest: LocalModelManifest) => Promise<LocalModelManifest>;
+export type LiteRtActivationValidator = (manifest: LocalModelManifest) => Promise<void>;
 
 export function normalizeGgufActivationManifest(manifest: LocalModelManifest): LocalModelManifest {
   if ((manifest.runtimeFormat ?? "gguf") !== "gguf") return manifest;
@@ -14,10 +15,12 @@ export function normalizeGgufActivationManifest(manifest: LocalModelManifest): L
 
 export async function prepareManifestForActivation(
   manifest: LocalModelManifest,
-  probeLiteRt: LiteRtActivationProbe
+  validateLiteRt: LiteRtActivationValidator
 ): Promise<LocalModelManifest> {
   if ((manifest.runtimeFormat ?? "gguf") === "litert-lm") {
-    return probeLiteRt(manifest);
+    const startedAt = Date.now();
+    await validateLiteRt(manifest);
+    return evaluatedManifest(manifest, true, null, startedAt, new Date().toISOString());
   }
   return normalizeGgufActivationManifest(manifest);
 }

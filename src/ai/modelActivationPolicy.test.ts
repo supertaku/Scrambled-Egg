@@ -35,30 +35,26 @@ function manifest(runtimeFormat: "gguf" | "litert-lm"): LocalModelManifest {
 
 describe("prepareManifestForActivation", () => {
   it("makes a validated GGUF activation independent from legacy benchmark failures", async () => {
-    const probeLiteRt = vi.fn(async (value: LocalModelManifest) => value);
+    const validateLiteRt = vi.fn(async (_value: LocalModelManifest) => undefined);
 
-    const result = await prepareManifestForActivation(manifest("gguf"), probeLiteRt);
+    const result = await prepareManifestForActivation(manifest("gguf"), validateLiteRt);
 
-    expect(probeLiteRt).not.toHaveBeenCalled();
+    expect(validateLiteRt).not.toHaveBeenCalled();
     expect(result.evaluationStatus).toBe("not_required");
     expect(result.lastEvaluation).toBeNull();
   });
 
-  it("requires the LiteRT activation probe and returns its evaluated manifest", async () => {
-    const evaluated = {
-      ...manifest("litert-lm"),
-      evaluationStatus: "passed" as const,
-      lastEvaluation: {
-        evaluatedAt: "2026-06-12T00:00:01.000Z",
-        passed: true,
-        failureReason: null
-      }
-    };
-    const probeLiteRt = vi.fn(async () => evaluated);
+  it("marks LiteRT activation passed after validation without generated text", async () => {
+    const validateLiteRt = vi.fn(async (_value: LocalModelManifest) => undefined);
 
-    const result = await prepareManifestForActivation(manifest("litert-lm"), probeLiteRt);
+    const result = await prepareManifestForActivation(manifest("litert-lm"), validateLiteRt);
 
-    expect(probeLiteRt).toHaveBeenCalledOnce();
-    expect(result).toBe(evaluated);
+    expect(validateLiteRt).toHaveBeenCalledOnce();
+    expect(result.evaluationStatus).toBe("passed");
+    expect(result.lastEvaluation).toMatchObject({
+      passed: true,
+      failureReason: null,
+      failureCategory: null
+    });
   });
 });

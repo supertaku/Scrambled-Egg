@@ -74,12 +74,6 @@ export function ModelCatalogSection({
             {forecast?.summary ? <Text selectable style={styles.forecast}>{forecast.summary}</Text> : null}
             <Text selectable style={styles.meta}>{model.artifactSource} | {model.artifactLicense}</Text>
             {reason ? <Text selectable style={styles.warning}>{reason}</Text> : null}
-            {model.activationPolicy === "manual" ? (
-              <Text selectable style={styles.notice}>Experimental: manual activation is required after the on-device smoke test.</Text>
-            ) : null}
-            {model.lifecycleChannel === "evaluation" ? (
-              <Text selectable style={styles.notice}>In evaluation: this model activates only after it passes the on-device smoke test.</Text>
-            ) : null}
             <Pressable
               accessibilityRole="button"
               disabled={Boolean(reason) || selectedOperation || busy || operation?.phase === "paused"}
@@ -108,7 +102,6 @@ const createStyles = ({ colors }: Theme) => StyleSheet.create({
   meta: { color: colors.muted, fontSize: 12, fontWeight: "700" },
   modelCard: { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 8, padding: 14 },
   modelName: { color: colors.ink, fontSize: 15, fontWeight: "900" },
-  notice: { backgroundColor: colors.goldSoft, borderRadius: 9, color: colors.ink, fontSize: 12, fontWeight: "700", lineHeight: 17, padding: 9 },
   sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "900", marginTop: 4 },
   warning: { color: colors.danger, fontSize: 12, fontWeight: "700", lineHeight: 17 }
 });

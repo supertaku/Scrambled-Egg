@@ -46,6 +46,8 @@ export interface HakiLocalAIModule {
   ) => Promise<Partial<SafeChatResult> | string>;
   cancelGeneration?: (requestId: string) => Promise<boolean>;
   cancelProcess?: () => Promise<boolean>;
+  validateModelConfiguration?: (modelPath: string) => Promise<boolean>;
+  prepareModel?: (modelPath: string) => Promise<void>;
   embedText?: (text: string) => Promise<number[]>;
   isModelTierDownloaded?: (tier: string) => Promise<boolean>;
   release?: () => Promise<void> | void;

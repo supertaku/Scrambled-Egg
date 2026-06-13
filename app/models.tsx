@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, CheckCircle2, Cpu, PauseCircle, PlayCircle, RefreshCw, Trash2, Upload } from "lucide-react-native";
+import { ArrowLeft, CheckCircle2, Lightbulb, PauseCircle, PlayCircle, RefreshCw, Trash2, Upload } from "lucide-react-native";
 
 import {
   activateChatModel,
@@ -29,7 +29,11 @@ import { evaluateModelActivation } from "@/ai/modelActivationState";
 import { groupCatalogByRecommendation } from "@/ai/modelCatalog";
 import { ModelCatalogSection } from "@/components/models/ModelCatalogSection";
 import { ModelOperationHaki } from "@/components/models/ModelOperationHaki";
-import { getCurrentAIMode, refreshDeviceCapabilities } from "@/services/modeSelectionService";
+import {
+  getCurrentAIMode,
+  prewarmLocalAIForChat,
+  refreshDeviceCapabilities
+} from "@/services/modeSelectionService";
 import { useThemeColors, useThemedStyles } from "@/theme/ThemeProvider";
 import type { Theme } from "@/theme/themes";
 
@@ -85,6 +89,7 @@ export default function ModelsScreen() {
       if (next && ["completed", "failed", "canceled"].includes(next.phase) && terminalOperationRef.current !== next.operationId) {
         terminalOperationRef.current = next.operationId;
         void load(next.phase === "completed", next.phase === "failed");
+        if (next.phase === "completed") void prewarmLocalAIForChat();
       }
     });
   }, [load]);
@@ -157,21 +162,19 @@ export default function ModelsScreen() {
           {error ? <Text selectable style={styles.error}>{error}</Text> : null}
           {loading ? <ActivityIndicator color={colors.maroon} /> : null}
 
-          <View style={styles.card}>
-            <Cpu color={colors.maroon} size={21} />
-            <Text style={styles.cardTitle}>Unlock supportive Haki modes</Text>
-            <Text selectable style={styles.body}>
-              Campus Haki already answers from the saved campus guide. Download a chat model to unlock Friendly Haki and Campus Haki + Friendly Haki.
-            </Text>
-            <Text selectable style={styles.meta}>Only downloads suited for this phone are shown.</Text>
-            {catalog && catalog.hardware.memoryGB !== null && catalog.hardware.freeStorageGB !== null ? (
-              <Text selectable style={styles.meta}>
-                This phone reports {catalog.hardware.memoryGB.toFixed(1)} GB total RAM and {catalog.hardware.freeStorageGB.toFixed(1)} GB free storage.
-              </Text>
-            ) : null}
-            <Text selectable style={styles.body}>
-              If Haki feels slow, switch to another downloaded model, or remove this model and install a smaller one.
-            </Text>
+          <View style={styles.notesCard}>
+            <View style={styles.notesAccent} />
+            <View style={styles.notesHeader}>
+              <View style={styles.notesIconBadge}>
+                <Lightbulb color={colors.white} size={21} />
+              </View>
+              <Text style={styles.notesTitle}>Haki Notes</Text>
+            </View>
+            <View style={styles.notesList}>
+              <NoteBullet text="Haki only shows models that are suitable for this phone." />
+              <NoteBullet text="Downloaded models run on this phone and can work offline." />
+              <NoteBullet text="If Haki feels slow, switch to a smaller downloaded model." />
+            </View>
             {catalog?.unavailableReason ? <Text selectable style={styles.warning}>Chat downloads are not available on this phone right now.</Text> : null}
             {catalog?.unavailableReason ? (
               <ActionButton
@@ -314,6 +317,16 @@ export default function ModelsScreen() {
   );
 }
 
+function NoteBullet({ text }: { text: string }) {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <View style={styles.notesBulletRow}>
+      <View style={styles.notesBulletDot} />
+      <Text selectable style={styles.notesBulletText}>{text}</Text>
+    </View>
+  );
+}
+
 function ActionButton({
   disabled,
   icon,
@@ -357,8 +370,29 @@ const createStyles = ({ colors }: Theme) => StyleSheet.create({
   headerGap: { width: 40 },
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 32, borderTopRightRadius: 32, flex: 1, overflow: "hidden" },
   content: { gap: 14, padding: 16 },
-  card: { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 16, borderWidth: 1, gap: 8, padding: 16 },
-  cardTitle: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  notesCard: {
+    backgroundColor: colors.goldSoft,
+    borderColor: colors.goldBorder,
+    borderRadius: 18,
+    borderWidth: 1,
+    elevation: 3,
+    gap: 14,
+    overflow: "hidden",
+    padding: 16,
+    paddingLeft: 21,
+    shadowColor: colors.maroon,
+    shadowOffset: { height: 3, width: 0 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8
+  },
+  notesAccent: { backgroundColor: colors.maroon, bottom: 0, left: 0, position: "absolute", top: 0, width: 5 },
+  notesHeader: { alignItems: "center", flexDirection: "row", gap: 11 },
+  notesIconBadge: { alignItems: "center", backgroundColor: colors.maroon, borderRadius: 20, height: 40, justifyContent: "center", width: 40 },
+  notesTitle: { color: colors.ink, fontSize: 19, fontWeight: "900" },
+  notesList: { gap: 10 },
+  notesBulletRow: { alignItems: "flex-start", flexDirection: "row", gap: 10 },
+  notesBulletDot: { backgroundColor: colors.maroon, borderRadius: 4, height: 8, marginTop: 6, width: 8 },
+  notesBulletText: { color: colors.ink, flex: 1, fontSize: 13, fontWeight: "700", lineHeight: 20 },
   sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "900", marginTop: 4 },
   modelCard: { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 8, padding: 14 },
   modelTitleRow: { alignItems: "center", flexDirection: "row", gap: 8, justifyContent: "space-between" },

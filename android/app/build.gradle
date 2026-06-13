@@ -195,10 +195,9 @@ dependencies {
     // KEEP THIS VERSION PINNED. HakiLiteRtLmModule.kt binds to this library
     // entirely through reflection with positional constructor signatures
     // (EngineConfig, ConversationConfig, SamplerConfig). A version bump can
-    // break Gemma at runtime rather than compile time; the activation smoke
-    // test is the only gate. Before changing it, re-verify the constructor
-    // shapes in HakiLiteRtLmModule.kt and re-run a device activation probe.
-    runtimeOnly("com.google.ai.edge.litertlm:litertlm-android:0.10.2")
+    // break Gemma at runtime rather than compile time. Fast activation checks
+    // these reflection contracts before the engine is prepared in background.
+    runtimeOnly("com.google.ai.edge.litertlm:litertlm-android:0.13.1")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";

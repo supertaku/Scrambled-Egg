@@ -451,37 +451,66 @@ assert.match(settingsSource, /loadSettings\(true\)/);
 assert.doesNotMatch(settingsSource, /ModelDownloader/);
 
 const modelsScreenSource = readFileSync(new URL("../app/models.tsx", import.meta.url), "utf8");
+const modelCatalogSectionSource = readFileSync(
+  new URL("../src/components/models/ModelCatalogSection.tsx", import.meta.url),
+  "utf8"
+);
 assert.match(modelsScreenSource, /Haki Models/);
+assert.match(modelsScreenSource, /Haki Notes/);
 assert.match(modelsScreenSource, /Recommended for this phone/);
 assert.match(modelsScreenSource, /Other compatible models/);
 assert.match(modelsScreenSource, /Campus Haki/);
-assert.match(modelsScreenSource, /Friendly Haki/);
+assert.match(modelsScreenSource, /Haki only shows models that are suitable for this phone/);
+assert.match(modelsScreenSource, /Downloaded models run on this phone and can work offline/);
 assert.match(modelsScreenSource, /activateChatModel/);
 assert.match(modelsScreenSource, /removeChatModel/);
 assert.match(modelsScreenSource, /resumePausedModelDownload/);
 assert.match(modelsScreenSource, /ModelCatalogSection/);
+assert.doesNotMatch(modelsScreenSource, /Campus Haki already answers|total RAM|free storage/);
+assert.doesNotMatch(modelCatalogSectionSource, /In evaluation|on-device smoke test/);
 
-assert.match(localModelManagerSource, /probeLiteRtLmActivation/);
+assert.match(localModelManagerSource, /validateLiteRtLmActivation/);
 assert.match(localModelManagerSource, /evaluationStatus/);
 assert.match(localModelManagerSource, /runtimeAvailability/);
 assert.match(localModelManagerSource, /catalogModel \? \{ modelTier: catalogModel\.tier \} : \{\}/);
-const liteRtActivationProbeSource = localModelManagerSource.slice(
-  localModelManagerSource.indexOf("async function probeLiteRtLmActivation"),
+const liteRtActivationValidationSource = localModelManagerSource.slice(
+  localModelManagerSource.indexOf("async function validateLiteRtLmActivation"),
   localModelManagerSource.indexOf("async function activateInstalledModelInternal")
 );
-assert.match(liteRtActivationProbeSource, /cleanupLiteRtActivationProbe/);
+assert.match(liteRtActivationValidationSource, /validateModelConfiguration/);
+assert.doesNotMatch(liteRtActivationValidationSource, /answerSafeChat|cleanupLiteRtActivationProbe/);
 assert.match(localModelManagerSource, /prepareManifestForActivation/);
 assert.doesNotMatch(localModelManagerSource, /probeGgufActivation|benchmarkCandidate/);
-const modelActivationProbeSource = readFileSync(new URL("../src/ai/modelActivationProbe.ts", import.meta.url), "utf8");
-assert.match(modelActivationProbeSource, /cancelGeneration/);
-assert.match(modelActivationProbeSource, /release/);
+assert.match(localModelManagerSource, /selectInstalledModelRecoveryCandidate/);
+const recoveryStart = localModelManagerSource.indexOf("export async function recoverInterruptedModelOperation");
+const installedRecoverySource = localModelManagerSource.slice(
+  localModelManagerSource.indexOf("if (!record) {", recoveryStart),
+  localModelManagerSource.indexOf("activeStagingRecord = record", recoveryStart)
+);
+assert.match(installedRecoverySource, /validateImportedModel/);
+assert.doesNotMatch(installedRecoverySource, /catalogDownloadFitsHardwareForDownload/);
 
 const liteRtNativeSource = readFileSync(
   new URL("../android/app/src/main/java/com/tupt/haki/HakiLiteRtLmModule.kt", import.meta.url),
   "utf8"
 );
+assert.match(liteRtNativeSource, /fun validateModelConfiguration\(/);
+assert.match(liteRtNativeSource, /fun prepareModel\(/);
 assert.match(liteRtNativeSource, /fun cancelProcess\(/);
 assert.match(liteRtNativeSource, /fun release\(/);
+assert.match(liteRtNativeSource, /engineRevision/);
+const nativeEngineForSource = liteRtNativeSource.slice(
+  liteRtNativeSource.indexOf("private fun engineFor"),
+  liteRtNativeSource.indexOf("private fun generateAsync")
+);
+assert.match(nativeEngineForSource, /val revision = synchronized\(lock\)/);
+assert.match(nativeEngineForSource, /getMethod\("initialize"\)\.invoke\(next\)/);
+assert.ok(
+  nativeEngineForSource.indexOf("getMethod(\"initialize\").invoke(next)") >
+    nativeEngineForSource.indexOf("val revision = synchronized(lock)")
+);
+const androidBuildSource = readFileSync(new URL("../android/app/build.gradle", import.meta.url), "utf8");
+assert.match(androidBuildSource, /litertlm-android:0\.13\.1/);
 const proguardSource = readFileSync(new URL("../android/app/proguard-rules.pro", import.meta.url), "utf8");
 assert.match(proguardSource, /-keep class com\.google\.ai\.edge\.litertlm\.\*\*/);
 
@@ -492,6 +521,7 @@ const liteRtSummarySource = liteRtProviderSource.slice(
 );
 assert.match(liteRtSummarySource, /requestId/);
 assert.match(liteRtSummarySource, /createLiteRtGenerationGuard/);
+assert.match(liteRtProviderSource, /prepareModel\(filePathFromUri\(manifest\.uri\)\)/);
 
 const hakiStatusSource = readFileSync(new URL("../src/components/models/ModelOperationHaki.tsx", import.meta.url), "utf8");
 assert.match(hakiStatusSource, /messageForModelOperation/);
