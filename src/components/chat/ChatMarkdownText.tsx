@@ -68,7 +68,12 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   listText: {
-    flex: 1
+    // flexBasis "auto" (not the flexBasis:0 that `flex: 1` implies) lets the
+    // text contribute its real content width to the row, so the shrink-wrapped
+    // bubble expands to its maxWidth instead of collapsing to one word per line.
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "auto"
   },
   bold: {
     fontWeight: "800"

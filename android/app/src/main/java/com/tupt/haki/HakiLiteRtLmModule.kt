@@ -325,7 +325,7 @@ class HakiLiteRtLmModule(
   }
 
   private fun appendGenerationOutput(generation: ActiveGeneration, currentText: String) {
-    if (currentText.isBlank()) return
+    if (currentText.isEmpty()) return
     val delta = synchronized(lock) {
       if (generation.completed || activeGeneration !== generation) return
       val previous = generation.output.toString()
@@ -353,7 +353,7 @@ class HakiLiteRtLmModule(
       generation.completed = true
       activeGeneration = null
       lastInferenceTimeMs = System.currentTimeMillis() - startedAt
-      generation.output.toString()
+      generation.output.toString().trim()
     }
     closeQuietly(generation.conversation)
     generation.promise.resolve(result)
@@ -398,7 +398,7 @@ class HakiLiteRtLmModule(
     closeQuietly(generation.conversation)
     val result = Arguments.createMap()
     result.putString("status", "incomplete")
-    result.putString("text", generation.output.toString())
+    result.putString("text", generation.output.toString().trim())
     generation.promise.resolve(result)
     return true
   }
@@ -422,12 +422,16 @@ class HakiLiteRtLmModule(
           }
         }
         ?.joinToString("")
-        ?.trim()
     } catch (_: Throwable) {
       null
     }
 
-    return textParts?.takeIf { it.isNotBlank() } ?: message.toString().trim()
+    // Do not trim here: LiteRT-LM delivers tokens whose word boundary is a
+    // SentencePiece leading space (" the", " process"). Trimming each snapshot
+    // strips those spaces and jams words together. The full answer is trimmed
+    // once when generation completes. `?:` triggers only on a null extraction,
+    // so empty content returns "" instead of the message object's toString().
+    return textParts ?: message.toString()
   }
 
   private fun createConversation(engine: AutoCloseable, systemInstruction: String): AutoCloseable {
