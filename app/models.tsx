@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, CheckCircle2, Lightbulb, PauseCircle, PlayCircle, RefreshCw, Trash2, Upload } from "lucide-react-native";
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Lightbulb, PauseCircle, PlayCircle, RefreshCw, Trash2, Upload } from "lucide-react-native";
 
 import {
   activateChatModel,
@@ -57,6 +57,7 @@ export default function ModelsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState<LocalAIProviderId | null>(null);
+  const [showMoreModels, setShowMoreModels] = useState(false);
   const terminalOperationRef = useRef<string | null>(null);
 
   const load = useCallback(async (refreshMode = false, preserveError = false) => {
@@ -130,6 +131,7 @@ export default function ModelsScreen() {
   const activeModel = library?.installedModels.find((model) => model.id === library.activeModelId) ?? null;
   const busy = operationBusy(operation);
   const groupedCatalog = groupCatalogByRecommendation(catalog?.compatibleModels ?? []);
+  const hasMoreModelOptions = groupedCatalog.alternative.length > 0 || groupedCatalog.experimental.length > 0;
 
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
@@ -284,31 +286,52 @@ export default function ModelsScreen() {
             operation={operation}
             title="Recommended for this phone"
           />
-          <ModelCatalogSection
-            busy={busy}
-            catalog={catalog}
-            disabledReason={(model) => model.runtimeFormat === "litert-lm" && catalog?.runtimeAvailability["litert-lm"] !== true
-              ? "Updated Android build required: LiteRT-LM bridge is not available."
-              : null}
-            emptyText="No other compatible chat downloads are available right now."
-            models={groupedCatalog.alternative}
-            onDownload={(model) => void runAction(() => downloadCatalogModel(model))}
-            operation={operation}
-            title="Other compatible models"
-          />
-          {groupedCatalog.experimental.length > 0 ? (
-            <ModelCatalogSection
-              busy={busy}
-              catalog={catalog}
-              disabledReason={(model) => model.runtimeFormat === "litert-lm" && catalog?.runtimeAvailability["litert-lm"] !== true
-                ? "Updated Android build required: LiteRT-LM bridge is not available."
-                : null}
-              emptyText="No experimental high-RAM downloads are available for this phone."
-              models={groupedCatalog.experimental}
-              onDownload={(model) => void runAction(() => downloadCatalogModel(model))}
-              operation={operation}
-              title="Experimental high-RAM"
-            />
+          {hasMoreModelOptions ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: showMoreModels }}
+                onPress={() => setShowMoreModels((value) => !value)}
+                style={styles.moreOptionsToggle}
+              >
+                <Text style={styles.moreOptionsToggleText}>
+                  {showMoreModels ? "Hide other models" : "Show more options"}
+                </Text>
+                {showMoreModels
+                  ? <ChevronUp color={colors.maroon} size={18} />
+                  : <ChevronDown color={colors.maroon} size={18} />}
+              </Pressable>
+              {showMoreModels ? (
+                <>
+                  <ModelCatalogSection
+                    busy={busy}
+                    catalog={catalog}
+                    disabledReason={(model) => model.runtimeFormat === "litert-lm" && catalog?.runtimeAvailability["litert-lm"] !== true
+                      ? "Updated Android build required: LiteRT-LM bridge is not available."
+                      : null}
+                    emptyText="No other compatible chat downloads are available right now."
+                    models={groupedCatalog.alternative}
+                    onDownload={(model) => void runAction(() => downloadCatalogModel(model))}
+                    operation={operation}
+                    title="Other compatible models"
+                  />
+                  {groupedCatalog.experimental.length > 0 ? (
+                    <ModelCatalogSection
+                      busy={busy}
+                      catalog={catalog}
+                      disabledReason={(model) => model.runtimeFormat === "litert-lm" && catalog?.runtimeAvailability["litert-lm"] !== true
+                        ? "Updated Android build required: LiteRT-LM bridge is not available."
+                        : null}
+                      emptyText="No experimental high-RAM downloads are available for this phone."
+                      models={groupedCatalog.experimental}
+                      onDownload={(model) => void runAction(() => downloadCatalogModel(model))}
+                      operation={operation}
+                      title="Experimental high-RAM"
+                    />
+                  ) : null}
+                </>
+              ) : null}
+            </>
           ) : null}
 
         </ScrollView>
@@ -394,6 +417,8 @@ const createStyles = ({ colors }: Theme) => StyleSheet.create({
   notesBulletDot: { backgroundColor: colors.maroon, borderRadius: 4, height: 8, marginTop: 6, width: 8 },
   notesBulletText: { color: colors.ink, flex: 1, fontSize: 13, fontWeight: "700", lineHeight: 20 },
   sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "900", marginTop: 4 },
+  moreOptionsToggle: { alignItems: "center", alignSelf: "flex-start", backgroundColor: colors.card, borderColor: colors.border, borderRadius: 999, borderWidth: 1, flexDirection: "row", gap: 6, marginTop: 2, paddingHorizontal: 14, paddingVertical: 9 },
+  moreOptionsToggleText: { color: colors.maroon, fontSize: 13, fontWeight: "900" },
   modelCard: { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 8, padding: 14 },
   modelTitleRow: { alignItems: "center", flexDirection: "row", gap: 8, justifyContent: "space-between" },
   modelName: { color: colors.ink, flex: 1, fontSize: 15, fontWeight: "900" },

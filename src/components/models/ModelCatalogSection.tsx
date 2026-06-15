@@ -66,7 +66,14 @@ export function ModelCatalogSection({
 
         return (
           <View key={model.id} style={styles.modelCard}>
-            <Text selectable style={styles.modelName}>{model.name}</Text>
+            <View style={styles.modelTitleRow}>
+              <Text selectable style={styles.modelName}>{model.name}</Text>
+              {model.lifecycleChannel === "evaluation" ? (
+                <View style={styles.evaluationBadge}>
+                  <Text style={styles.evaluationText}>EVALUATION</Text>
+                </View>
+              ) : null}
+            </View>
             <Text selectable style={styles.meta}>
               Download: {downloadSizeLabel(model.sizeMB)} | Device RAM: {model.minimumRamGB} GB minimum, {model.recommendedRamGB} GB recommended | {runtimeLabel(model)}
             </Text>
@@ -98,10 +105,13 @@ const createStyles = ({ colors }: Theme) => StyleSheet.create({
   buttonText: { color: colors.white, fontSize: 13, fontWeight: "900" },
   disabled: { opacity: 0.5 },
   emptyCard: { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 14, borderWidth: 1, padding: 14 },
+  evaluationBadge: { alignSelf: "flex-start", backgroundColor: colors.warningSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  evaluationText: { color: colors.warning, fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
   forecast: { color: colors.success, fontSize: 12, fontWeight: "700", lineHeight: 17 },
   meta: { color: colors.muted, fontSize: 12, fontWeight: "700" },
   modelCard: { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 8, padding: 14 },
-  modelName: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  modelName: { color: colors.ink, flex: 1, fontSize: 15, fontWeight: "900" },
+  modelTitleRow: { alignItems: "center", flexDirection: "row", gap: 8, justifyContent: "space-between" },
   sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "900", marginTop: 4 },
   warning: { color: colors.danger, fontSize: 12, fontWeight: "700", lineHeight: 17 }
 });

@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import type {
   LocalAICapabilities,
@@ -462,6 +462,12 @@ export class LlamaRnProvider implements LocalAIProvider {
       let streamedTokens = 0;
       let thermalCheckInFlight = false;
       let thermalStop: "serious" | "critical" | null = null;
+      // iOS-only background guard: llama.cpp eagerly initialises Metal, and
+      // holding a live completion while the app is backgrounded is a known
+      // crash vector. When the app leaves the foreground we stop the in-flight
+      // generation and surface the partial answer as incomplete so the user can
+      // resume on return. (Android has no equivalent Metal hazard.)
+      let backgroundStop = false;
       const maybeCheckThermal = () => {
         streamedTokens += 1;
         if (streamedTokens % 24 !== 0 || thermalCheckInFlight || thermalStop) return;
@@ -489,6 +495,18 @@ export class LlamaRnProvider implements LocalAIProvider {
       const complete = async (retry = false) => {
         watchdog.stop();
         watchdog.start();
+        const backgroundSubscription =
+          Platform.OS === "ios"
+            ? AppState.addEventListener("change", (nextState) => {
+                if (nextState === "background" && !backgroundStop) {
+                  backgroundStop = true;
+                  logger.ai.warn("llama.rn generation stopped because the app was backgrounded.", {
+                    modelTier: manifest.modelTier
+                  });
+                  void context.stopCompletion();
+                }
+              })
+            : null;
         try {
           return await context.completion(
             {
@@ -508,6 +526,7 @@ export class LlamaRnProvider implements LocalAIProvider {
           );
         } finally {
           watchdog.stop();
+          backgroundSubscription?.remove();
         }
       };
       let result = await complete(false);
@@ -522,6 +541,26 @@ export class LlamaRnProvider implements LocalAIProvider {
         return {
           status: partial ? "ok" : "refused",
           text: cleanedText || partial || "Generation stopped.",
+          citationIds,
+          contextUsage,
+          providerId: this.id,
+          providerName: this.name
+        };
+      }
+      if (backgroundStop) {
+        const partial = sanitizeAssistantText(result.content || result.text);
+        const { text: cleanedText, citationIds: footerIds } = extractCitationFooter(partial);
+        const inlineIds = citationIdsFromText(cleanedText, sourceContext);
+        const allowed = new Set((sourceContext ?? []).map((source) => source.citationId));
+        const citationIds = Array.from(
+          new Set([...footerIds, ...inlineIds].filter((id) => allowed.has(id)))
+        );
+        return {
+          status: partial ? "incomplete" : "refused",
+          text:
+            cleanedText ||
+            partial ||
+            "I paused this answer because the app went to the background. Reopen Haki and ask again to continue.",
           citationIds,
           contextUsage,
           providerId: this.id,
