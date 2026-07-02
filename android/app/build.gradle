@@ -198,6 +198,7 @@ dependencies {
     // break Gemma at runtime rather than compile time. Fast activation checks
     // these reflection contracts before the engine is prepared in background.
     runtimeOnly("com.google.ai.edge.litertlm:litertlm-android:0.13.1")
+    testImplementation("junit:junit:4.13.2")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";

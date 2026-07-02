@@ -1,5 +1,7 @@
 import { DeviceEventEmitter } from "react-native";
 
+import { logger } from "@/utils/logger";
+
 import type {
   LocalAICapabilities,
   LocalAIProvider,
@@ -9,7 +11,11 @@ import type {
   SummarizeFromSourcesInput
 } from "./LocalAIProvider";
 import { getDeviceHardwareProfile } from "./deviceHardwareProfile";
-import { createLiteRtGenerationGuard } from "./liteRtGenerationGuard";
+import {
+  createLiteRtGenerationGuard,
+  type LiteRtCancellationReason,
+  type LiteRtGenerationGuard
+} from "./liteRtGenerationGuard";
 import type { LocalModelManifest } from "./localModelMetadata";
 import { deviceCapabilityClassForTier } from "./localModelMetadata";
 import { getActiveChatModelStatus, withLocalModelInferenceLease } from "./localModelManager";
@@ -30,6 +36,82 @@ function nextRequestId(): string {
 
 function filePathFromUri(uri: string): string {
   return uri.startsWith("file://") ? decodeURIComponent(uri.slice("file://".length)) : uri;
+}
+
+type GuardedNativeOutcome<T> =
+  | { kind: "native"; result: T }
+  | { kind: "native-error"; error: unknown }
+  | { kind: "guard"; reason: LiteRtCancellationReason };
+
+async function raceNativeAgainstGuard<T>(params: {
+  guard: LiteRtGenerationGuard;
+  operation: "chat" | "stream-chat" | "summary";
+  requestId: string;
+  runNative: () => Promise<T>;
+  startedAt: number;
+}): Promise<GuardedNativeOutcome<T>> {
+  let terminalSelected = false;
+  const nativeOutcome: Promise<GuardedNativeOutcome<T>> = Promise.resolve()
+    .then(params.runNative)
+    .then(
+      (result) => {
+        if (terminalSelected) {
+          logger.ai.warn("LiteRT-LM native request settled after a terminal guard outcome.", {
+            elapsedMs: Date.now() - params.startedAt,
+            operation: params.operation,
+            requestId: params.requestId,
+            settlement: "resolved"
+          });
+        }
+        return { kind: "native" as const, result };
+      },
+      (error: unknown) => {
+        if (terminalSelected) {
+          logger.ai.warn("LiteRT-LM native request settled after a terminal guard outcome.", {
+            elapsedMs: Date.now() - params.startedAt,
+            operation: params.operation,
+            requestId: params.requestId,
+            settlement: "rejected"
+          });
+        }
+        return { kind: "native-error" as const, error };
+      }
+    );
+  const guardOutcome = params.guard.cancellation.then<GuardedNativeOutcome<T>>(() => {
+    const reason = params.guard.reason;
+    if (!reason) {
+      return {
+        kind: "native-error",
+        error: new Error("LiteRT-LM generation guard settled without a cancellation reason.")
+      };
+    }
+    return { kind: "guard", reason };
+  });
+
+  const outcome = await Promise.race([nativeOutcome, guardOutcome]);
+  terminalSelected = true;
+  return outcome;
+}
+
+function logGuardOutcome(params: {
+  hasPartialText: boolean;
+  operation: "chat" | "stream-chat" | "summary";
+  reason: LiteRtCancellationReason;
+  requestId: string;
+  startedAt: number;
+}): void {
+  const data = {
+    elapsedMs: Date.now() - params.startedAt,
+    hasPartialText: params.hasPartialText,
+    operation: params.operation,
+    reason: params.reason,
+    requestId: params.requestId
+  };
+  if (params.reason === "aborted") {
+    logger.ai.log("LiteRT-LM request canceled by the caller.", data);
+  } else {
+    logger.ai.warn("LiteRT-LM request stopped by its generation guard.", data);
+  }
 }
 
 export class LiteRtLmProvider implements LocalAIProvider {
@@ -152,17 +234,34 @@ export class LiteRtLmProvider implements LocalAIProvider {
         totalDeadlineMs: LITERT_GENERATION_DEADLINE_MS
       });
       const startedAt = Date.now();
+      logger.ai.log("LiteRT-LM request started.", { operation: "summary", requestId });
       guard.start();
       try {
-        const result = await nativeModule.summarizeFromSources({
-          ...input,
-          modelPath: filePathFromUri(manifest.uri),
+        const outcome = await raceNativeAgainstGuard({
+          guard,
+          operation: "summary",
           requestId,
-          instruction: `${input.instruction}\n\nUse only these sources. End with a SOURCE_IDS line containing only cited source IDs.`
+          startedAt,
+          runNative: () => nativeModule.summarizeFromSources!({
+            ...input,
+            modelPath: filePathFromUri(manifest.uri),
+            requestId,
+            instruction: `${input.instruction}\n\nUse only these sources. End with a SOURCE_IDS line containing only cited source IDs.`
+          })
         });
         this.lastInferenceTimeMs = Date.now() - startedAt;
-        if (guard.reason) throw new Error(`LiteRT-LM summarization canceled: ${guard.reason}.`);
-        return coerceNativeSummaryResult(result, input, this.id, this.name);
+        if (outcome.kind === "native-error") throw outcome.error;
+        if (outcome.kind === "guard") {
+          logGuardOutcome({
+            hasPartialText: false,
+            operation: "summary",
+            reason: outcome.reason,
+            requestId,
+            startedAt
+          });
+          throw new Error(`LiteRT-LM summarization canceled: ${outcome.reason}.`);
+        }
+        return coerceNativeSummaryResult(outcome.result, input, this.id, this.name);
       } finally {
         guard.stop();
       }
@@ -194,16 +293,40 @@ export class LiteRtLmProvider implements LocalAIProvider {
         totalDeadlineMs: LITERT_GENERATION_DEADLINE_MS
       });
       const startedAt = Date.now();
+      logger.ai.log("LiteRT-LM request started.", { operation: "chat", requestId });
       guard.start();
       try {
-        const result = await nativeModule.answerSafeChat({
-          ...nativeInput,
-          modelPath: filePathFromUri(manifest.uri),
+        const outcome = await raceNativeAgainstGuard({
+          guard,
+          operation: "chat",
           requestId,
-          taskContext: [input.taskContext, sourceBlock(input.sourceContext)].filter(Boolean).join("\n\n")
+          startedAt,
+          runNative: () => nativeModule.answerSafeChat!({
+            ...nativeInput,
+            modelPath: filePathFromUri(manifest.uri),
+            requestId,
+            taskContext: [input.taskContext, sourceBlock(input.sourceContext)].filter(Boolean).join("\n\n")
+          })
         });
         this.lastInferenceTimeMs = Date.now() - startedAt;
+        if (outcome.kind === "native-error") throw outcome.error;
+        if (outcome.kind === "guard") {
+          logGuardOutcome({
+            hasPartialText: false,
+            operation: "chat",
+            reason: outcome.reason,
+            requestId,
+            startedAt
+          });
+          return {
+            status: "incomplete",
+            text: "",
+            providerId: this.id,
+            providerName: this.name
+          };
+        }
         if (guard.reason || abortSignal?.aborted) {
+          const result = outcome.result;
           return {
             status: "incomplete",
             text: typeof result === "string" ? result : result.text ?? "",
@@ -211,7 +334,7 @@ export class LiteRtLmProvider implements LocalAIProvider {
             providerName: this.name
           };
         }
-        return coerceNativeSafeChatResult(result, this.id, this.name);
+        return coerceNativeSafeChatResult(outcome.result, this.id, this.name);
       } finally {
         guard.stop();
       }
@@ -237,32 +360,65 @@ export class LiteRtLmProvider implements LocalAIProvider {
         requestId,
         totalDeadlineMs: LITERT_GENERATION_DEADLINE_MS
       });
+      const startedAt = Date.now();
+      let acceptingTokens = true;
+      let streamedText = "";
       // Deltas arrive as device events keyed by requestId (a bridge Callback
       // can only fire once); the awaited promise returns the complete text.
       const tokenSubscription = DeviceEventEmitter.addListener(
         LITERT_TOKEN_EVENT,
         (event: { requestId?: string; token?: string }) => {
           if (event?.requestId !== requestId || !event.token) return;
-          if (!abortSignal?.aborted && !guard.reason) onToken(event.token);
+          if (!acceptingTokens || abortSignal?.aborted || guard.reason) return;
+          streamedText = `${streamedText}${event.token}`;
+          onToken(event.token);
         }
       );
+      logger.ai.log("LiteRT-LM request started.", { operation: "stream-chat", requestId });
       guard.start();
       try {
-        const result = await streamSafeChat({
-          ...nativeInput,
-          modelPath: filePathFromUri(manifest.uri),
-          requestId
+        const outcome = await raceNativeAgainstGuard({
+          guard,
+          operation: "stream-chat",
+          requestId,
+          startedAt,
+          runNative: () => streamSafeChat({
+            ...nativeInput,
+            modelPath: filePathFromUri(manifest.uri),
+            requestId
+          })
         });
-        if (guard.reason || abortSignal?.aborted) {
+        acceptingTokens = false;
+        this.lastInferenceTimeMs = Date.now() - startedAt;
+        if (outcome.kind === "native-error") throw outcome.error;
+        if (outcome.kind === "guard") {
+          logGuardOutcome({
+            hasPartialText: streamedText.length > 0,
+            operation: "stream-chat",
+            reason: outcome.reason,
+            requestId,
+            startedAt
+          });
           return {
             status: "incomplete",
-            text: typeof result === "string" ? result : result.text ?? "",
+            text: streamedText,
             providerId: this.id,
             providerName: this.name
           };
         }
-        return coerceNativeSafeChatResult(result, this.id, this.name);
+        if (guard.reason || abortSignal?.aborted) {
+          const result = outcome.result;
+          return {
+            status: "incomplete",
+            text: (typeof result === "string" ? result : result.text ?? "") || streamedText,
+            providerId: this.id,
+            providerName: this.name
+          };
+        }
+        const result = coerceNativeSafeChatResult(outcome.result, this.id, this.name);
+        return result.text || !streamedText ? result : { ...result, text: streamedText };
       } finally {
+        acceptingTokens = false;
         tokenSubscription.remove();
         guard.stop();
       }

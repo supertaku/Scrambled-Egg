@@ -1,10 +1,12 @@
 import type { DeviceThermalState } from "./LocalAIProvider";
+import { logger } from "@/utils/logger";
 
 export type LiteRtCancellationReason = "aborted" | "thermal-critical" | "thermal-serious" | "timeout";
 
 interface LiteRtGenerationGuardOptions {
   abortSignal?: AbortSignal;
   cancel: (requestId: string) => Promise<boolean>;
+  cancelAckDeadlineMs?: number;
   readThermalState?: () => Promise<DeviceThermalState>;
   requestId: string;
   thermalCheckIntervalMs?: number;
@@ -19,6 +21,7 @@ export interface LiteRtGenerationGuard {
 }
 
 const DEFAULT_THERMAL_CHECK_INTERVAL_MS = 5_000;
+const DEFAULT_CANCEL_ACK_DEADLINE_MS = 5_000;
 
 export function createLiteRtGenerationGuard(options: LiteRtGenerationGuardOptions): LiteRtGenerationGuard {
   let reason: LiteRtCancellationReason | null = null;
@@ -43,7 +46,42 @@ export function createLiteRtGenerationGuard(options: LiteRtGenerationGuardOption
     if (reason) return;
     reason = nextReason;
     clearTimers();
-    void options.cancel(options.requestId).catch(() => false).finally(resolveCancellation);
+    resolveCancellation();
+
+    let cancelAckTimer: ReturnType<typeof setTimeout> | null = null;
+    const cancelAckTimeout = new Promise<{ kind: "timeout" }>((resolve) => {
+      cancelAckTimer = setTimeout(
+        () => resolve({ kind: "timeout" }),
+        options.cancelAckDeadlineMs ?? DEFAULT_CANCEL_ACK_DEADLINE_MS
+      );
+    });
+    const cancelRequest = Promise.resolve()
+      .then(() => options.cancel(options.requestId))
+      .then(
+        (accepted) => ({ kind: "result" as const, accepted }),
+        (error: unknown) => ({ kind: "error" as const, error })
+      );
+
+    void Promise.race([cancelRequest, cancelAckTimeout]).then((outcome) => {
+      if (cancelAckTimer) clearTimeout(cancelAckTimer);
+      if (outcome.kind === "timeout") {
+        logger.ai.warn("LiteRT-LM cancellation acknowledgement timed out.", {
+          reason: nextReason,
+          requestId: options.requestId
+        });
+      } else if (outcome.kind === "error") {
+        logger.ai.warn("LiteRT-LM cancellation request failed.", {
+          error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
+          reason: nextReason,
+          requestId: options.requestId
+        });
+      } else if (!outcome.accepted) {
+        logger.ai.warn("LiteRT-LM cancellation request was not accepted.", {
+          reason: nextReason,
+          requestId: options.requestId
+        });
+      }
+    });
   };
 
   const onAbort = () => cancelOnce("aborted");

@@ -1,5 +1,6 @@
 package com.tupt.haki
 
+import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -29,9 +30,16 @@ class HakiLiteRtLmModule(
     val requestId: String,
     val promise: Promise,
     val emitTokens: Boolean,
+    val terminalDispatcher: DeferredTerminalDispatcher,
     val output: StringBuilder = StringBuilder(),
     var conversation: AutoCloseable? = null,
-    var completed: Boolean = false
+    var completed: Boolean = false,
+    var sawFirstOutput: Boolean = false
+  )
+
+  private data class TerminalSnapshot(
+    val conversation: AutoCloseable?,
+    val output: String
   )
 
   override fun getName(): String = "HakiLiteRtLm"
@@ -198,9 +206,11 @@ class HakiLiteRtLmModule(
         promise.reject("E_HAKI_LITERT_BUSY", "LiteRT-LM is already generating a response.")
         null
       } else {
-        ActiveGeneration(requestId, promise, emitTokens).also { activeGeneration = it }
+        createActiveGeneration(requestId, promise, emitTokens).also { activeGeneration = it }
       }
     } ?: return
+
+    Log.d(TAG, "requestId=$requestId event=start streaming=$emitTokens")
 
     inferenceExecutor.execute {
       try {
@@ -309,13 +319,19 @@ class HakiLiteRtLmModule(
     ) { _, method, args ->
       when (method.name) {
         "onMessage" -> appendGenerationOutput(generation, messageText(args?.firstOrNull()))
-        "onDone" -> completeGeneration(generation, startedAt)
-        "onError" -> failGeneration(
-          generation,
-          errorCode,
-          errorMessage,
-          args?.firstOrNull() as? Throwable ?: IllegalStateException(errorMessage)
-        )
+        "onDone" -> {
+          Log.d(TAG, "requestId=${generation.requestId} event=terminal-callback outcome=done")
+          completeGeneration(generation, startedAt)
+        }
+        "onError" -> {
+          Log.d(TAG, "requestId=${generation.requestId} event=terminal-callback outcome=error")
+          failGeneration(
+            generation,
+            errorCode,
+            errorMessage,
+            args?.firstOrNull() as? Throwable ?: IllegalStateException(errorMessage)
+          )
+        }
       }
       null
     }
@@ -326,12 +342,20 @@ class HakiLiteRtLmModule(
 
   private fun appendGenerationOutput(generation: ActiveGeneration, currentText: String) {
     if (currentText.isEmpty()) return
+    var firstOutput = false
     val delta = synchronized(lock) {
       if (generation.completed || activeGeneration !== generation) return
       val previous = generation.output.toString()
       val next = if (currentText.startsWith(previous)) currentText.removePrefix(previous) else currentText
       generation.output.append(next)
+      if (!generation.sawFirstOutput) {
+        generation.sawFirstOutput = true
+        firstOutput = true
+      }
       next
+    }
+    if (firstOutput) {
+      Log.d(TAG, "requestId=${generation.requestId} event=first-output")
     }
     if (delta.isNotEmpty() && generation.emitTokens) {
       try {
@@ -348,15 +372,14 @@ class HakiLiteRtLmModule(
   }
 
   private fun completeGeneration(generation: ActiveGeneration, startedAt: Long) {
-    val result = synchronized(lock) {
-      if (generation.completed || activeGeneration !== generation) return
-      generation.completed = true
-      activeGeneration = null
-      lastInferenceTimeMs = System.currentTimeMillis() - startedAt
-      generation.output.toString().trim()
+    finishGeneration(
+      generation = generation,
+      event = "completed",
+      startedAt = startedAt,
+      cancelBeforeClose = false
+    ) { snapshot ->
+      generation.promise.resolve(snapshot.output.trim())
     }
-    closeQuietly(generation.conversation)
-    generation.promise.resolve(result)
   }
 
   private fun failGeneration(
@@ -365,17 +388,14 @@ class HakiLiteRtLmModule(
     errorMessage: String,
     error: Throwable
   ) {
-    val shouldReject = synchronized(lock) {
-      if (generation.completed || activeGeneration !== generation) {
-        false
-      } else {
-        generation.completed = true
-        activeGeneration = null
-        true
-      }
+    finishGeneration(
+      generation = generation,
+      event = "failed",
+      startedAt = null,
+      cancelBeforeClose = false
+    ) {
+      generation.promise.reject(errorCode, errorMessage, error)
     }
-    closeQuietly(generation.conversation)
-    if (shouldReject) generation.promise.reject(errorCode, errorMessage, error)
   }
 
   private fun cancelActiveGeneration(requestId: String?): Boolean {
@@ -384,23 +404,102 @@ class HakiLiteRtLmModule(
       if (current == null || current.completed || (requestId != null && current.requestId != requestId)) {
         null
       } else {
-        current.completed = true
-        activeGeneration = null
         current
       }
     } ?: return false
 
-    try {
-      generation.conversation?.javaClass?.getMethod("cancelProcess")?.invoke(generation.conversation)
-    } catch (_: Throwable) {
-      // Cancellation still resolves the JS request even if native cleanup fails.
+    Log.d(
+      TAG,
+      "requestId=${generation.requestId} event=cancellation-requested reason=${if (requestId == null) "process" else "request"}"
+    )
+
+    return finishGeneration(
+      generation = generation,
+      event = "canceled",
+      startedAt = null,
+      cancelBeforeClose = true
+    ) { snapshot ->
+      val result = Arguments.createMap()
+      result.putString("status", "incomplete")
+      result.putString("text", snapshot.output.trim())
+      generation.promise.resolve(result)
     }
-    closeQuietly(generation.conversation)
-    val result = Arguments.createMap()
-    result.putString("status", "incomplete")
-    result.putString("text", generation.output.toString().trim())
-    generation.promise.resolve(result)
-    return true
+  }
+
+  private fun createActiveGeneration(
+    requestId: String,
+    promise: Promise,
+    emitTokens: Boolean
+  ): ActiveGeneration {
+    val dispatcher = DeferredTerminalDispatcher(
+      onSettlementFailure = { error ->
+        Log.w(TAG, "requestId=$requestId event=promise-settlement-failed", error)
+      },
+      onCleanupFailure = { error ->
+        Log.w(TAG, "requestId=$requestId event=cleanup-failed", error)
+      },
+      enqueueCleanup = { cleanup -> inferenceExecutor.execute(cleanup) }
+    )
+    return ActiveGeneration(requestId, promise, emitTokens, dispatcher)
+  }
+
+  private fun finishGeneration(
+    generation: ActiveGeneration,
+    event: String,
+    startedAt: Long?,
+    cancelBeforeClose: Boolean,
+    settlePromise: (TerminalSnapshot) -> Unit
+  ): Boolean {
+    var snapshot: TerminalSnapshot? = null
+    val dispatched = generation.terminalDispatcher.dispatch(
+      settle = {
+        val claimed = synchronized(lock) {
+          if (generation.completed || activeGeneration !== generation) {
+            null
+          } else {
+            generation.completed = true
+            activeGeneration = null
+            if (startedAt != null) {
+              lastInferenceTimeMs = System.currentTimeMillis() - startedAt
+            }
+            TerminalSnapshot(
+              conversation = generation.conversation,
+              output = generation.output.toString()
+            ).also { generation.conversation = null }
+          }
+        }
+        if (claimed != null) {
+          snapshot = claimed
+          settlePromise(claimed)
+          Log.d(
+            TAG,
+            "requestId=${generation.requestId} event=promise-settled outcome=$event outputChars=${claimed.output.length}"
+          )
+        }
+      },
+      cleanup = {
+        val claimed = snapshot ?: return@dispatch
+        Log.d(TAG, "requestId=${generation.requestId} event=cleanup-start outcome=$event")
+        if (cancelBeforeClose) {
+          try {
+            claimed.conversation?.javaClass?.getMethod("cancelProcess")?.invoke(claimed.conversation)
+          } catch (error: Throwable) {
+            Log.w(TAG, "requestId=${generation.requestId} event=cancellation-cleanup-failed", error)
+          }
+        }
+        try {
+          claimed.conversation?.close()
+        } catch (error: Throwable) {
+          Log.w(TAG, "requestId=${generation.requestId} event=conversation-close-failed", error)
+        }
+        Log.d(TAG, "requestId=${generation.requestId} event=cleanup-complete outcome=$event")
+      }
+    )
+
+    if (!dispatched) {
+      Log.w(TAG, "requestId=${generation.requestId} event=late-terminal-ignored outcome=$event")
+    }
+    return dispatched && snapshot != null
   }
 
   private fun messageText(message: Any?): String {
@@ -571,7 +670,7 @@ class HakiLiteRtLmModule(
   private fun closeQuietly(target: AutoCloseable?) {
     try {
       target?.close()
-    } catch (_: Exception) {
+    } catch (_: Throwable) {
       // Ignore release failures during model swaps and app shutdown.
     }
   }
@@ -617,6 +716,7 @@ class HakiLiteRtLmModule(
   }
 
   private companion object {
+    private const val TAG = "HakiLiteRtLm"
     private const val TOKEN_EVENT_NAME = "HakiLiteRtLmToken"
     private const val BACKEND_CLASS = "com.google.ai.edge.litertlm.Backend"
     private const val BACKEND_CPU_CLASS = "com.google.ai.edge.litertlm.Backend\$CPU"
